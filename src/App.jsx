@@ -6,7 +6,7 @@ import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
 import { mockDebtors, calculateMetrics } from './data/mockData';
-import { fetchDebtorsFromSheet, fetchClientsByAgentFromSheet } from './services/zohoWorkDrive';
+import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import './index.css';
 
 const AppContainer = styled.div`
@@ -240,10 +240,7 @@ function App() {
     setIsSyncing(true);
 
     try {
-      const [sheetData, csData] = await Promise.all([
-        fetchDebtorsFromSheet(undefined, { cacheBust: true }),
-        fetchClientsByAgentFromSheet(undefined, { cacheBust: true })
-      ]);
+      const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
 
       if (sheetData && sheetData.length > 0) {
         setData(sheetData);

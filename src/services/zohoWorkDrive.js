@@ -1,7 +1,6 @@
-import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 
-const SHEET_CSV_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b'; // Enlace de Zoho del usuario
-const CS_BY_AGENT_CSV_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b';
+const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
 
 const normalizeText = (value, fallback = '') => {
   const normalized = String(value ?? '').trim();
@@ -12,13 +11,19 @@ const normalizeAmount = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
-
   const raw = String(value ?? '').replace(/[^0-9.-]/g, '');
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const normalizeDate = (value) => {
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed?.y && parsed?.m && parsed?.d) {
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+    }
+  }
+
   const raw = String(value ?? '').trim();
   if (!raw) return '';
 
@@ -31,22 +36,16 @@ const normalizeDate = (value) => {
   return `${year}-${month}-${day}`;
 };
 
-const buildCsvUrl = (url, cacheBust) => {
+const buildUrl = (url, cacheBust) => {
   if (!cacheBust) return url;
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}t=${Date.now()}`;
 };
 
-const mapPaymentStatus = (value, dueDate) => {
-  const rawStatus = normalizeText(value, 'pending').toLowerCase();
-
-  if (['paid', 'pagado', 'cobrado'].includes(rawStatus)) {
-    return 'paid';
-  }
-
-  if (['overdue', 'mora', 'vencido'].includes(rawStatus)) {
-    return 'overdue';
-  }
+const normalizeStatus = (value, dueDate) => {
+  const raw = normalizeText(value, 'pending').toLowerCase();
+  if (['paid', 'pagado', 'cobrado'].includes(raw)) return 'paid';
+  if (['overdue', 'mora', 'vencido'].includes(raw)) return 'overdue';
 
   if (dueDate) {
     const parsedDate = new Date(`${dueDate}T00:00:00`);
@@ -73,87 +72,86 @@ const normalizeDebtFlag = (value) => {
   return null;
 };
 
-const mapDebtorRow = (row) => {
-  const company = normalizeText(row['company name'] || row.company || row.clientname, 'Unknown Company');
-  const dueDate = normalizeDate(row.duedate || row['due date'] || row.due_date || row['billing cycle'] || row.billingcycle);
+const createLookup = (row) => {
+  const lookup = {};
+  Object.entries(row || {}).forEach(([key, value]) => {
+    lookup[String(key).trim().toLowerCase()] = value;
+  });
+  return lookup;
+};
+
+const mapDebtorRow = (row, sheetName) => {
+  const r = createLookup(row);
+  const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
+  const dueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
+  const billingCycle = normalizeText(r['billing cycle'] || r.billingcycle || sheetName);
 
   return {
-    id: normalizeText(row['invoice number'] || row.id, `INV-${Math.floor(Math.random() * 10000)}`),
-    invoiceNumber: normalizeText(row['invoice number'] || row.id),
+    id: normalizeText(r['invoice number'] || r.id, `INV-${Math.floor(Math.random() * 100000)}`),
+    invoiceNumber: normalizeText(r['invoice number'] || r.id),
     company,
     clientName: company,
-    contactPerson: normalizeText(row['contact person'] || row.contact || row.contactperson),
-    agentId: normalizeText(row['sales rep'] || row.agentid || row.agent, 'Unassigned'),
-    billingCycle: normalizeText(row['billing cycle'] || row.billingcycle),
-    amount: normalizeAmount(row['total due ($)'] ?? row.amount ?? row.totaldue),
+    contactPerson: normalizeText(r['contact person'] || r.contact || r.contactperson),
+    agentId: normalizeText(r['sales rep'] || r.agentid || r.agent, 'Unassigned'),
+    billingCycle,
+    amount: normalizeAmount(r['total due ($)'] ?? r.amount ?? r.totaldue),
     dueDate,
-    status: mapPaymentStatus(row['payment status'] || row.status, dueDate),
-    notes: normalizeText(row.notes)
+    status: normalizeStatus(r['payment status'] || r.status, dueDate),
+    notes: normalizeText(r.notes)
   };
 };
 
-export const fetchDebtorsFromSheet = async (url = SHEET_CSV_URL, options = {}) => {
-  const { cacheBust = true } = options;
-  if (!url) {
-    throw new Error('No URL provided');
-  }
-
-  const csvUrl = buildCsvUrl(url, cacheBust);
-
-  return new Promise((resolve, reject) => {
-    Papa.parse(csvUrl, {
-      download: true,
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim().toLowerCase(),
-      complete: (results) => {
-        const mappedData = results.data
-          .filter((row) => row['invoice number'] || row.id || row['company name'] || row.clientname)
-          .map(mapDebtorRow);
-
-        resolve(mappedData);
-      },
-      error: (error) => {
-        console.error('Error parsing CSV:', error);
-        reject(error);
-      }
-    });
-  });
+const mapCsByAgentRow = (row) => {
+  const r = createLookup(row);
+  return {
+    agentId: normalizeText(r['sales rep'] || r.agentid || r.agent, 'Unassigned'),
+    company: normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company'),
+    debtStatus: normalizeText(r['debt status'] || r.status),
+    hasDebt: normalizeDebtFlag(r['debt status'] || r.status),
+    checked: parseBoolean(r.checked)
+  };
 };
 
-export const fetchClientsByAgentFromSheet = async (url = CS_BY_AGENT_CSV_URL, options = {}) => {
+const parseWorkbook = (arrayBuffer) => {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
+
+  const debtors = workbook.SheetNames
+    .filter((sheetName) => sheetName !== csSheetName)
+    .flatMap((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+      return rows.map((row) => mapDebtorRow(row, sheetName));
+    })
+    .filter((item) => item.company);
+
+  const clientsByAgent = csSheetName
+    ? XLSX.utils.sheet_to_json(workbook.Sheets[csSheetName], { defval: '' }).map(mapCsByAgentRow)
+    : [];
+
+  return { debtors, clientsByAgent };
+};
+
+export const fetchAllDataFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {
   const { cacheBust = true } = options;
-  if (!url) {
-    return [];
+  if (!url) throw new Error('No URL provided');
+
+  const requestUrl = buildUrl(url, cacheBust);
+  const response = await fetch(requestUrl);
+  if (!response.ok) {
+    throw new Error(`Unable to download sheet data (${response.status})`);
   }
 
-  const csvUrl = buildCsvUrl(url, cacheBust);
+  const arrayBuffer = await response.arrayBuffer();
+  return parseWorkbook(arrayBuffer);
+};
 
-  return new Promise((resolve, reject) => {
-    Papa.parse(csvUrl, {
-      download: true,
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim().toLowerCase(),
-      complete: (results) => {
-        const mappedData = results.data
-          .filter((row) => row['sales rep'] || row.agentid || row['company name'] || row.clientname)
-          .map((row) => ({
-            agentId: normalizeText(row['sales rep'] || row.agentid || row.agent, 'Unassigned'),
-            company: normalizeText(row['company name'] || row.company || row.clientname, 'Unknown Company'),
-            debtStatus: normalizeText(row['debt status'] || row.status),
-            hasDebt: normalizeDebtFlag(row['debt status'] || row.status),
-            checked: parseBoolean(row.checked)
-          }));
+export const fetchDebtorsFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {
+  const { debtors } = await fetchAllDataFromSheet(url, options);
+  return debtors;
+};
 
-        resolve(mappedData);
-      },
-      error: (error) => {
-        console.error('Error parsing clients by agent CSV:', error);
-        reject(error);
-      }
-    });
-  });
+export const fetchClientsByAgentFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {
+  const { clientsByAgent } = await fetchAllDataFromSheet(url, options);
+  return clientsByAgent;
 };
