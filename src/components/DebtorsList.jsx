@@ -158,13 +158,6 @@ const BillingCycleSelect = styled.select`
   }
 `;
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value);
-};
-
 const getComputedStatus = (item) => {
   const rawStatus = String(item.status ?? '').toLowerCase();
   if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
@@ -182,26 +175,32 @@ const getComputedStatus = (item) => {
   return 'pending';
 };
 
-const getStatusBadge = (status) => {
-  switch (status.toLowerCase()) {
-    case 'paid':
-    case 'pagado':
-      return <span className="status-badge status-paid">Paid</span>;
-    case 'pending':
-    case 'pendiente':
-      return <span className="status-badge status-pending">Pending</span>;
-    case 'overdue':
-    case 'mora':
-      return <span className="status-badge status-overdue">Overdue</span>;
-    default:
-      return <span className="status-badge status-pending">{status}</span>;
-  }
-};
-
-export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfile, onQuickUpdateBillingCycle }) {
+export default function DebtorsList({
+  data,
+  onEdit,
+  onDelete,
+  onOpenCompanyProfile,
+  onQuickUpdateBillingCycle,
+  onQuickUpdateStatus,
+  onQuickUpdateAmount
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
+  const [pendingAmounts, setPendingAmounts] = useState({});
+
+  const commitQuickAmount = (item) => {
+    const raw = pendingAmounts[item.id];
+    if (raw === undefined) return;
+    const parsed = Number.parseFloat(String(raw));
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    onQuickUpdateAmount?.(item, parsed);
+    setPendingAmounts((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+  };
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -327,8 +326,42 @@ export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfi
                   </BillingCycleSelect>
                 </Td>
                 <Td>{item.invoiceCount || 0}</Td>
-                <Td>{getStatusBadge(getComputedStatus(item))}</Td>
-                <Td>{formatCurrency(item.amount)}</Td>
+                <Td>
+                  <BillingCycleSelect
+                    value={getComputedStatus(item)}
+                    onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
+                    style={{ minWidth: '114px' }}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                  </BillingCycleSelect>
+                </Td>
+                <Td>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={pendingAmounts[item.id] ?? String(item.amount ?? 0)}
+                    onChange={(e) => setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    onBlur={() => commitQuickAmount(item)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitQuickAmount(item);
+                      }
+                    }}
+                    style={{
+                      width: '110px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      color: 'var(--text-main)',
+                      padding: '0.32rem 0.45rem',
+                      fontSize: '0.78rem'
+                    }}
+                  />
+                </Td>
                 <Td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     <button

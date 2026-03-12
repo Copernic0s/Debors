@@ -285,26 +285,16 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
             </FormGroup>
           </FormRow>
 
-          <FormRow>
-            <FormGroup>
-              <label>Assigned Agent</label>
-              <input
-                required
-                type="text"
-                value={formData.agentId}
-                onChange={e => setFormData({ ...formData, agentId: e.target.value })}
-                placeholder="Ex. Guidiana Puentes"
-              />
-            </FormGroup>
-            <FormGroup>
-              <label>Record ID</label>
-              <input
-                disabled
-                type="text"
-                value={formData.id}
-              />
-            </FormGroup>
-          </FormRow>
+          <FormGroup>
+            <label>Assigned Agent</label>
+            <input
+              required
+              type="text"
+              value={formData.agentId}
+              onChange={e => setFormData({ ...formData, agentId: e.target.value })}
+              placeholder="Ex. Guidiana Puentes"
+            />
+          </FormGroup>
 
           <FormGroup>
             <label>Notes (Optional)</label>

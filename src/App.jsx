@@ -411,7 +411,33 @@ function App() {
 
   const handleSaveDebtor = (debtor) => {
     if (currentDebtor) {
-      setData(data.map(d => d.id === debtor.id ? debtor : d));
+      const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
+
+      if (isAggregatedRow) {
+        const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
+        setData(data.map((item) => {
+          const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+          if (!sameCompany) return item;
+
+          const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+          if (!inAgentScope) return item;
+
+          return {
+            ...item,
+            company: debtor.company || debtor.clientName,
+            clientName: debtor.company || debtor.clientName,
+            amount: Number(debtor.amount) || 0,
+            dueDate: debtor.dueDate,
+            status: debtor.status,
+            agentId: debtor.agentId,
+            billingCycle: debtor.billingCycle,
+            notes: debtor.notes
+          };
+        }));
+      } else {
+        setData(data.map(d => d.id === debtor.id ? debtor : d));
+      }
+
       toast.success('Debt updated successfully', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
@@ -463,6 +489,91 @@ function App() {
     }));
 
     toast.success('Billing cycle updated', {
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
+  const quickUpdatePaymentStatus = (row, nextStatus) => {
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const normalizedStatus = String(nextStatus || '').toLowerCase();
+
+    setData((prev) => prev.map((item) => {
+      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+      if (!sameCompany) return item;
+
+      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (!inAgentScope) return item;
+
+      return {
+        ...item,
+        status: normalizedStatus
+      };
+    }));
+
+    toast.success('Payment status updated', {
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
+  const quickUpdateTotalDue = (row, nextAmount) => {
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const parsedAmount = Number.parseFloat(String(nextAmount));
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
+
+    setData((prev) => {
+      const matchingIndexes = [];
+
+      prev.forEach((item, index) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return;
+
+        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+        if (!inAgentScope) return;
+
+        matchingIndexes.push(index);
+      });
+
+      if (matchingIndexes.length === 0) return prev;
+
+      const updated = [...prev];
+      if (matchingIndexes.length === 1) {
+        const idx = matchingIndexes[0];
+        updated[idx] = { ...updated[idx], amount: parsedAmount };
+        return updated;
+      }
+
+      const currentTotal = matchingIndexes.reduce((sum, idx) => sum + (Number(updated[idx].amount) || 0), 0);
+      if (currentTotal <= 0) {
+        matchingIndexes.forEach((idx, index) => {
+          updated[idx] = {
+            ...updated[idx],
+            amount: index === 0 ? parsedAmount : 0
+          };
+        });
+        return updated;
+      }
+
+      let runningSum = 0;
+      matchingIndexes.forEach((idx, index) => {
+        if (index === matchingIndexes.length - 1) {
+          updated[idx] = { ...updated[idx], amount: Number((parsedAmount - runningSum).toFixed(2)) };
+          return;
+        }
+
+        const ratio = (Number(updated[idx].amount) || 0) / currentTotal;
+        const nextValue = Number((parsedAmount * ratio).toFixed(2));
+        runningSum += nextValue;
+        updated[idx] = { ...updated[idx], amount: nextValue };
+      });
+
+      return updated;
+    });
+
+    toast.success('Total due updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
   };
@@ -578,6 +689,8 @@ function App() {
           data={agentData}
           onOpenCompanyProfile={openCompanyProfile}
           onQuickUpdateBillingCycle={quickUpdateBillingCycle}
+          onQuickUpdateStatus={quickUpdatePaymentStatus}
+          onQuickUpdateAmount={quickUpdateTotalDue}
           onEdit={(debtor) => {
             setCurrentDebtor(debtor);
             setIsModalOpen(true);
