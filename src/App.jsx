@@ -74,10 +74,10 @@ const Logo = styled.div`
 `;
 
 const BrandOwner = styled.p`
-  margin: 0 0 2.1rem;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  margin: -0.2rem 0 1.2rem;
+  color: #9adfff;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 `;
 
