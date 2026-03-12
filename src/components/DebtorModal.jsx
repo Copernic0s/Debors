@@ -150,7 +150,10 @@ const ModalFooter = styled.div`
 const createDefaultFormData = () => ({
   id: `DB-${Math.floor(Math.random() * 10000)}`,
   clientName: '',
+  company: '',
   amount: '',
+  billingCycle: '',
+  customBillingCycle: '',
   dueDate: new Date().toISOString().split('T')[0],
   status: 'pending',
   agentId: '',
@@ -159,10 +162,30 @@ const createDefaultFormData = () => ({
 
 const createFormDataFromDebtor = (debtor) => {
   if (!debtor) return createDefaultFormData();
+
+  const knownCycles = new Set([
+    '',
+    'Owner A (Mon-Sun | Due Tue 5PM CT)',
+    'Owner B (Thu-Wed | Due Fri 5PM CT)',
+    'Company Dual (Mon + Thu invoices)',
+    'Monday cycle',
+    'Thursday cycle',
+    'CS by agent',
+    'Multiple',
+    'Unspecified'
+  ]);
+
+  const incomingCycle = String(debtor.billingCycle || '').trim();
+  const useCustomCycle = incomingCycle && !knownCycles.has(incomingCycle);
+
   return {
     ...createDefaultFormData(),
     ...debtor,
-    amount: debtor.amount ?? ''
+    company: debtor.company || debtor.clientName || '',
+    clientName: debtor.company || debtor.clientName || '',
+    amount: debtor.amount ?? '',
+    billingCycle: useCustomCycle ? 'custom' : incomingCycle,
+    customBillingCycle: useCustomCycle ? incomingCycle : ''
   };
 };
 
@@ -173,10 +196,20 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    const finalBillingCycle = formData.billingCycle === 'custom'
+      ? formData.customBillingCycle.trim()
+      : formData.billingCycle;
+
+    const finalCompany = formData.clientName.trim();
+
     onSave({
       ...formData,
+      company: finalCompany,
+      clientName: finalCompany,
       amount: parseFloat(formData.amount),
-      agentId: formData.agentId.trim()
+      agentId: formData.agentId.trim(),
+      billingCycle: finalBillingCycle
     });
   };
 
@@ -213,17 +246,46 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
               />
             </FormGroup>
             <FormGroup>
-              <label>Billing Cycle Close</label>
+              <label>Billing Cycle</label>
+              <select
+                value={formData.billingCycle}
+                onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}
+              >
+                <option value="">Unspecified</option>
+                <option value="Owner A (Mon-Sun | Due Tue 5PM CT)">Owner A (Mon-Sun | Due Tue 5PM CT)</option>
+                <option value="Owner B (Thu-Wed | Due Fri 5PM CT)">Owner B (Thu-Wed | Due Fri 5PM CT)</option>
+                <option value="Company Dual (Mon + Thu invoices)">Company Dual (Mon + Thu invoices)</option>
+                <option value="Monday cycle">Monday cycle</option>
+                <option value="Thursday cycle">Thursday cycle</option>
+                <option value="CS by agent">CS by agent</option>
+                <option value="Multiple">Multiple</option>
+                <option value="custom">Other (custom)</option>
+              </select>
+            </FormGroup>
+          </FormRow>
+
+          {formData.billingCycle === 'custom' && (
+            <FormGroup>
+              <label>Custom Billing Cycle</label>
               <input
                 required
+                type="text"
+                value={formData.customBillingCycle}
+                onChange={e => setFormData({ ...formData, customBillingCycle: e.target.value })}
+                placeholder="Ex. Friday cycle / custom agreement"
+              />
+            </FormGroup>
+          )}
+
+          <FormRow>
+            <FormGroup>
+              <label>Payment Due Date (optional)</label>
+              <input
                 type="date"
                 value={formData.dueDate}
                 onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
               />
             </FormGroup>
-          </FormRow>
-
-          <FormRow>
             <FormGroup>
               <label>Status</label>
               <select
@@ -235,6 +297,9 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
                 <option value="overdue">Overdue</option>
               </select>
             </FormGroup>
+          </FormRow>
+
+          <FormRow>
             <FormGroup>
               <label>Assigned Agent</label>
               <input
@@ -243,6 +308,14 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
                 value={formData.agentId}
                 onChange={e => setFormData({ ...formData, agentId: e.target.value })}
                 placeholder="Ex. Guidiana Puentes"
+              />
+            </FormGroup>
+            <FormGroup>
+              <label>Record ID</label>
+              <input
+                disabled
+                type="text"
+                value={formData.id}
               />
             </FormGroup>
           </FormRow>
