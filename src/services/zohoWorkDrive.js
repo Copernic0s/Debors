@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 
 const SHEET_CSV_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b'; // Enlace de Zoho del usuario
-const CS_BY_AGENT_CSV_URL = '';
+const CS_BY_AGENT_CSV_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b';
 
 const normalizeText = (value, fallback = '') => {
   const normalized = String(value ?? '').trim();
