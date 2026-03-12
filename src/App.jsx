@@ -205,7 +205,7 @@ const aggregateByCompany = (rows) => {
     if (!company) return;
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const key = `${agent.toLowerCase()}|${company.toLowerCase()}`;
+    const key = company.toLowerCase();
     const amount = Number(row.amount) || 0;
 
     const current = grouped.get(key);
@@ -215,19 +215,29 @@ const aggregateByCompany = (rows) => {
         company,
         clientName: company,
         agentId: agent,
+        agentSet: new Set([agent]),
         amount,
         billingCycle: row.billingCycle || '',
+        cycleSet: new Set([row.billingCycle].filter(Boolean)),
         status: row.status || 'pending',
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
+        invoiceCount: row.invoiceNumber ? 1 : 0,
+        dueDate: row.dueDate || '',
         id: `CMP-${key}`
       });
       return;
     }
 
     current.amount += amount;
-    if (current.billingCycle !== row.billingCycle && row.billingCycle) {
-      current.billingCycle = 'Multiple';
+    current.agentSet.add(agent);
+    if (row.billingCycle) current.cycleSet.add(row.billingCycle);
+    if (row.invoiceNumber) current.invoiceCount += 1;
+
+    if (row.dueDate) {
+      if (!current.dueDate || row.dueDate < current.dueDate) {
+        current.dueDate = row.dueDate;
+      }
     }
 
     const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
@@ -240,7 +250,19 @@ const aggregateByCompany = (rows) => {
     }
   });
 
-  return Array.from(grouped.values());
+  return Array.from(grouped.values()).map((item) => {
+    const agents = Array.from(item.agentSet);
+    const cycles = Array.from(item.cycleSet);
+    return {
+      ...item,
+      agentId: agents.length > 1 ? 'Multiple' : agents[0],
+      billingCycle: cycles.length > 1 ? 'Multiple' : (cycles[0] || 'Unspecified'),
+      dueDate: item.dueDate || '',
+      invoiceCount: item.invoiceCount,
+      agentSet: undefined,
+      cycleSet: undefined
+    };
+  });
 };
 
 function App() {
@@ -279,6 +301,7 @@ function App() {
         }
       } else {
         setData([]);
+        setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.error('Zoho returned no rows.', {
             icon: 'ℹ️',
@@ -287,6 +310,7 @@ function App() {
         }
       }
     } catch {
+      setData([]);
       setSyncSourceLabel('Zoho WorkDrive');
       if (notifyUser) {
         toast.error('Unable to connect to Zoho.', {

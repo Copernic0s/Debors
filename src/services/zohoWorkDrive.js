@@ -3,6 +3,12 @@ import * as XLSX from 'xlsx';
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
 const CORS_PROXY_URL = 'https://api.allorigins.win/raw?url=';
 
+const BILLING_PROFILE = {
+  OWNER_A: 'owner_a',
+  OWNER_B: 'owner_b',
+  COMPANY_DUAL: 'company_dual'
+};
+
 const normalizeText = (value, fallback = '') => {
   const normalized = String(value ?? '').trim();
   return normalized || fallback;
@@ -91,11 +97,87 @@ const createLookup = (row) => {
   return lookup;
 };
 
+const parseSheetWeekStart = (sheetName) => {
+  const raw = String(sheetName || '').trim();
+  const match = raw.match(/^([A-Za-z]+)\s+(\d+)\s*-\s*(\d+)$/);
+  if (!match) return null;
+
+  const [, monthName, startDay] = match;
+  const currentYear = new Date().getFullYear();
+  const parsed = new Date(`${monthName} ${startDay}, ${currentYear}`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const toDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getWeekdayInSheet = (sheetStartDate, targetWeekday) => {
+  if (!sheetStartDate) return null;
+
+  for (let i = 0; i <= 6; i += 1) {
+    const current = new Date(sheetStartDate);
+    current.setDate(sheetStartDate.getDate() + i);
+    if (current.getDay() === targetWeekday) {
+      return current;
+    }
+  }
+
+  return null;
+};
+
+const inferBillingProfile = (billingCycleText) => {
+  const normalized = normalizeText(billingCycleText).toLowerCase();
+
+  if (normalized.includes('thursday') || normalized.includes('thu')) {
+    return BILLING_PROFILE.OWNER_B;
+  }
+
+  if (normalized.includes('monday') || normalized.includes('mon')) {
+    return BILLING_PROFILE.OWNER_A;
+  }
+
+  if (normalized.includes('twice') || normalized.includes('dual')) {
+    return BILLING_PROFILE.COMPANY_DUAL;
+  }
+
+  return BILLING_PROFILE.OWNER_A;
+};
+
+const inferDueDateFromCycle = (billingCycleText, sheetName) => {
+  const profile = inferBillingProfile(billingCycleText);
+  const weekStart = parseSheetWeekStart(sheetName);
+  if (!weekStart) return '';
+
+  if (profile === BILLING_PROFILE.OWNER_B) {
+    const friday = getWeekdayInSheet(weekStart, 5);
+    return friday ? toDateKey(friday) : '';
+  }
+
+  if (profile === BILLING_PROFILE.COMPANY_DUAL) {
+    const normalized = normalizeText(billingCycleText).toLowerCase();
+    if (normalized.includes('thursday') || normalized.includes('thu')) {
+      const friday = getWeekdayInSheet(weekStart, 5);
+      return friday ? toDateKey(friday) : '';
+    }
+    const tuesday = getWeekdayInSheet(weekStart, 2);
+    return tuesday ? toDateKey(tuesday) : '';
+  }
+
+  const tuesday = getWeekdayInSheet(weekStart, 2);
+  return tuesday ? toDateKey(tuesday) : '';
+};
+
 const mapDebtorRow = (row, sheetName) => {
   const r = createLookup(row);
   const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
-  const dueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
   const billingCycle = normalizeText(r['billing cycle'] || r.billingcycle || sheetName);
+  const explicitDueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
+  const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
 
   return {
     id: normalizeText(r['invoice number'] || r.id, `INV-${Math.floor(Math.random() * 100000)}`),

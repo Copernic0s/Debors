@@ -185,6 +185,14 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
       return 0;
     }
 
+    if (sortConfig.key === 'agentId' || sortConfig.key === 'billingCycle') {
+      const aValue = String(a[sortConfig.key] || '');
+      const bValue = String(b[sortConfig.key] || '');
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
     if (a[sortConfig.key] < b[sortConfig.key]) {
       return sortConfig.direction === 'asc' ? -1 : 1;
     }
@@ -224,6 +232,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
               <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('invoiceCount')}>Invoices {sortConfig.key === 'invoiceCount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Payment Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
@@ -249,6 +258,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
                   </div>
                 </Td>
                 <Td>{item.billingCycle || item.dueDate || 'No cycle'}</Td>
+                <Td>{item.invoiceCount || 0}</Td>
                 <Td>{getStatusBadge(getComputedStatus(item))}</Td>
                 <Td>{formatCurrency(item.amount)}</Td>
                 <Td style={{ textAlign: 'right' }}>
@@ -274,7 +284,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
               </Tr>
             )) : (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No records found
                 </td>
               </tr>

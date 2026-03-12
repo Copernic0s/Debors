@@ -96,42 +96,60 @@ const normalizeAmount = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const getDayStart = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const getCentralTimeNow = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(new Date());
 
-const getDateDiffInDays = (dateValue, referenceDate) => {
-  if (!dateValue) return null;
-  const parsed = new Date(`${dateValue}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return Math.floor((parsed - referenceDate) / 86400000);
+  const value = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+
+  return {
+    dateKey: `${value.year}-${value.month}-${value.day}`,
+    hour: Number.parseInt(value.hour || '0', 10),
+    minute: Number.parseInt(value.minute || '0', 10)
+  };
 };
 
-const normalizeStatus = (status, dueDate, referenceDate) => {
-  const raw = String(status ?? '').trim().toLowerCase();
-  if (raw === 'paid' || raw === 'pagado' || raw === 'cobrado') return 'paid';
-  if (raw === 'overdue' || raw === 'mora' || raw === 'vencido') return 'overdue';
+const isPastCutoffInCentral = (dueDate) => {
+  if (!dueDate) return false;
+  const nowCt = getCentralTimeNow();
 
-  const diff = getDateDiffInDays(dueDate, referenceDate);
-  if (diff !== null && diff < 0) return 'overdue';
+  if (nowCt.dateKey > dueDate) return true;
+  if (nowCt.dateKey < dueDate) return false;
+
+  if (nowCt.hour > 17) return true;
+  if (nowCt.hour < 17) return false;
+  return nowCt.minute >= 0;
+};
+
+const normalizeStatus = (status, dueDate) => {
+  const raw = String(status ?? '').trim().toLowerCase();
+  if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) return 'paid';
+  if (raw.includes('overdue') || raw.includes('mora') || raw.includes('vencido')) return 'overdue';
+  if (isPastCutoffInCentral(dueDate)) return 'overdue';
   return 'pending';
 };
 
 export const calculateMetrics = (data) => {
-  const today = getDayStart(new Date());
-
   let totalDebt = 0;
   let totalOverdue = 0;
   let totalCollected = 0;
   let overdueAccounts = 0;
-  let pendingAccounts = 0;
 
   const activeClients = new Set();
 
   data.forEach((item) => {
     const amount = normalizeAmount(item.amount);
-    const status = normalizeStatus(item.status, item.dueDate, today);
+    const status = normalizeStatus(item.status, item.dueDate);
 
-    if (item.clientName) {
-      activeClients.add(String(item.clientName).trim().toLowerCase());
+    if (item.company || item.clientName) {
+      activeClients.add(String(item.company || item.clientName).trim().toLowerCase());
     }
 
     if (status === 'paid') {
@@ -140,7 +158,6 @@ export const calculateMetrics = (data) => {
     }
 
     totalDebt += amount;
-    pendingAccounts += 1;
 
     if (status === 'overdue') {
       totalOverdue += amount;
@@ -157,7 +174,6 @@ export const calculateMetrics = (data) => {
     totalCollected,
     activeClients: activeClients.size,
     overdueAccounts,
-    pendingAccounts,
     collectionRate
   };
 };
