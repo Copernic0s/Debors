@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
+const CORS_PROXY_URL = 'https://api.allorigins.win/raw?url=';
 
 const normalizeText = (value, fallback = '') => {
   const normalized = String(value ?? '').trim();
@@ -44,8 +45,18 @@ const buildUrl = (url, cacheBust) => {
 
 const normalizeStatus = (value, dueDate) => {
   const raw = normalizeText(value, 'pending').toLowerCase();
-  if (['paid', 'pagado', 'cobrado'].includes(raw)) return 'paid';
-  if (['overdue', 'mora', 'vencido'].includes(raw)) return 'overdue';
+
+  if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) {
+    return 'paid';
+  }
+
+  if (raw.includes('overdue') || raw.includes('mora') || raw.includes('vencido')) {
+    return 'overdue';
+  }
+
+  if (raw.includes('pending')) {
+    return 'pending';
+  }
 
   if (dueDate) {
     const parsedDate = new Date(`${dueDate}T00:00:00`);
@@ -133,10 +144,12 @@ const parseWorkbook = (arrayBuffer) => {
 };
 
 export const fetchAllDataFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {
-  const { cacheBust = true } = options;
+  const { cacheBust = true, useProxy = true } = options;
   if (!url) throw new Error('No URL provided');
 
-  const requestUrl = buildUrl(url, cacheBust);
+  const sourceUrl = buildUrl(url, cacheBust);
+  const requestUrl = useProxy ? `${CORS_PROXY_URL}${encodeURIComponent(sourceUrl)}` : sourceUrl;
+
   const response = await fetch(requestUrl);
   if (!response.ok) {
     throw new Error(`Unable to download sheet data (${response.status})`);

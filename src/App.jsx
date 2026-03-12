@@ -157,70 +157,41 @@ const AgentSnapshot = styled.div`
   }
 `;
 
-const AgentStatusPanel = styled.div`
-  margin-bottom: 1.5rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  background: var(--surface-2);
-  padding: 0.9rem;
-`;
+const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
+  const merged = [...debtRows];
+  const existingPairs = new Set(
+    debtRows.map((row) => `${String(row.agentId || '').trim().toLowerCase()}|${String(row.company || row.clientName || '').trim().toLowerCase()}`)
+  );
 
-const AgentStatusHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.7rem;
-  gap: 0.8rem;
+  csRows.forEach((row) => {
+    const agent = String(row.agentId || '').trim();
+    const company = String(row.company || '').trim();
+    if (!company) return;
 
-  h3 {
-    margin: 0;
-    font-size: 0.95rem;
-  }
+    const key = `${agent.toLowerCase()}|${company.toLowerCase()}`;
+    if (existingPairs.has(key)) return;
 
-  span {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-  }
-`;
+    merged.push({
+      id: `CS-${agent || 'UNASSIGNED'}-${company}`,
+      invoiceNumber: '',
+      company,
+      clientName: company,
+      contactPerson: '',
+      agentId: agent || 'Unassigned',
+      billingCycle: 'CS by agent',
+      amount: 0,
+      dueDate: '',
+      status: row.hasDebt ? 'pending' : 'paid',
+      notes: row.debtStatus || ''
+    });
+  });
 
-const AgentStatusList = styled.ul`
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.5rem;
-`;
-
-const AgentStatusItem = styled.li`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.65rem;
-
-  strong {
-    font-size: 0.82rem;
-    font-weight: 600;
-  }
-`;
-
-const StatusDot = styled.span`
-  border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: ${(props) => (props.$hasDebt ? 'var(--danger)' : 'var(--ok)')};
-  background: ${(props) => (props.$hasDebt ? 'rgba(248, 113, 113, 0.16)' : 'rgba(16, 185, 129, 0.16)')};
-  border: 1px solid ${(props) => (props.$hasDebt ? 'rgba(248, 113, 113, 0.28)' : 'rgba(16, 185, 129, 0.3)')};
-`;
+  return merged;
+};
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState([]);
-  const [clientsByAgent, setClientsByAgent] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
@@ -241,18 +212,17 @@ function App() {
 
     try {
       const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
 
-      if (sheetData && sheetData.length > 0) {
-        setData(sheetData);
-        setClientsByAgent(csData);
+      if (mergedData && mergedData.length > 0) {
+        setData(mergedData);
         if (notifyUser) {
-          toast.success(`Sync completed (${sheetData.length} records)`, {
+          toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
         setData(mockDebtors);
-        setClientsByAgent(csData);
         if (notifyUser) {
           toast('Zoho returned no rows. Using local backup.', {
             icon: 'ℹ️',
@@ -262,7 +232,6 @@ function App() {
       }
     } catch {
       setData(mockDebtors);
-      setClientsByAgent([]);
       if (notifyUser) {
         toast.error('Unable to connect to Zoho. Showing local data.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -292,12 +261,11 @@ function App() {
 
   useEffect(() => {
     if (selectedAgent === 'all') return;
-    const exists = data.some((item) => String(item.agentId || '').trim() === selectedAgent)
-      || clientsByAgent.some((item) => String(item.agentId || '').trim() === selectedAgent);
+    const exists = data.some((item) => String(item.agentId || '').trim() === selectedAgent);
     if (!exists) {
       setSelectedAgent('all');
     }
-  }, [selectedAgent, data, clientsByAgent]);
+  }, [selectedAgent, data]);
 
   const handleSaveDebtor = (debtor) => {
     if (currentDebtor) {
@@ -329,65 +297,22 @@ function App() {
   };
 
   const metrics = calculateMetrics(data);
-  const agentOptions = Array.from(new Set([
-    ...data.map((item) => String(item.agentId || '').trim()).filter(Boolean),
-    ...clientsByAgent.map((item) => String(item.agentId || '').trim()).filter(Boolean)
-  ])).sort();
+  const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
     ? data
     : data.filter((item) => String(item.agentId || '').trim() === selectedAgent);
 
   const clientDebtMap = new Map();
-
-  clientsByAgent
-    .filter((item) => selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent)
-    .forEach((item) => {
-      const key = String(item.company || '').trim().toLowerCase();
-      if (!key) return;
-      const known = item.hasDebt;
-      const existing = clientDebtMap.get(key);
-      if (!existing) {
-        clientDebtMap.set(key, {
-          company: item.company,
-          hasDebt: known,
-          source: 'cs'
-        });
-      } else if (existing.hasDebt === null && known !== null) {
-        existing.hasDebt = known;
-      }
-    });
-
   agentData.forEach((item) => {
     const key = String(item.company || item.clientName || '').trim().toLowerCase();
     if (!key) return;
     const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
-    const existing = clientDebtMap.get(key);
-
-    if (!existing) {
-      clientDebtMap.set(key, {
-        company: item.company || item.clientName,
-        hasDebt: isInDebt,
-        source: 'debts'
-      });
-      return;
-    }
-
-    if (existing.hasDebt === null) {
-      existing.hasDebt = isInDebt;
-    } else {
-      existing.hasDebt = existing.hasDebt || isInDebt;
-    }
+    const previous = clientDebtMap.get(key) || false;
+    clientDebtMap.set(key, previous || isInDebt);
   });
 
-  const clientStatusRows = Array.from(clientDebtMap.values())
-    .map((item) => ({
-      ...item,
-      hasDebt: item.hasDebt === null ? false : item.hasDebt
-    }))
-    .sort((a, b) => a.company.localeCompare(b.company));
-
-  const snapshotClients = clientStatusRows.length;
-  const snapshotClientsInDebt = clientStatusRows.filter((item) => item.hasDebt).length;
+  const snapshotClients = clientDebtMap.size;
+  const snapshotClientsInDebt = Array.from(clientDebtMap.values()).filter(Boolean).length;
   const snapshotClientsClear = snapshotClients - snapshotClientsInDebt;
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
@@ -439,23 +364,6 @@ function App() {
             </div>
           </AgentSnapshot>
         </AgentToolbar>
-
-        <AgentStatusPanel>
-          <AgentStatusHeader>
-            <h3>{selectedAgent === 'all' ? 'Client debt status by all agents' : `Client debt status - ${selectedAgent}`}</h3>
-            <span>{clientsByAgent.length > 0 ? 'Based on CS by agent + debt records' : 'Based on debt records'}</span>
-          </AgentStatusHeader>
-          <AgentStatusList>
-            {clientStatusRows.length > 0 ? clientStatusRows.map((row) => (
-              <AgentStatusItem key={`${selectedAgent}-${row.company}`}>
-                <strong>{row.company}</strong>
-                <StatusDot $hasDebt={row.hasDebt}>{row.hasDebt ? 'Has Debt' : 'No Debt'}</StatusDot>
-              </AgentStatusItem>
-            )) : (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No client records for this view.</span>
-            )}
-          </AgentStatusList>
-        </AgentStatusPanel>
 
         <DebtorsList
           data={agentData}
