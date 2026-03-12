@@ -158,6 +158,96 @@ const BillingCycleSelect = styled.select`
   }
 `;
 
+const StatusSelect = styled(BillingCycleSelect)`
+  min-width: 122px;
+  font-weight: 700;
+  color: ${(props) => {
+    if (props.$tone === 'paid') return 'var(--ok)';
+    if (props.$tone === 'overdue') return 'var(--danger)';
+    return 'var(--warn)';
+  }};
+  border-color: ${(props) => {
+    if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.35)';
+    if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.35)';
+    return 'rgba(245, 158, 11, 0.35)';
+  }};
+  background: ${(props) => {
+    if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.12)';
+    if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.12)';
+    return 'rgba(245, 158, 11, 0.12)';
+  }};
+`;
+
+const InvoiceStepper = styled.div`
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+`;
+
+const StepButton = styled.button`
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+`;
+
+const StepValue = styled.input`
+  width: 46px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  outline: none;
+`;
+
+const DueInput = styled.input`
+  width: 112px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  padding: 0.32rem 0.45rem;
+  font-size: 0.78rem;
+
+  &:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.16);
+  }
+`;
+
+const IconActionButton = styled.button`
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid ${(props) => props.$danger ? 'rgba(248, 113, 113, 0.36)' : 'rgba(56, 189, 248, 0.35)'};
+  background: ${(props) => props.$danger ? 'rgba(248, 113, 113, 0.12)' : 'rgba(56, 189, 248, 0.14)'};
+  color: ${(props) => props.$danger ? 'var(--danger)' : 'var(--brand)'};
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s, filter 0.15s;
+
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.1);
+  }
+`;
+
 const getComputedStatus = (item) => {
   const rawStatus = String(item.status ?? '').toLowerCase();
   if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
@@ -182,12 +272,14 @@ export default function DebtorsList({
   onOpenCompanyProfile,
   onQuickUpdateBillingCycle,
   onQuickUpdateStatus,
-  onQuickUpdateAmount
+  onQuickUpdateAmount,
+  onQuickUpdateInvoiceCount
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
   const [pendingAmounts, setPendingAmounts] = useState({});
+  const [pendingInvoices, setPendingInvoices] = useState({});
 
   const commitQuickAmount = (item) => {
     const raw = pendingAmounts[item.id];
@@ -196,6 +288,19 @@ export default function DebtorsList({
     if (!Number.isFinite(parsed) || parsed < 0) return;
     onQuickUpdateAmount?.(item, parsed);
     setPendingAmounts((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+  };
+
+  const commitInvoiceCount = (item) => {
+    const raw = pendingInvoices[item.id];
+    if (raw === undefined) return;
+    const parsed = Number.parseInt(String(raw), 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+    onQuickUpdateInvoiceCount?.(item, parsed);
+    setPendingInvoices((prev) => {
       const next = { ...prev };
       delete next[item.id];
       return next;
@@ -325,20 +430,58 @@ export default function DebtorsList({
                     ))}
                   </BillingCycleSelect>
                 </Td>
-                <Td>{item.invoiceCount || 0}</Td>
                 <Td>
-                  <BillingCycleSelect
+                  <InvoiceStepper>
+                    <StepButton
+                      type="button"
+                      onClick={() => {
+                        const current = Number.parseInt(String(pendingInvoices[item.id] ?? item.invoiceCount ?? 0), 10) || 0;
+                        const next = Math.max(0, current - 1);
+                        setPendingInvoices((prev) => ({ ...prev, [item.id]: next }));
+                        onQuickUpdateInvoiceCount?.(item, next);
+                      }}
+                    >
+                      -
+                    </StepButton>
+                    <StepValue
+                      type="number"
+                      min="0"
+                      value={pendingInvoices[item.id] ?? String(item.invoiceCount ?? 0)}
+                      onChange={(e) => setPendingInvoices((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      onBlur={() => commitInvoiceCount(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitInvoiceCount(item);
+                        }
+                      }}
+                    />
+                    <StepButton
+                      type="button"
+                      onClick={() => {
+                        const current = Number.parseInt(String(pendingInvoices[item.id] ?? item.invoiceCount ?? 0), 10) || 0;
+                        const next = current + 1;
+                        setPendingInvoices((prev) => ({ ...prev, [item.id]: next }));
+                        onQuickUpdateInvoiceCount?.(item, next);
+                      }}
+                    >
+                      +
+                    </StepButton>
+                  </InvoiceStepper>
+                </Td>
+                <Td>
+                  <StatusSelect
+                    $tone={getComputedStatus(item)}
                     value={getComputedStatus(item)}
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
-                    style={{ minWidth: '114px' }}
                   >
                     <option value="pending">Pending</option>
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
-                  </BillingCycleSelect>
+                  </StatusSelect>
                 </Td>
                 <Td>
-                  <input
+                  <DueInput
                     type="number"
                     step="0.01"
                     min="0"
@@ -351,35 +494,25 @@ export default function DebtorsList({
                         commitQuickAmount(item);
                       }
                     }}
-                    style={{
-                      width: '110px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      padding: '0.32rem 0.45rem',
-                      fontSize: '0.78rem'
-                    }}
                   />
                 </Td>
                 <Td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                    <button
-                      className="btn btn-secondary"
+                    <IconActionButton
+                      type="button"
                       onClick={() => onEdit(item)}
-                      style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
                       title="Edit"
                     >
-                      <Edit2 size={14} color="var(--brand)" />
-                    </button>
-                    <button
-                      className="btn btn-secondary"
+                      <Edit2 size={14} />
+                    </IconActionButton>
+                    <IconActionButton
+                      type="button"
+                      $danger
                       onClick={() => setDeleteDialog({ isOpen: true, item })}
-                      style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
                       title="Delete"
                     >
-                      <Trash2 size={14} color="var(--danger)" />
-                    </button>
+                      <Trash2 size={14} />
+                    </IconActionButton>
                   </div>
                 </Td>
               </Tr>

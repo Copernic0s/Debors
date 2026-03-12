@@ -284,6 +284,7 @@ const aggregateByCompany = (rows) => {
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
         invoiceCount: row.invoiceNumber ? 1 : 0,
+        invoiceCountOverride: Number.isFinite(Number(row.invoiceCountOverride)) ? Number(row.invoiceCountOverride) : null,
         dueDate: row.dueDate || '',
         id: `CMP-${key}`
       });
@@ -294,6 +295,9 @@ const aggregateByCompany = (rows) => {
     current.agentSet.add(agent);
     if (row.billingCycle) current.cycleSet.add(row.billingCycle);
     if (row.invoiceNumber) current.invoiceCount += 1;
+    if (Number.isFinite(Number(row.invoiceCountOverride))) {
+      current.invoiceCountOverride = Number(row.invoiceCountOverride);
+    }
 
     if (row.dueDate) {
       if (!current.dueDate || row.dueDate < current.dueDate) {
@@ -319,9 +323,10 @@ const aggregateByCompany = (rows) => {
       agentId: agents.length > 1 ? 'Multiple' : agents[0],
       billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
-      invoiceCount: item.invoiceCount,
+      invoiceCount: Number.isFinite(Number(item.invoiceCountOverride)) ? Number(item.invoiceCountOverride) : item.invoiceCount,
       agentSet: undefined,
-      cycleSet: undefined
+      cycleSet: undefined,
+      invoiceCountOverride: item.invoiceCountOverride
     };
   });
 };
@@ -578,6 +583,31 @@ function App() {
     });
   };
 
+  const quickUpdateInvoiceCount = (row, nextCount) => {
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const parsed = Number.parseInt(String(nextCount), 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return;
+
+    setData((prev) => prev.map((item) => {
+      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+      if (!sameCompany) return item;
+
+      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (!inAgentScope) return item;
+
+      return {
+        ...item,
+        invoiceCountOverride: parsed
+      };
+    }));
+
+    toast.success('Invoice count updated', {
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
   const aggregatedData = aggregateByCompany(data);
   const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
@@ -691,6 +721,7 @@ function App() {
           onQuickUpdateBillingCycle={quickUpdateBillingCycle}
           onQuickUpdateStatus={quickUpdatePaymentStatus}
           onQuickUpdateAmount={quickUpdateTotalDue}
+          onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
           onEdit={(debtor) => {
             setCurrentDebtor(debtor);
             setIsModalOpen(true);
