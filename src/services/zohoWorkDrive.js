@@ -1,7 +1,11 @@
 import * as XLSX from 'xlsx';
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
-const CORS_PROXY_URL = 'https://api.allorigins.win/raw?url=';
+const CORS_PROXY_BUILDERS = [
+  (targetUrl) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+  (targetUrl) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+  (targetUrl) => targetUrl
+];
 
 const BILLING_PROFILE = {
   OWNER_A: 'owner_a',
@@ -226,15 +230,28 @@ const parseWorkbook = (arrayBuffer) => {
 };
 
 export const fetchAllDataFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {
-  const { cacheBust = true, useProxy = true } = options;
+  const { cacheBust = true } = options;
   if (!url) throw new Error('No URL provided');
 
   const sourceUrl = buildUrl(url, cacheBust);
-  const requestUrl = useProxy ? `${CORS_PROXY_URL}${encodeURIComponent(sourceUrl)}` : sourceUrl;
+  let lastError = null;
+  let response = null;
 
-  const response = await fetch(requestUrl);
-  if (!response.ok) {
-    throw new Error(`Unable to download sheet data (${response.status})`);
+  for (const buildProxyUrl of CORS_PROXY_BUILDERS) {
+    const requestUrl = buildProxyUrl(sourceUrl);
+    try {
+      response = await fetch(requestUrl);
+      if (response.ok) {
+        break;
+      }
+      lastError = new Error(`Proxy request failed (${response.status})`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw new Error(lastError?.message || 'Unable to download sheet data');
   }
 
   const arrayBuffer = await response.arrayBuffer();
