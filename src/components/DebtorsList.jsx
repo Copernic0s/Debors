@@ -182,7 +182,7 @@ const getStatusBadge = (status) => {
   }
 };
 
-export default function DebtorsList({ data, onEdit, onDelete }) {
+export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfile }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
@@ -268,7 +268,23 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
           <tbody>
             {filteredData.length > 0 ? filteredData.map((item) => (
               <Tr key={item.id}>
-                <Td style={{ fontWeight: 600 }}>{item.company || item.clientName || 'Unassigned Company'}</Td>
+                <Td style={{ fontWeight: 600 }}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--brand)',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: 0,
+                      textAlign: 'left'
+                    }}
+                  >
+                    {item.company || item.clientName || 'Unassigned Company'}
+                  </button>
+                </Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <div style={{

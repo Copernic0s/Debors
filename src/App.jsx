@@ -5,6 +5,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
+import CompanyProfileModal from './components/CompanyProfileModal';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import './index.css';
@@ -334,6 +335,7 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
+  const [activeCompany, setActiveCompany] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const syncInFlightRef = useRef(false);
 
@@ -435,6 +437,11 @@ function App() {
     setIsModalOpen(true);
   };
 
+  const openCompanyProfile = (companyName) => {
+    if (!companyName) return;
+    setActiveCompany(companyName);
+  };
+
   const aggregatedData = aggregateByCompany(data);
   const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
@@ -457,6 +464,44 @@ function App() {
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
+
+  const companyProfile = React.useMemo(() => {
+    if (!activeCompany) return null;
+
+    const scopedRows = data.filter((item) => {
+      const company = String(item.company || item.clientName || '').trim().toLowerCase();
+      const byCompany = company === activeCompany.trim().toLowerCase();
+      if (!byCompany) return false;
+      if (selectedAgent === 'all') return true;
+      return String(item.agentId || '').trim() === selectedAgent;
+    });
+
+    const invoiceRows = scopedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
+    const totalDebt = scopedRows
+      .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalOverdue = scopedRows
+      .filter((item) => String(item.status || '').toLowerCase() === 'overdue')
+      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    return {
+      company: activeCompany,
+      totalDebt,
+      totalOverdue,
+      invoiceCount: invoiceRows.length,
+      agents: Array.from(new Set(scopedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
+      contacts: Array.from(new Set(scopedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
+      invoices: invoiceRows
+        .map((item) => ({
+          id: item.id,
+          invoiceNumber: item.invoiceNumber || item.id,
+          billingCycle: item.billingCycle,
+          status: item.status,
+          amount: Number(item.amount) || 0
+        }))
+        .sort((a, b) => String(a.invoiceNumber).localeCompare(String(b.invoiceNumber)))
+    };
+  }, [activeCompany, data, selectedAgent]);
 
   const renderContent = () => {
     if (activeTab === 'reports') {
@@ -506,6 +551,7 @@ function App() {
 
         <DebtorsList
           data={agentData}
+          onOpenCompanyProfile={openCompanyProfile}
           onEdit={(debtor) => {
             setCurrentDebtor(debtor);
             setIsModalOpen(true);
@@ -583,6 +629,12 @@ function App() {
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveDebtor}
         debtor={currentDebtor}
+      />
+
+      <CompanyProfileModal
+        isOpen={Boolean(activeCompany)}
+        onClose={() => setActiveCompany(null)}
+        profile={companyProfile}
       />
 
       <Toaster position="bottom-right" />
