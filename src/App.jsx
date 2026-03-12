@@ -11,6 +11,32 @@ import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import './index.css';
 
+const MANUAL_EDITS_STORAGE_KEY = 'debors_manual_edits_v1';
+
+const safeReadManualEdits = () => {
+  try {
+    const raw = localStorage.getItem(MANUAL_EDITS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const mergeManualEdits = (rows, editsById) => {
+  return rows
+    .filter((row) => !editsById[row.id]?.__deleted)
+    .map((row) => {
+      const patch = editsById[row.id];
+      if (!patch) return row;
+      return {
+        ...row,
+        ...patch
+      };
+    });
+};
+
 const AppContainer = styled.div`
   display: flex;
   min-height: 100vh;
@@ -343,7 +369,14 @@ function App() {
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [manualEdits, setManualEdits] = useState(() => safeReadManualEdits());
   const syncInFlightRef = useRef(false);
+  const manualEditsRef = useRef(manualEdits);
+
+  useEffect(() => {
+    manualEditsRef.current = manualEdits;
+    localStorage.setItem(MANUAL_EDITS_STORAGE_KEY, JSON.stringify(manualEdits));
+  }, [manualEdits]);
 
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
     if (syncInFlightRef.current) return;
@@ -357,12 +390,13 @@ function App() {
     try {
       const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
+      const hydratedData = mergeManualEdits(mergedData, manualEditsRef.current);
 
-      if (mergedData && mergedData.length > 0) {
-        setData(mergedData);
+      if (hydratedData && hydratedData.length > 0) {
+        setData(hydratedData);
         setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
-          toast.success(`Sync completed (${mergedData.length} records)`, {
+          toast.success(`Sync completed (${hydratedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
@@ -420,27 +454,39 @@ function App() {
 
       if (isAggregatedRow) {
         const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
-        setData(data.map((item) => {
-          const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-          if (!sameCompany) return item;
+        setData((prev) => {
+          const changed = [];
+          const next = prev.map((item) => {
+            const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+            if (!sameCompany) return item;
 
-          const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-          if (!inAgentScope) return item;
+            const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+            if (!inAgentScope) return item;
 
-          return {
-            ...item,
-            company: debtor.company || debtor.clientName,
-            clientName: debtor.company || debtor.clientName,
-            amount: Number(debtor.amount) || 0,
-            dueDate: debtor.dueDate,
-            status: debtor.status,
-            agentId: debtor.agentId,
-            billingCycle: debtor.billingCycle,
-            notes: debtor.notes
-          };
-        }));
+            const updatedRow = {
+              ...item,
+              company: debtor.company || debtor.clientName,
+              clientName: debtor.company || debtor.clientName,
+              amount: Number(debtor.amount) || 0,
+              dueDate: debtor.dueDate,
+              status: debtor.status,
+              agentId: debtor.agentId,
+              billingCycle: debtor.billingCycle,
+              notes: debtor.notes
+            };
+            changed.push(updatedRow);
+            return updatedRow;
+          });
+          persistEditedRows(changed);
+          return next;
+        });
       } else {
-        setData(data.map(d => d.id === debtor.id ? debtor : d));
+        setData((prev) => {
+          const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
+          const changed = next.filter((d) => d.id === debtor.id);
+          persistEditedRows(changed);
+          return next;
+        });
       }
 
       toast.success('Debt updated successfully', {
@@ -457,7 +503,14 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
-    setData(data.filter(d => d.id !== id));
+    setData((prev) => prev.filter((d) => d.id !== id));
+    setManualEdits((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        __deleted: true
+      }
+    }));
     toast.success('Record deleted', {
       icon: '🗑️',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -474,24 +527,56 @@ function App() {
     setActiveCompany(companyName);
   };
 
+  const persistEditedRows = (rows) => {
+    if (!rows || rows.length === 0) return;
+
+    setManualEdits((prev) => {
+      const next = { ...prev };
+      rows.forEach((row) => {
+        if (!row?.id) return;
+        next[row.id] = {
+          ...(next[row.id] || {}),
+          __deleted: false,
+          amount: row.amount,
+          status: row.status,
+          billingCycle: row.billingCycle,
+          dueDate: row.dueDate,
+          agentId: row.agentId,
+          company: row.company,
+          clientName: row.clientName,
+          notes: row.notes,
+          invoiceCountOverride: row.invoiceCountOverride
+        };
+      });
+      return next;
+    });
+  };
+
   const quickUpdateBillingCycle = (row, nextCycle) => {
     const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
     const normalizedNextCycle = normalizeBillingCycle(nextCycle);
 
-    setData((prev) => prev.map((item) => {
-      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-      if (!sameCompany) return item;
+    setData((prev) => {
+      const changed = [];
+      const next = prev.map((item) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return item;
 
-      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      if (!inAgentScope) return item;
+        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+        if (!inAgentScope) return item;
 
-      return {
-        ...item,
-        billingCycle: normalizedNextCycle
-      };
-    }));
+        const updatedRow = {
+          ...item,
+          billingCycle: normalizedNextCycle
+        };
+        changed.push(updatedRow);
+        return updatedRow;
+      });
+      persistEditedRows(changed);
+      return next;
+    });
 
     toast.success('Billing cycle updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -504,18 +589,25 @@ function App() {
 
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
-    setData((prev) => prev.map((item) => {
-      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-      if (!sameCompany) return item;
+    setData((prev) => {
+      const changed = [];
+      const next = prev.map((item) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return item;
 
-      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      if (!inAgentScope) return item;
+        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+        if (!inAgentScope) return item;
 
-      return {
-        ...item,
-        status: normalizedStatus
-      };
-    }));
+        const updatedRow = {
+          ...item,
+          status: normalizedStatus
+        };
+        changed.push(updatedRow);
+        return updatedRow;
+      });
+      persistEditedRows(changed);
+      return next;
+    });
 
     toast.success('Payment status updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -548,6 +640,7 @@ function App() {
       if (matchingIndexes.length === 1) {
         const idx = matchingIndexes[0];
         updated[idx] = { ...updated[idx], amount: parsedAmount };
+        persistEditedRows([updated[idx]]);
         return updated;
       }
 
@@ -559,6 +652,7 @@ function App() {
             amount: index === 0 ? parsedAmount : 0
           };
         });
+        persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
         return updated;
       }
 
@@ -575,6 +669,7 @@ function App() {
         updated[idx] = { ...updated[idx], amount: nextValue };
       });
 
+      persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
       return updated;
     });
 
@@ -590,18 +685,25 @@ function App() {
     const parsed = Number.parseInt(String(nextCount), 10);
     if (!Number.isFinite(parsed) || parsed < 0) return;
 
-    setData((prev) => prev.map((item) => {
-      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-      if (!sameCompany) return item;
+    setData((prev) => {
+      const changed = [];
+      const next = prev.map((item) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return item;
 
-      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      if (!inAgentScope) return item;
+        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+        if (!inAgentScope) return item;
 
-      return {
-        ...item,
-        invoiceCountOverride: parsed
-      };
-    }));
+        const updatedRow = {
+          ...item,
+          invoiceCountOverride: parsed
+        };
+        changed.push(updatedRow);
+        return updatedRow;
+      });
+      persistEditedRows(changed);
+      return next;
+    });
 
     toast.success('Invoice count updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
