@@ -1,0 +1,331 @@
+import React, { useState } from 'react';
+import styled from 'styled-components';
+import { Search, ChevronDown, ChevronUp, Edit2, Trash2 } from 'lucide-react';
+import ConfirmDialog from './ConfirmDialog';
+
+const Container = styled.div`
+  padding: 1.5rem;
+  margin-top: 2rem;
+  animation: fadeIn 0.6s ease-out;
+  border-radius: var(--radius-xl);
+`;
+
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+`;
+
+const Title = styled.h2`
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+`;
+
+const Controls = styled.div`
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+`;
+
+const SearchInput = styled.div`
+  position: relative;
+  
+  input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.6rem 1rem 0.6rem 2.5rem;
+    color: var(--text-main);
+    font-family: 'Manrope', inherit;
+    font-size: 0.875rem;
+    width: 250px;
+    transition: all 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+  }
+
+  svg {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+`;
+
+const FilterSelect = styled.select`
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 1rem;
+  color: var(--text-main);
+  font-family: 'Manrope', inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+
+  &:focus {
+    border-color: var(--brand);
+  }
+
+  option {
+    background: var(--bg-2);
+    color: var(--text-main);
+  }
+`;
+
+const TableWrapper = styled.div`
+  overflow-x: auto;
+  width: 100%;
+`;
+
+const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+`;
+
+const Th = styled.th`
+  padding: 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+
+  &:hover {
+    color: var(--text-main);
+  }
+
+  div {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+`;
+
+const Td = styled.td`
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-main);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  vertical-align: middle;
+`;
+
+const Tr = styled.tr`
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+
+  &:last-child ${Td} {
+    border-bottom: none;
+  }
+`;
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value);
+};
+
+const getComputedStatus = (item) => {
+  const rawStatus = String(item.status ?? '').toLowerCase();
+  if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
+  if (rawStatus === 'overdue' || rawStatus === 'mora' || rawStatus === 'vencido') return 'overdue';
+
+  if (item.dueDate) {
+    const dueDate = new Date(`${item.dueDate}T00:00:00`);
+    const today = new Date();
+    const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (!Number.isNaN(dueDate.getTime()) && dueDate < dayStart) {
+      return 'overdue';
+    }
+  }
+
+  return 'pending';
+};
+
+const getStatusBadge = (status) => {
+  switch (status.toLowerCase()) {
+    case 'paid':
+    case 'pagado':
+      return <span className="status-badge status-paid">Pagado</span>;
+    case 'pending':
+    case 'pendiente':
+      return <span className="status-badge status-pending">Pendiente</span>;
+    case 'overdue':
+    case 'mora':
+      return <span className="status-badge status-overdue">En Mora</span>;
+    default:
+      return <span className="status-badge status-pending">{status}</span>;
+  }
+};
+
+export default function DebtorsList({ data, onEdit, onDelete }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterAgent, setFilterAgent] = useState('all');
+  const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
+
+  // Obtener la lista única de agentes basados en los datos
+  const uniqueAgents = Array.from(new Set(data.map(item => item.agentId))).filter(Boolean);
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedData = [...data].sort((a, b) => {
+    if (sortConfig.key === 'status') {
+      const aStatus = getComputedStatus(a);
+      const bStatus = getComputedStatus(b);
+      if (aStatus < bStatus) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aStatus > bStatus) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
+    if (a[sortConfig.key] < b[sortConfig.key]) {
+      return sortConfig.direction === 'asc' ? -1 : 1;
+    }
+    if (a[sortConfig.key] > b[sortConfig.key]) {
+      return sortConfig.direction === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
+
+  const filteredData = sortedData.filter(item => {
+    const matchesSearch = item.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.id.toString().toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesAgent = filterAgent === 'all' || item.agentId?.toString() === filterAgent;
+    return matchesSearch && matchesAgent;
+  });
+
+  return (
+    <Container className="glass-panel">
+      <Header>
+        <Title>Listado de Deudores</Title>
+        <Controls>
+          <SearchInput>
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Buscar cliente o ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </SearchInput>
+          <FilterSelect
+            value={filterAgent}
+            onChange={(e) => setFilterAgent(e.target.value)}
+          >
+            <option value="all">Todos los Agentes</option>
+            {uniqueAgents.map(agentStr => (
+              <option key={agentStr} value={agentStr}>{agentStr}</option>
+            ))}
+          </FilterSelect>
+        </Controls>
+      </Header>
+
+      <TableWrapper>
+        <Table>
+          <thead>
+            <tr>
+              <Th onClick={() => handleSort('id')}>ID {sortConfig.key === 'id' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('clientName')}>Cliente {sortConfig.key === 'clientName' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('amount')}>Monto {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('dueDate')}>Vencimiento {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('status')}>Estado {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('agentId')}>Agente</Th>
+              <Th></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.length > 0 ? filteredData.map((item) => (
+              <Tr key={item.id}>
+                <Td style={{ color: 'var(--text-muted)' }}>{item.id}</Td>
+                <Td style={{ fontWeight: 600 }}>{item.clientName}</Td>
+                <Td>{formatCurrency(item.amount)}</Td>
+                <Td>{item.dueDate || 'Sin fecha'}</Td>
+                <Td>{getStatusBadge(getComputedStatus(item))}</Td>
+                <Td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{
+                      width: '24px', height: '24px', borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.1)', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-main)',
+                      border: '1px solid var(--border-color)',
+                      flexShrink: 0
+                    }}>
+                      {(item.agentId && typeof item.agentId === 'string') ? item.agentId.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    {item.agentId}
+                  </div>
+                </Td>
+                <Td style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => onEdit(item)}
+                      style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
+                      title="Editar"
+                    >
+                      <Edit2 size={14} color="var(--brand)" />
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => setDeleteDialog({ isOpen: true, item })}
+                      style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
+                      title="Eliminar"
+                    >
+                      <Trash2 size={14} color="var(--danger)" />
+                    </button>
+                  </div>
+                </Td>
+              </Tr>
+            )) : (
+              <tr>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  No se encontraron resultados
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      </TableWrapper>
+
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        title="Eliminar Registro"
+        message={`¿Estás seguro de que deseas borrar el registro de cobranza de "${deleteDialog.item?.clientName}"? Esta acción no se puede deshacer.`}
+        isDanger={true}
+        confirmText="Sí, Eliminar"
+        onCancel={() => setDeleteDialog({ isOpen: false, item: null })}
+        onConfirm={() => {
+          if (deleteDialog.item) {
+            onDelete(deleteDialog.item.id);
+          }
+          setDeleteDialog({ isOpen: false, item: null });
+        }}
+      />
+    </Container>
+  );
+}
