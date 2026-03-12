@@ -5,7 +5,7 @@ import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
-import { mockDebtors, calculateMetrics } from './data/mockData';
+import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import './index.css';
 
@@ -62,15 +62,23 @@ const Logo = styled.div`
   font-family: 'Montserrat', sans-serif;
   font-size: 1.5rem;
   font-weight: 800;
-  color: var(--text-main);
+  color: #39b8ff;
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 0.75rem;
 
   span {
-    color: var(--accent-color);
+    color: #86dbff;
   }
+`;
+
+const BrandOwner = styled.p`
+  margin: 0 0 2.1rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 `;
 
 const NavItem = styled.div`
@@ -189,11 +197,58 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   return merged;
 };
 
+const aggregateByCompany = (rows) => {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const company = String(row.company || row.clientName || '').trim();
+    if (!company) return;
+
+    const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
+    const key = `${agent.toLowerCase()}|${company.toLowerCase()}`;
+    const amount = Number(row.amount) || 0;
+
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, {
+        ...row,
+        company,
+        clientName: company,
+        agentId: agent,
+        amount,
+        billingCycle: row.billingCycle || '',
+        status: row.status || 'pending',
+        notes: row.notes || '',
+        invoiceNumber: row.invoiceNumber || '',
+        id: `CMP-${key}`
+      });
+      return;
+    }
+
+    current.amount += amount;
+    if (current.billingCycle !== row.billingCycle && row.billingCycle) {
+      current.billingCycle = 'Multiple';
+    }
+
+    const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
+    if (statuses.some((s) => s === 'overdue')) {
+      current.status = 'overdue';
+    } else if (statuses.some((s) => s === 'pending')) {
+      current.status = 'pending';
+    } else {
+      current.status = 'paid';
+    }
+  });
+
+  return Array.from(grouped.values());
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -216,24 +271,25 @@ function App() {
 
       if (mergedData && mergedData.length > 0) {
         setData(mergedData);
+        setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
-        setData(mockDebtors);
+        setData([]);
         if (notifyUser) {
-          toast('Zoho returned no rows. Using local backup.', {
+          toast.error('Zoho returned no rows.', {
             icon: 'ℹ️',
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       }
     } catch {
-      setData(mockDebtors);
+      setSyncSourceLabel('Zoho WorkDrive');
       if (notifyUser) {
-        toast.error('Unable to connect to Zoho. Showing local data.', {
+        toast.error('Unable to connect to Zoho.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
         });
       }
@@ -296,11 +352,12 @@ function App() {
     setIsModalOpen(true);
   };
 
-  const metrics = calculateMetrics(data);
-  const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
+  const aggregatedData = aggregateByCompany(data);
+  const metrics = calculateMetrics(aggregatedData);
+  const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
-    ? data
-    : data.filter((item) => String(item.agentId || '').trim() === selectedAgent);
+    ? aggregatedData
+    : aggregatedData.filter((item) => String(item.agentId || '').trim() === selectedAgent);
 
   const clientDebtMap = new Map();
   agentData.forEach((item) => {
@@ -360,7 +417,6 @@ function App() {
               <div>
                 <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
               </div>
-              <span>{selectedAgent === 'all' ? 'Current view: all agents' : `Current view: ${selectedAgent}`}</span>
             </div>
           </AgentSnapshot>
         </AgentToolbar>
@@ -393,6 +449,7 @@ function App() {
             </div>
             Flow<span>Collect</span>
           </Logo>
+          <BrandOwner>Andres Mendez</BrandOwner>
 
           <nav style={{ flex: 1 }}>
             <NavItem $active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>
@@ -416,7 +473,7 @@ function App() {
               style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
               size={24}
             />
-            <h1 style={{ fontSize: '1.35rem', margin: 0 }}>Citifuel</h1>
+            <h1 style={{ fontSize: '1.35rem', margin: 0, color: '#39b8ff' }}>Citifuel</h1>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
@@ -428,7 +485,7 @@ function App() {
                 <Plus size={16} /> New Debtor
               </button>
             </div>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Last sync: {syncTimeLabel}</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
           </div>
         </Topbar>
 

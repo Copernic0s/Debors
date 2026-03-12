@@ -157,7 +157,7 @@ const getStatusBadge = (status) => {
 
 export default function DebtorsList({ data, onEdit, onDelete }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
 
   const handleSort = (key) => {
@@ -222,10 +222,10 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
           <thead>
             <tr>
               <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('amount')}>Balance {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('dueDate')}>Billing Cycle Close {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('agentId')}>Agent</Th>
+              <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('status')}>Payment Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
             </tr>
           </thead>
@@ -233,9 +233,6 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
             {filteredData.length > 0 ? filteredData.map((item) => (
               <Tr key={item.id}>
                 <Td style={{ fontWeight: 600 }}>{item.company || item.clientName || 'Unassigned Company'}</Td>
-                <Td>{formatCurrency(item.amount)}</Td>
-                <Td>{item.billingCycle || item.dueDate || 'No cycle close date'}</Td>
-                <Td>{getStatusBadge(getComputedStatus(item))}</Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <div style={{
@@ -251,6 +248,9 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
                     {item.agentId}
                   </div>
                 </Td>
+                <Td>{item.billingCycle || item.dueDate || 'No cycle'}</Td>
+                <Td>{getStatusBadge(getComputedStatus(item))}</Td>
+                <Td>{formatCurrency(item.amount)}</Td>
                 <Td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     <button
