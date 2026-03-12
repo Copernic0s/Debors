@@ -234,7 +234,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
               <Tr key={item.id}>
                 <Td style={{ fontWeight: 600 }}>{item.company || item.clientName || 'Unassigned Company'}</Td>
                 <Td>{formatCurrency(item.amount)}</Td>
-                <Td>{item.dueDate || 'No cycle close date'}</Td>
+                <Td>{item.billingCycle || item.dueDate || 'No cycle close date'}</Td>
                 <Td>{getStatusBadge(getComputedStatus(item))}</Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
