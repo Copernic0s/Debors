@@ -377,11 +377,11 @@ function App() {
   };
 
   const aggregatedData = aggregateByCompany(data);
-  const metrics = calculateMetrics(aggregatedData);
   const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
     ? aggregatedData
     : aggregatedData.filter((item) => String(item.agentId || '').trim() === selectedAgent);
+  const metrics = calculateMetrics(agentData);
 
   const clientDebtMap = new Map();
   agentData.forEach((item) => {
