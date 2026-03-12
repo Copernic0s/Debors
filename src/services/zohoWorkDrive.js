@@ -63,11 +63,12 @@ export const fetchDebtorsFromSheet = async (url = SHEET_CSV_URL, options = {}) =
                     .filter(row => row['invoice number'] || row.id || row['company name'] || row.clientname) // Filtrar filas vacías
                     .map(row => ({
                         id: normalizeText(row['invoice number'] || row.id, `INV-${Math.floor(Math.random() * 10000)}`),
-                        clientName: normalizeText(row['company name'] || row.clientname, 'Desconocido'),
+                        clientName: normalizeText(row['company name'] || row.clientname, 'Unknown Company'),
+                        company: normalizeText(row['company name'] || row.clientname, 'Unknown Company'),
                         amount: normalizeAmount(row['total due ($)'] ?? row.amount),
                         dueDate: normalizeDate(row.duedate || row['due date'] || row.due_date),
                         status: normalizeText(row['payment status'] || row.status, 'pending').toLowerCase(),
-                        agentId: normalizeText(row['sales rep'] || row.agentid, 'Sin Asignar'),
+                        agentId: normalizeText(row['sales rep'] || row.agentid, 'Unassigned'),
                         notes: normalizeText(row.notes)
                     }));
 

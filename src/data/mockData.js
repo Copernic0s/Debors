@@ -13,6 +13,7 @@ export const mockDebtors = [
   {
     id: 'DB-1001',
     clientName: 'TechCorp Solutions',
+    company: 'TechCorp Solutions',
     amount: 5400.00,
     dueDate: format(subDays(today, 5), 'yyyy-MM-dd'),
     status: 'overdue',
@@ -23,6 +24,7 @@ export const mockDebtors = [
   {
     id: 'DB-1002',
     clientName: 'María Rodríguez',
+    company: 'María Rodríguez',
     amount: 850.50,
     dueDate: format(addDays(today, 15), 'yyyy-MM-dd'),
     status: 'pending',
@@ -33,6 +35,7 @@ export const mockDebtors = [
   {
     id: 'DB-1003',
     clientName: 'Comercializadora Zeta',
+    company: 'Comercializadora Zeta',
     amount: 12000.00,
     dueDate: format(subDays(today, 30), 'yyyy-MM-dd'),
     status: 'overdue',
@@ -43,6 +46,7 @@ export const mockDebtors = [
   {
     id: 'DB-1004',
     clientName: 'Jorge Alvarenga',
+    company: 'Jorge Alvarenga',
     amount: 420.00,
     dueDate: format(subDays(today, 2), 'yyyy-MM-dd'),
     status: 'paid',
@@ -53,6 +57,7 @@ export const mockDebtors = [
   {
     id: 'DB-1005',
     clientName: 'Innovia Designs',
+    company: 'Innovia Designs',
     amount: 3200.00,
     dueDate: format(addDays(today, 5), 'yyyy-MM-dd'),
     status: 'pending',
@@ -63,6 +68,7 @@ export const mockDebtors = [
   {
     id: 'DB-1006',
     clientName: 'Global Logistics',
+    company: 'Global Logistics',
     amount: 8900.00,
     dueDate: format(subDays(today, 12), 'yyyy-MM-dd'),
     status: 'overdue',
@@ -73,6 +79,7 @@ export const mockDebtors = [
   {
     id: 'DB-1007',
     clientName: 'Estudio Jurídico Meier',
+    company: 'Estudio Jurídico Meier',
     amount: 1500.00,
     dueDate: format(addDays(today, 20), 'yyyy-MM-dd'),
     status: 'pending',

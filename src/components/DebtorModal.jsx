@@ -150,24 +150,24 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
     <Overlay onClick={onClose}>
       <ModalContent onClick={e => e.stopPropagation()}>
         <ModalHeader>
-          <h3>{debtor ? 'Editar Deuda' : 'Nuevo Deudor'}</h3>
+          <h3>{debtor ? 'Edit Debt' : 'New Debtor'}</h3>
           <button type="button" onClick={onClose}><X size={20} /></button>
         </ModalHeader>
         <ModalBody id="debtor-form" onSubmit={handleSubmit}>
           <FormGroup>
-            <label>Nombre del Cliente</label>
+            <label>Company</label>
             <input
               required
               type="text"
               value={formData.clientName}
               onChange={e => setFormData({ ...formData, clientName: e.target.value })}
-              placeholder="Ej. TechCorp Solutions"
+              placeholder="Ex. TechCorp Solutions"
             />
           </FormGroup>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <FormGroup>
-              <label>Monto ($)</label>
+              <label>Balance ($)</label>
               <input
                 required
                 type="number"
@@ -179,7 +179,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
               />
             </FormGroup>
             <FormGroup>
-              <label>Vencimiento</label>
+              <label>Billing Cycle Close</label>
               <input
                 required
                 type="date"
@@ -191,40 +191,40 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <FormGroup>
-              <label>Estado</label>
+              <label>Status</label>
               <select
                 value={formData.status}
                 onChange={e => setFormData({ ...formData, status: e.target.value })}
               >
-                <option value="pending">Pendiente</option>
-                <option value="paid">Pagado</option>
-                <option value="overdue">En Mora</option>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
               </select>
             </FormGroup>
             <FormGroup>
-              <label>Agente Asignado (Sales Rep)</label>
+              <label>Assigned Agent</label>
               <input
                 required
                 type="text"
                 value={formData.agentId}
                 onChange={e => setFormData({ ...formData, agentId: e.target.value })}
-                placeholder="Ej. Guidiana Puentes"
+                placeholder="Ex. Guidiana Puentes"
               />
             </FormGroup>
           </div>
 
           <FormGroup>
-            <label>Notas (Opcional)</label>
+            <label>Notes (Optional)</label>
             <textarea
               value={formData.notes || ''}
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Acuerdos de pago, promesas, etc..."
+              placeholder="Payment notes, commitments, follow-up comments..."
             />
           </FormGroup>
         </ModalBody>
         <ModalFooter>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" form="debtor-form" className="btn btn-primary">Guardar Cambios</button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" form="debtor-form" className="btn btn-primary">Save Changes</button>
         </ModalFooter>
       </ModalContent>
     </Overlay>

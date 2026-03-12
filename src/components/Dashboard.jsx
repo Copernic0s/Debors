@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, AlertCircle, Users, CheckCircle, ClipboardList, Percent } from 'lucide-react';
+import { DollarSign, AlertCircle, Users, ClipboardList } from 'lucide-react';
 import styled from 'styled-components';
 
 const DashboardGrid = styled.div`
@@ -59,7 +59,7 @@ export default function Dashboard({ metrics }) {
         <DashboardGrid>
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Deuda Total Activa</StatLabel>
+                    <StatLabel>Total Active Debt</StatLabel>
                     <StatValue>{formatCurrency(metrics.totalDebt)}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(59, 130, 246, 0.2)" $color="var(--accent-color)">
@@ -69,7 +69,7 @@ export default function Dashboard({ metrics }) {
 
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Total en Mora</StatLabel>
+                    <StatLabel>Total Overdue</StatLabel>
                     <StatValue style={{ color: 'var(--danger)' }}>{formatCurrency(metrics.totalOverdue)}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(239, 68, 68, 0.2)" $color="var(--danger)">
@@ -79,17 +79,7 @@ export default function Dashboard({ metrics }) {
 
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Total Recaudado (Mes)</StatLabel>
-                    <StatValue>{formatCurrency(metrics.totalCollected)}</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(16, 185, 129, 0.2)" $color="var(--success)">
-                    <CheckCircle size={24} />
-                </IconWrapper>
-            </StatCard>
-
-            <StatCard className="glass-panel">
-                <StatInfo>
-                    <StatLabel>Clientes Activos</StatLabel>
+                    <StatLabel>Active Clients</StatLabel>
                     <StatValue>{metrics.activeClients}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(245, 158, 11, 0.2)" $color="var(--warn)">
@@ -99,21 +89,11 @@ export default function Dashboard({ metrics }) {
 
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Cuentas Vencidas</StatLabel>
+                    <StatLabel>Overdue Accounts</StatLabel>
                     <StatValue style={{ color: 'var(--danger)' }}>{metrics.overdueAccounts}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(248, 113, 113, 0.15)" $color="var(--danger)">
                     <ClipboardList size={24} />
-                </IconWrapper>
-            </StatCard>
-
-            <StatCard className="glass-panel">
-                <StatInfo>
-                    <StatLabel>Efectividad de Cobro</StatLabel>
-                    <StatValue>{(metrics.collectionRate || 0).toFixed(1)}%</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(16, 185, 129, 0.2)" $color="var(--success)">
-                    <Percent size={24} />
                 </IconWrapper>
             </StatCard>
         </DashboardGrid>

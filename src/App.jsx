@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
-import { Bell, User, Menu, RefreshCw, Layers, Plus, Database, Clock3 } from 'lucide-react';
+import { Menu, RefreshCw, Layers, Plus, Users } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -96,30 +96,64 @@ const NavItem = styled.div`
   }
 `;
 
-const SyncMeta = styled.div`
+const AgentToolbar = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 
-  @media (max-width: 1100px) {
-    display: none;
+  @media (max-width: 900px) {
+    flex-direction: column;
+    align-items: stretch;
   }
 `;
 
-const SyncChip = styled.div`
-  display: inline-flex;
+const AgentSelect = styled.select`
+  min-width: 260px;
+  max-width: 380px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.8rem;
+  color: var(--text-main);
+  font-family: 'Manrope', inherit;
+  font-size: 0.9rem;
+  outline: none;
+
+  &:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+  }
+
+  option {
+    color: var(--text-main);
+    background: var(--bg-2);
+  }
+`;
+
+const AgentSnapshot = styled.div`
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.8rem;
   background: var(--surface-2);
   border: 1px solid var(--border-color);
-  border-radius: 999px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  border-radius: var(--radius-lg);
+  padding: 0.7rem 0.9rem;
+  color: var(--text-main);
 
   strong {
     color: var(--text-main);
-    font-weight: 700;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 0.84rem;
+  }
+
+  @media (max-width: 1100px) {
+    width: 100%;
   }
 `;
 
@@ -128,9 +162,8 @@ function App() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isUsingRealData, setIsUsingRealData] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState(null);
-  const [syncSource, setSyncSource] = useState('mock');
+  const [selectedAgent, setSelectedAgent] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -150,19 +183,15 @@ function App() {
 
       if (sheetData && sheetData.length > 0) {
         setData(sheetData);
-        setIsUsingRealData(true);
-        setSyncSource('zoho');
         if (notifyUser) {
-          toast.success(`Sincronizacion completa (${sheetData.length} registros)`, {
+          toast.success(`Sync completed (${sheetData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
         setData(mockDebtors);
-        setIsUsingRealData(false);
-        setSyncSource('mock');
         if (notifyUser) {
-          toast('Zoho no devolvio filas. Se usa respaldo local.', {
+          toast('Zoho returned no rows. Using local backup.', {
             icon: 'ℹ️',
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
@@ -170,10 +199,8 @@ function App() {
       }
     } catch {
       setData(mockDebtors);
-      setIsUsingRealData(false);
-      setSyncSource('mock');
       if (notifyUser) {
-        toast.error('No se pudo conectar con Zoho. Mostrando datos locales.', {
+        toast.error('Unable to connect to Zoho. Showing local data.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
         });
       }
@@ -201,15 +228,13 @@ function App() {
 
   const handleSaveDebtor = (debtor) => {
     if (currentDebtor) {
-      // Editar
       setData(data.map(d => d.id === debtor.id ? debtor : d));
-      toast.success('Deuda actualizada correctamente', {
+      toast.success('Debt updated successfully', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
     } else {
-      // Nuevo
       setData([debtor, ...data]);
-      toast.success('Nuevo deudor registrado', {
+      toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
     }
@@ -219,7 +244,7 @@ function App() {
 
   const handleDeleteDebtor = (id) => {
     setData(data.filter(d => d.id !== id));
-    toast.success('Registro eliminado', {
+    toast.success('Record deleted', {
       icon: '🗑️',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
@@ -231,16 +256,33 @@ function App() {
   };
 
   const metrics = calculateMetrics(data);
+  const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
+  const agentData = selectedAgent === 'all'
+    ? data
+    : data.filter((item) => String(item.agentId || '').trim() === selectedAgent);
+
+  const clientDebtMap = new Map();
+  agentData.forEach((item) => {
+    const key = String(item.company || item.clientName || '').trim().toLowerCase();
+    if (!key) return;
+    const previous = clientDebtMap.get(key) || false;
+    const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
+    clientDebtMap.set(key, previous || isInDebt);
+  });
+
+  const snapshotClients = clientDebtMap.size;
+  const snapshotClientsInDebt = Array.from(clientDebtMap.values()).filter(Boolean).length;
+  const snapshotClientsClear = snapshotClients - snapshotClientsInDebt;
   const syncTimeLabel = lastSyncAt
-    ? new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
+    ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
 
   const renderContent = () => {
     if (activeTab === 'reports') {
       return (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Módulo de Reportes</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Próximamente... Aquí podrás ver gráficas de recaudación por agente y exportar PDFs.</p>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Reports Module</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Coming soon... agent performance trends and export options.</p>
         </div>
       );
     }
@@ -248,8 +290,8 @@ function App() {
     if (activeTab === 'settings') {
       return (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Configuración</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Próximamente... Ajustes de conexión con Work Drive y preferencias del equipo.</p>
+          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Settings</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Coming soon... connection preferences and team options.</p>
         </div>
       );
     }
@@ -257,16 +299,33 @@ function App() {
     return (
       <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
         <div style={{ marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Bienvenido al Panel 👋</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Aquí está el resumen de las cobranzas consolidado.</p>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', marginTop: '0.45rem' }}>
-            Fuente activa: {isUsingRealData ? 'Zoho WorkDrive' : 'Respaldo local'} | Ultima sincronizacion: {syncTimeLabel}
-          </p>
+          <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Track total debt, overdue balances, and account health across your team.</p>
         </div>
 
         <Dashboard metrics={metrics} />
+
+        <AgentToolbar>
+          <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+            <option value="all">All agents</option>
+            {agentOptions.map((agentName) => (
+              <option key={agentName} value={agentName}>{agentName}</option>
+            ))}
+          </AgentSelect>
+
+          <AgentSnapshot>
+            <Users size={16} color="var(--brand)" />
+            <div>
+              <div>
+                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
+              </div>
+              <span>{selectedAgent === 'all' ? 'Current view: all agents' : `Current view: ${selectedAgent}`}</span>
+            </div>
+          </AgentSnapshot>
+        </AgentToolbar>
+
         <DebtorsList
-          data={data}
+          data={agentData}
           onEdit={(debtor) => {
             setCurrentDebtor(debtor);
             setIsModalOpen(true);
@@ -299,10 +358,10 @@ function App() {
               Dashboard
             </NavItem>
             <NavItem $active={activeTab === 'reports'} onClick={() => setActiveTab('reports')}>
-              <span style={{ fontSize: '1.2rem' }}>📊</span> Reportes
+              <span style={{ fontSize: '1.2rem' }}>📊</span> Reports
             </NavItem>
             <NavItem $active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
-              <span style={{ fontSize: '1.2rem' }}>⚙️</span> Configuración
+              <span style={{ fontSize: '1.2rem' }}>⚙️</span> Settings
             </NavItem>
           </nav>
         </div>
@@ -322,35 +381,13 @@ function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })}>
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sincronizar
+                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
               </button>
               <button className="btn btn-primary" onClick={openNewModal}>
-                <Plus size={16} /> Nuevo Deudor
+                <Plus size={16} /> New Debtor
               </button>
             </div>
-
-            <SyncMeta>
-              <SyncChip>
-                <Database size={14} />
-                Fuente: <strong>{syncSource === 'zoho' ? 'Zoho' : 'Local'}</strong>
-              </SyncChip>
-              <SyncChip>
-                <Clock3 size={14} />
-                Sync: <strong>{syncTimeLabel}</strong>
-              </SyncChip>
-            </SyncMeta>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', borderLeft: '1px solid var(--border-color)', paddingLeft: '1.5rem' }}>
-              <Bell size={20} style={{ color: 'var(--text-muted)', cursor: 'pointer' }} />
-              <div style={{
-                width: '38px', height: '38px', borderRadius: '50%',
-                background: 'var(--surface-3)', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: 'pointer', border: '1px solid var(--border-color)',
-                boxShadow: 'var(--shadow-md)'
-              }}>
-                <User size={18} color="var(--brand)" />
-              </div>
-            </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Last sync: {syncTimeLabel}</span>
           </div>
         </Topbar>
 

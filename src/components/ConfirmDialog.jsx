@@ -74,7 +74,7 @@ const ModalFooter = styled.div`
   gap: 1rem;
 `;
 
-export default function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, confirmText = "Confirmar", isDanger = false }) {
+export default function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, confirmText = "Confirm", isDanger = false }) {
     if (!isOpen) return null;
 
     return (
@@ -88,7 +88,7 @@ export default function ConfirmDialog({ isOpen, title, message, onConfirm, onCan
                     <p>{message}</p>
                 </ModalBody>
                 <ModalFooter>
-                    <button style={{ flex: 1 }} className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+                    <button style={{ flex: 1 }} className="btn btn-secondary" onClick={onCancel}>Cancel</button>
                     <button
                         style={{
                             flex: 1,

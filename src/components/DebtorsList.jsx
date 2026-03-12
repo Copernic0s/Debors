@@ -61,27 +61,6 @@ const SearchInput = styled.div`
   }
 `;
 
-const FilterSelect = styled.select`
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0.6rem 1rem;
-  color: var(--text-main);
-  font-family: 'Manrope', inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
-  outline: none;
-
-  &:focus {
-    border-color: var(--brand);
-  }
-
-  option {
-    background: var(--bg-2);
-    color: var(--text-main);
-  }
-`;
-
 const TableWrapper = styled.div`
   overflow-x: auto;
   width: 100%;
@@ -164,13 +143,13 @@ const getStatusBadge = (status) => {
   switch (status.toLowerCase()) {
     case 'paid':
     case 'pagado':
-      return <span className="status-badge status-paid">Pagado</span>;
+      return <span className="status-badge status-paid">Paid</span>;
     case 'pending':
     case 'pendiente':
-      return <span className="status-badge status-pending">Pendiente</span>;
+      return <span className="status-badge status-pending">Pending</span>;
     case 'overdue':
     case 'mora':
-      return <span className="status-badge status-overdue">En Mora</span>;
+      return <span className="status-badge status-overdue">Overdue</span>;
     default:
       return <span className="status-badge status-pending">{status}</span>;
   }
@@ -178,12 +157,8 @@ const getStatusBadge = (status) => {
 
 export default function DebtorsList({ data, onEdit, onDelete }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterAgent, setFilterAgent] = useState('all');
   const [sortConfig, setSortConfig] = useState({ key: 'dueDate', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
-
-  // Obtener la lista única de agentes basados en los datos
-  const uniqueAgents = Array.from(new Set(data.map(item => item.agentId))).filter(Boolean);
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -202,6 +177,14 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
       return 0;
     }
 
+    if (sortConfig.key === 'company') {
+      const aCompany = String(a.company || a.clientName || '');
+      const bCompany = String(b.company || b.clientName || '');
+      if (aCompany < bCompany) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aCompany > bCompany) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
     if (a[sortConfig.key] < b[sortConfig.key]) {
       return sortConfig.direction === 'asc' ? -1 : 1;
     }
@@ -212,35 +195,25 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
   });
 
   const filteredData = sortedData.filter(item => {
-    const matchesSearch = item.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.id.toString().toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesAgent = filterAgent === 'all' || item.agentId?.toString() === filterAgent;
-    return matchesSearch && matchesAgent;
+    const companyName = String(item.company || item.clientName || '').toLowerCase();
+    const agentName = String(item.agentId || '').toLowerCase();
+    return companyName.includes(searchTerm.toLowerCase()) || agentName.includes(searchTerm.toLowerCase());
   });
 
   return (
     <Container className="glass-panel">
       <Header>
-        <Title>Listado de Deudores</Title>
+        <Title>Debtors List</Title>
         <Controls>
           <SearchInput>
             <Search size={16} />
             <input
               type="text"
-              placeholder="Buscar cliente o ID..."
+              placeholder="Search company or agent..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </SearchInput>
-          <FilterSelect
-            value={filterAgent}
-            onChange={(e) => setFilterAgent(e.target.value)}
-          >
-            <option value="all">Todos los Agentes</option>
-            {uniqueAgents.map(agentStr => (
-              <option key={agentStr} value={agentStr}>{agentStr}</option>
-            ))}
-          </FilterSelect>
         </Controls>
       </Header>
 
@@ -248,22 +221,20 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
         <Table>
           <thead>
             <tr>
-              <Th onClick={() => handleSort('id')}>ID {sortConfig.key === 'id' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('clientName')}>Cliente {sortConfig.key === 'clientName' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('amount')}>Monto {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('dueDate')}>Vencimiento {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('status')}>Estado {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('agentId')}>Agente</Th>
+              <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('amount')}>Balance {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('dueDate')}>Billing Cycle Close {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('agentId')}>Agent</Th>
               <Th></Th>
             </tr>
           </thead>
           <tbody>
             {filteredData.length > 0 ? filteredData.map((item) => (
               <Tr key={item.id}>
-                <Td style={{ color: 'var(--text-muted)' }}>{item.id}</Td>
-                <Td style={{ fontWeight: 600 }}>{item.clientName}</Td>
+                <Td style={{ fontWeight: 600 }}>{item.company || item.clientName || 'Unassigned Company'}</Td>
                 <Td>{formatCurrency(item.amount)}</Td>
-                <Td>{item.dueDate || 'Sin fecha'}</Td>
+                <Td>{item.dueDate || 'No cycle close date'}</Td>
                 <Td>{getStatusBadge(getComputedStatus(item))}</Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -286,7 +257,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
                       className="btn btn-secondary"
                       onClick={() => onEdit(item)}
                       style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
-                      title="Editar"
+                      title="Edit"
                     >
                       <Edit2 size={14} color="var(--brand)" />
                     </button>
@@ -294,7 +265,7 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
                       className="btn btn-secondary"
                       onClick={() => setDeleteDialog({ isOpen: true, item })}
                       style={{ padding: '0.4rem', border: '1px solid rgba(255,255,255,0.08)', background: 'var(--surface-2)' }}
-                      title="Eliminar"
+                      title="Delete"
                     >
                       <Trash2 size={14} color="var(--danger)" />
                     </button>
@@ -303,8 +274,8 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
               </Tr>
             )) : (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  No se encontraron resultados
+                <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  No records found
                 </td>
               </tr>
             )}
@@ -314,10 +285,10 @@ export default function DebtorsList({ data, onEdit, onDelete }) {
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
-        title="Eliminar Registro"
-        message={`¿Estás seguro de que deseas borrar el registro de cobranza de "${deleteDialog.item?.clientName}"? Esta acción no se puede deshacer.`}
+        title="Delete Record"
+        message={`Are you sure you want to delete the collection record for "${deleteDialog.item?.company || deleteDialog.item?.clientName}"? This action cannot be undone.`}
         isDanger={true}
-        confirmText="Sí, Eliminar"
+        confirmText="Yes, Delete"
         onCancel={() => setDeleteDialog({ isOpen: false, item: null })}
         onConfirm={() => {
           if (deleteDialog.item) {
