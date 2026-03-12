@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Search, ChevronDown, ChevronUp, Edit2, Trash2 } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
+import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Container = styled.div`
   padding: 1.5rem;
@@ -142,6 +143,21 @@ const Tr = styled.tr`
   }
 `;
 
+const BillingCycleSelect = styled.select`
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 0.78rem;
+  padding: 0.32rem 0.45rem;
+  min-width: 148px;
+
+  option {
+    background: var(--bg-2);
+    color: var(--text-main);
+  }
+`;
+
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -182,7 +198,7 @@ const getStatusBadge = (status) => {
   }
 };
 
-export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfile }) {
+export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfile, onQuickUpdateBillingCycle }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
@@ -300,7 +316,16 @@ export default function DebtorsList({ data, onEdit, onDelete, onOpenCompanyProfi
                     {item.agentId}
                   </div>
                 </Td>
-                <Td>{item.billingCycle || item.dueDate || 'No cycle'}</Td>
+                <Td>
+                  <BillingCycleSelect
+                    value={normalizeBillingCycle(item.billingCycle || BILLING_CYCLES.UNSPECIFIED)}
+                    onChange={(e) => onQuickUpdateBillingCycle?.(item, e.target.value)}
+                  >
+                    {BILLING_CYCLE_OPTIONS.map((cycle) => (
+                      <option key={cycle} value={cycle}>{cycle}</option>
+                    ))}
+                  </BillingCycleSelect>
+                </Td>
                 <Td>{item.invoiceCount || 0}</Td>
                 <Td>{getStatusBadge(getComputedStatus(item))}</Td>
                 <Td>{formatCurrency(item.amount)}</Td>

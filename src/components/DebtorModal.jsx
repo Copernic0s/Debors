@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { X } from 'lucide-react';
+import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Overlay = styled.div`
   position: fixed;
@@ -152,7 +153,7 @@ const createDefaultFormData = () => ({
   clientName: '',
   company: '',
   amount: '',
-  billingCycle: '',
+  billingCycle: BILLING_CYCLES.UNSPECIFIED,
   customBillingCycle: '',
   dueDate: new Date().toISOString().split('T')[0],
   status: 'pending',
@@ -163,20 +164,10 @@ const createDefaultFormData = () => ({
 const createFormDataFromDebtor = (debtor) => {
   if (!debtor) return createDefaultFormData();
 
-  const knownCycles = new Set([
-    '',
-    'Owner A (Mon-Sun | Due Tue 5PM CT)',
-    'Owner B (Thu-Wed | Due Fri 5PM CT)',
-    'Company Dual (Mon + Thu invoices)',
-    'Monday cycle',
-    'Thursday cycle',
-    'CS by agent',
-    'Multiple',
-    'Unspecified'
-  ]);
-
-  const incomingCycle = String(debtor.billingCycle || '').trim();
-  const useCustomCycle = incomingCycle && !knownCycles.has(incomingCycle);
+  const incomingCycleRaw = String(debtor.billingCycle || '').trim();
+  const incomingCycle = normalizeBillingCycle(incomingCycleRaw);
+  const knownCycles = new Set([...BILLING_CYCLE_OPTIONS, BILLING_CYCLES.MULTIPLE]);
+  const useCustomCycle = incomingCycleRaw && !knownCycles.has(incomingCycle);
 
   return {
     ...createDefaultFormData(),
@@ -185,7 +176,7 @@ const createFormDataFromDebtor = (debtor) => {
     clientName: debtor.company || debtor.clientName || '',
     amount: debtor.amount ?? '',
     billingCycle: useCustomCycle ? 'custom' : incomingCycle,
-    customBillingCycle: useCustomCycle ? incomingCycle : ''
+    customBillingCycle: useCustomCycle ? incomingCycleRaw : ''
   };
 };
 
@@ -251,14 +242,9 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
                 value={formData.billingCycle}
                 onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}
               >
-                <option value="">Unspecified</option>
-                <option value="Owner A (Mon-Sun | Due Tue 5PM CT)">Owner A (Mon-Sun | Due Tue 5PM CT)</option>
-                <option value="Owner B (Thu-Wed | Due Fri 5PM CT)">Owner B (Thu-Wed | Due Fri 5PM CT)</option>
-                <option value="Company Dual (Mon + Thu invoices)">Company Dual (Mon + Thu invoices)</option>
-                <option value="Monday cycle">Monday cycle</option>
-                <option value="Thursday cycle">Thursday cycle</option>
-                <option value="CS by agent">CS by agent</option>
-                <option value="Multiple">Multiple</option>
+                {BILLING_CYCLE_OPTIONS.map((cycle) => (
+                  <option key={cycle} value={cycle}>{cycle}</option>
+                ))}
                 <option value="custom">Other (custom)</option>
               </select>
             </FormGroup>

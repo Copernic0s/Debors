@@ -8,6 +8,7 @@ import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
+import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import './index.css';
 
 const AppContainer = styled.div`
@@ -277,8 +278,8 @@ const aggregateByCompany = (rows) => {
         agentId: agent,
         agentSet: new Set([agent]),
         amount,
-        billingCycle: row.billingCycle || '',
-        cycleSet: new Set([row.billingCycle].filter(Boolean)),
+        billingCycle: row.billingCycle || BILLING_CYCLES.UNSPECIFIED,
+        cycleSet: new Set([row.billingCycle || BILLING_CYCLES.UNSPECIFIED]),
         status: row.status || 'pending',
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
@@ -316,7 +317,7 @@ const aggregateByCompany = (rows) => {
     return {
       ...item,
       agentId: agents.length > 1 ? 'Multiple' : agents[0],
-      billingCycle: cycles.length > 1 ? 'Multiple' : (cycles[0] || 'Unspecified'),
+      billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
       invoiceCount: item.invoiceCount,
       agentSet: undefined,
@@ -442,6 +443,30 @@ function App() {
     setActiveCompany(companyName);
   };
 
+  const quickUpdateBillingCycle = (row, nextCycle) => {
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const normalizedNextCycle = normalizeBillingCycle(nextCycle);
+
+    setData((prev) => prev.map((item) => {
+      const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+      if (!sameCompany) return item;
+
+      const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (!inAgentScope) return item;
+
+      return {
+        ...item,
+        billingCycle: normalizedNextCycle
+      };
+    }));
+
+    toast.success('Billing cycle updated', {
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
   const aggregatedData = aggregateByCompany(data);
   const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
   const agentData = selectedAgent === 'all'
@@ -552,6 +577,7 @@ function App() {
         <DebtorsList
           data={agentData}
           onOpenCompanyProfile={openCompanyProfile}
+          onQuickUpdateBillingCycle={quickUpdateBillingCycle}
           onEdit={(debtor) => {
             setCurrentDebtor(debtor);
             setIsModalOpen(true);

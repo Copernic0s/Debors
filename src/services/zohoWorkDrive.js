@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
 const CORS_PROXY_BUILDERS = [
@@ -135,18 +136,18 @@ const getWeekdayInSheet = (sheetStartDate, targetWeekday) => {
 };
 
 const inferBillingProfile = (billingCycleText) => {
-  const normalized = normalizeText(billingCycleText).toLowerCase();
+  const normalized = normalizeBillingCycle(billingCycleText);
 
-  if (normalized.includes('thursday') || normalized.includes('thu')) {
+  if (normalized === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
     return BILLING_PROFILE.OWNER_B;
   }
 
-  if (normalized.includes('monday') || normalized.includes('mon')) {
-    return BILLING_PROFILE.OWNER_A;
+  if (normalized === BILLING_CYCLES.TWICE) {
+    return BILLING_PROFILE.COMPANY_DUAL;
   }
 
-  if (normalized.includes('twice') || normalized.includes('dual')) {
-    return BILLING_PROFILE.COMPANY_DUAL;
+  if (normalized === BILLING_CYCLES.MONDAY_SUNDAY) {
+    return BILLING_PROFILE.OWNER_A;
   }
 
   return BILLING_PROFILE.OWNER_A;
@@ -163,8 +164,8 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
   }
 
   if (profile === BILLING_PROFILE.COMPANY_DUAL) {
-    const normalized = normalizeText(billingCycleText).toLowerCase();
-    if (normalized.includes('thursday') || normalized.includes('thu')) {
+    const normalized = normalizeBillingCycle(billingCycleText);
+    if (normalized === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
       const friday = getWeekdayInSheet(weekStart, 5);
       return friday ? toDateKey(friday) : '';
     }
@@ -179,7 +180,7 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
 const mapDebtorRow = (row, sheetName) => {
   const r = createLookup(row);
   const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
-  const billingCycle = normalizeText(r['billing cycle'] || r.billingcycle || sheetName);
+  const billingCycle = normalizeBillingCycle(r['billing cycle'] || r.billingcycle || sheetName);
   const explicitDueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
   const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
 
