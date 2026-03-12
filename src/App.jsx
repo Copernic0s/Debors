@@ -40,7 +40,7 @@ const MainContent = styled.main`
 `;
 
 const Topbar = styled.header`
-  height: 72px;
+  min-height: 72px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -50,12 +50,23 @@ const Topbar = styled.header`
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   z-index: 10;
+
+  @media (max-width: 900px) {
+    padding: 0.75rem 1rem;
+    gap: 0.8rem;
+    align-items: flex-start;
+    flex-direction: column;
+  }
 `;
 
 const ContentScroll = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 2rem;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
 `;
 
 const Logo = styled.div`
@@ -162,6 +173,54 @@ const AgentSnapshot = styled.div`
 
   @media (max-width: 1100px) {
     width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    padding: 0.6rem 0.75rem;
+    font-size: 0.82rem;
+  }
+`;
+
+const TopbarLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+`;
+
+const TopbarRight = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+
+  @media (max-width: 900px) {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+`;
+
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 0.75rem;
+
+  @media (max-width: 768px) {
+    width: 100%;
+
+    .btn {
+      flex: 1;
+      padding: 0.58rem 0.75rem;
+      font-size: 0.8rem;
+    }
+  }
+`;
+
+const SyncInfo = styled.span`
+  color: var(--text-muted);
+  font-size: 0.82rem;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    font-size: 0.76rem;
   }
 `;
 
@@ -491,26 +550,26 @@ function App() {
 
       <MainContent>
         <Topbar>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <TopbarLeft>
             <Menu
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
               size={24}
             />
             <h1 style={{ fontSize: '1.35rem', margin: 0, color: '#39b8ff' }}>Citifuel</h1>
-          </div>
+          </TopbarLeft>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <TopbarRight>
+            <ActionButtons>
               <button className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })}>
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
               </button>
               <button className="btn btn-primary" onClick={openNewModal}>
                 <Plus size={16} /> New Debtor
               </button>
-            </div>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-          </div>
+            </ActionButtons>
+            <SyncInfo>Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</SyncInfo>
+          </TopbarRight>
         </Topbar>
 
         <ContentScroll>

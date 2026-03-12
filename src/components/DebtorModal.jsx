@@ -15,6 +15,12 @@ const Overlay = styled.div`
   justify-content: center;
   z-index: 1000;
   animation: fadeIn 0.2s ease-out;
+
+  @media (max-width: 768px) {
+    align-items: flex-start;
+    padding: 1rem;
+    overflow-y: auto;
+  }
 `;
 
 const ModalContent = styled.div`
@@ -26,6 +32,12 @@ const ModalContent = styled.div`
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   animation: slideUp 0.3s ease-out;
+
+  @media (max-width: 768px) {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
 
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(20px); }
@@ -64,6 +76,20 @@ const ModalBody = styled.form`
   display: flex;
   flex-direction: column;
   gap: 1rem;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
+`;
+
+const FormRow = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const FormGroup = styled.div`
@@ -111,6 +137,14 @@ const ModalFooter = styled.div`
   display: flex;
   justify-content: flex-end;
   gap: 1rem;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+
+    .btn {
+      flex: 1;
+    }
+  }
 `;
 
 const createDefaultFormData = () => ({
@@ -165,7 +199,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
             />
           </FormGroup>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <FormRow>
             <FormGroup>
               <label>Balance ($)</label>
               <input
@@ -187,9 +221,9 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
                 onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
               />
             </FormGroup>
-          </div>
+          </FormRow>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <FormRow>
             <FormGroup>
               <label>Status</label>
               <select
@@ -211,7 +245,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
                 placeholder="Ex. Guidiana Puentes"
               />
             </FormGroup>
-          </div>
+          </FormRow>
 
           <FormGroup>
             <label>Notes (Optional)</label>

@@ -8,6 +8,11 @@ const Container = styled.div`
   margin-top: 2rem;
   animation: fadeIn 0.6s ease-out;
   border-radius: var(--radius-xl);
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+    margin-top: 1rem;
+  }
 `;
 
 const Header = styled.div`
@@ -29,6 +34,10 @@ const Controls = styled.div`
   display: flex;
   gap: 1rem;
   align-items: center;
+
+  @media (max-width: 768px) {
+    width: 100%;
+  }
 `;
 
 const SearchInput = styled.div`
@@ -42,7 +51,7 @@ const SearchInput = styled.div`
     color: var(--text-main);
     font-family: 'Manrope', inherit;
     font-size: 0.875rem;
-    width: 250px;
+    width: min(250px, 75vw);
     transition: all 0.2s;
 
     &:focus {
@@ -58,6 +67,14 @@ const SearchInput = styled.div`
     top: 50%;
     transform: translateY(-50%);
     color: var(--text-muted);
+  }
+
+  @media (max-width: 768px) {
+    width: 100%;
+
+    input {
+      width: 100%;
+    }
   }
 `;
 
@@ -93,6 +110,11 @@ const Th = styled.th`
     align-items: center;
     gap: 0.5rem;
   }
+
+  @media (max-width: 768px) {
+    white-space: nowrap;
+    padding: 0.8rem;
+  }
 `;
 
 const Td = styled.td`
@@ -101,6 +123,11 @@ const Td = styled.td`
   color: var(--text-main);
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   vertical-align: middle;
+
+  @media (max-width: 768px) {
+    padding: 0.8rem;
+    white-space: nowrap;
+  }
 `;
 
 const Tr = styled.tr`
