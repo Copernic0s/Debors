@@ -1,16 +1,36 @@
-# React + Vite
+# Debtors App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Panel de seguimiento de deudas por agente para el equipo de ventas.
 
-Currently, two official plugins are available:
+## Funciones clave
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Sincronizacion de datos desde Zoho WorkDrive (CSV publico).
+- Fallback automatico a datos locales cuando la fuente remota no responde.
+- Dashboard con metricas automáticas (deuda activa, vencida, recaudado, efectividad).
+- Listado editable de deudores con filtros y ordenamiento.
 
-## React Compiler
+## Desarrollo local
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+## Build
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm run build
+npm run preview
+```
+
+## Deploy a GitHub Pages
+
+El repo incluye workflow en `.github/workflows/deploy-pages.yml`.
+
+1. En GitHub, abre `Settings > Pages`.
+2. En `Build and deployment`, selecciona `GitHub Actions`.
+3. Haz push a `main` y espera la ejecucion del workflow.
+
+URL esperada:
+
+`https://copernic0s.github.io/Debors/`
