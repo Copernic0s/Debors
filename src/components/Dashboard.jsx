@@ -15,10 +15,14 @@ const StatCard = styled.div`
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  transition: transform 0.2s;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  box-shadow: 0 12px 26px rgba(4, 12, 28, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
   &:hover {
-    transform: translateY(-4px);
+    transform: translateY(-6px) scale(1.01);
+    box-shadow: 0 18px 36px rgba(3, 12, 29, 0.45), 0 0 0 1px rgba(56, 189, 248, 0.16);
+    border-color: rgba(56, 189, 248, 0.25);
   }
 `;
 
@@ -29,7 +33,7 @@ const StatInfo = styled.div`
 
 const StatLabel = styled.span`
   font-size: 0.875rem;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-weight: 500;
   margin-bottom: 0.5rem;
 `;
@@ -37,7 +41,7 @@ const StatLabel = styled.span`
 const StatValue = styled.span`
   font-size: 1.875rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text-main);
 `;
 
 const IconWrapper = styled.div`

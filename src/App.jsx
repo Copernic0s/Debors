@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
-import { Menu, RefreshCw, Layers, Plus, Users } from 'lucide-react';
+import { RefreshCw, Plus, Users } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -42,22 +42,6 @@ const AppContainer = styled.div`
   min-height: 100vh;
 `;
 
-const Sidebar = styled.aside`
-  width: ${props => props.$isOpen ? '260px' : '0px'};
-  background: var(--bg-2);
-  border-right: ${props => props.$isOpen ? '1px solid var(--border-color)' : 'none'};
-  display: flex;
-  flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  position: relative;
-  flex-shrink: 0;
-  
-  @media (max-width: 768px) {
-    display: none;
-  }
-`;
-
 const MainContent = styled.main`
   flex: 1;
   display: flex;
@@ -94,52 +78,6 @@ const ContentScroll = styled.div`
 
   @media (max-width: 768px) {
     padding: 1rem;
-  }
-`;
-
-const Logo = styled.div`
-  font-family: 'Montserrat', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #39b8ff;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-
-  span {
-    color: #86dbff;
-  }
-`;
-
-const BrandOwner = styled.p`
-  margin: -0.2rem 0 1.2rem;
-  color: #9adfff;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-`;
-
-const NavItem = styled.div`
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius-md);
-  margin-bottom: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: ${props => props.$active ? 'var(--text-main)' : 'var(--text-muted)'};
-  background: ${props => props.$active ? 'var(--surface-3)' : 'transparent'};
-  font-weight: ${props => props.$active ? '600' : '500'};
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-
-  ${props => props.$active && `
-    box-shadow: inset 4px 0 0 var(--brand);
-  `}
-
-  &:hover {
-    background: ${props => props.$active ? 'var(--surface-3)' : 'var(--surface-2)'};
-    color: var(--text-main);
   }
 `;
 
@@ -184,6 +122,7 @@ const AgentSnapshot = styled.div`
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  margin-left: auto;
   background: var(--surface-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -212,7 +151,21 @@ const AgentSnapshot = styled.div`
 const TopbarLeft = styled.div`
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
+  flex: 1;
+`;
+
+const BrandTitle = styled.h1`
+  font-size: 1.35rem;
+  margin: 0;
+  color: #39b8ff;
+  letter-spacing: 0.01em;
+  font-family: 'Montserrat', sans-serif;
+
+  span {
+    color: #86dbff;
+    margin-right: 0.5rem;
+  }
 `;
 
 const TopbarRight = styled.div`
@@ -358,7 +311,6 @@ const aggregateByCompany = (rows) => {
 };
 
 function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -368,7 +320,6 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [manualEdits, setManualEdits] = useState(() => safeReadManualEdits());
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef(manualEdits);
@@ -771,110 +722,52 @@ function App() {
     };
   }, [activeCompany, data, selectedAgent]);
 
-  const renderContent = () => {
-    if (activeTab === 'reports') {
-      return (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Reports Module</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Coming soon... agent performance trends and export options.</p>
-        </div>
-      );
-    }
-
-    if (activeTab === 'settings') {
-      return (
-        <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Settings</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Coming soon... connection preferences and team options.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
-        <div style={{ marginBottom: '2.5rem' }}>
-          <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Track total debt, overdue balances, and account health across your team.</p>
-        </div>
-
-        <Dashboard metrics={metrics} />
-
-        <AgentToolbar>
-          <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-            <option value="all">All agents</option>
-            {agentOptions.map((agentName) => (
-              <option key={agentName} value={agentName}>{agentName}</option>
-            ))}
-          </AgentSelect>
-
-          <AgentSnapshot>
-            <Users size={16} color="var(--brand)" />
-            <div>
-              <div>
-                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-              </div>
-            </div>
-          </AgentSnapshot>
-        </AgentToolbar>
-
-        <DebtorsList
-          data={agentData}
-          onOpenCompanyProfile={openCompanyProfile}
-          onQuickUpdateBillingCycle={quickUpdateBillingCycle}
-          onQuickUpdateStatus={quickUpdatePaymentStatus}
-          onQuickUpdateAmount={quickUpdateTotalDue}
-          onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
-          onEdit={(debtor) => {
-            setCurrentDebtor(debtor);
-            setIsModalOpen(true);
-          }}
-          onDelete={handleDeleteDebtor}
-        />
+  const overviewContent = (
+    <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
+      <div style={{ marginBottom: '1.4rem' }}>
+        <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
       </div>
-    );
-  };
+
+      <Dashboard metrics={metrics} />
+
+      <AgentToolbar>
+        <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+          <option value="all">All agents</option>
+          {agentOptions.map((agentName) => (
+            <option key={agentName} value={agentName}>{agentName}</option>
+          ))}
+        </AgentSelect>
+
+        <AgentSnapshot>
+          <Users size={16} color="var(--brand)" />
+          <div>
+            <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
+          </div>
+        </AgentSnapshot>
+      </AgentToolbar>
+
+      <DebtorsList
+        data={agentData}
+        onOpenCompanyProfile={openCompanyProfile}
+        onQuickUpdateBillingCycle={quickUpdateBillingCycle}
+        onQuickUpdateStatus={quickUpdatePaymentStatus}
+        onQuickUpdateAmount={quickUpdateTotalDue}
+        onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
+        onEdit={(debtor) => {
+          setCurrentDebtor(debtor);
+          setIsModalOpen(true);
+        }}
+        onDelete={handleDeleteDebtor}
+      />
+    </div>
+  );
 
   return (
     <AppContainer>
-      <Sidebar $isOpen={isSidebarOpen}>
-        <div style={{ width: '260px', padding: '1.5rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <Logo>
-            <div style={{
-              width: '36px', height: '36px', borderRadius: '10px',
-              background: 'linear-gradient(135deg, var(--brand), #67d8ff)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(56, 189, 248, 0.3)',
-              flexShrink: 0
-            }}>
-              <Layers color="#062131" size={20} />
-            </div>
-            Flow<span>Collect</span>
-          </Logo>
-          <BrandOwner>Andres Mendez</BrandOwner>
-
-          <nav style={{ flex: 1 }}>
-            <NavItem $active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}>
-              Dashboard
-            </NavItem>
-            <NavItem $active={activeTab === 'reports'} onClick={() => setActiveTab('reports')}>
-              <span style={{ fontSize: '1.2rem' }}>📊</span> Reports
-            </NavItem>
-            <NavItem $active={activeTab === 'settings'} onClick={() => setActiveTab('settings')}>
-              <span style={{ fontSize: '1.2rem' }}>⚙️</span> Settings
-            </NavItem>
-          </nav>
-        </div>
-      </Sidebar>
-
       <MainContent>
         <Topbar>
           <TopbarLeft>
-            <Menu
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
-              size={24}
-            />
-            <h1 style={{ fontSize: '1.35rem', margin: 0, color: '#39b8ff' }}>Citifuel</h1>
+            <BrandTitle><span>Flow Collect</span> Almafuel</BrandTitle>
           </TopbarLeft>
 
           <TopbarRight>
@@ -891,7 +784,7 @@ function App() {
         </Topbar>
 
         <ContentScroll>
-          {renderContent()}
+          {overviewContent}
         </ContentScroll>
       </MainContent>
 

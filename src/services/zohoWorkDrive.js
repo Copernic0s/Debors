@@ -57,6 +57,10 @@ const buildUrl = (url, cacheBust) => {
 const normalizeStatus = (value, dueDate) => {
   const raw = normalizeText(value, 'pending').toLowerCase();
 
+  if (raw.includes('partial')) {
+    return 'pending';
+  }
+
   if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) {
     return 'paid';
   }
@@ -177,7 +181,7 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
   return tuesday ? toDateKey(tuesday) : '';
 };
 
-const mapDebtorRow = (row, sheetName) => {
+const mapDebtorRow = (row, sheetName, sheetOrder) => {
   const r = createLookup(row);
   const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
   const billingCycle = normalizeBillingCycle(r['billing cycle'] || r.billingcycle || sheetName);
@@ -195,8 +199,52 @@ const mapDebtorRow = (row, sheetName) => {
     amount: normalizeAmount(r['total due ($)'] ?? r.amount ?? r.totaldue),
     dueDate,
     status: normalizeStatus(r['payment status'] || r.status, dueDate),
-    notes: normalizeText(r.notes)
+    notes: normalizeText(r.notes),
+    sourceSheetOrder: sheetOrder
   };
+};
+
+const consolidateDebtorRows = (rows) => {
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const invoice = String(row.invoiceNumber || row.id || '').trim();
+    const company = String(row.company || row.clientName || '').trim().toLowerCase();
+    const key = invoice ? `${company}|${invoice.toLowerCase()}` : `${company}|row:${row.id}`;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, { ...row });
+      return;
+    }
+
+    const current = grouped.get(key);
+
+    if ((Number(row.amount) || 0) > (Number(current.amount) || 0)) {
+      current.amount = Number(row.amount) || 0;
+    }
+
+    if ((Number(row.sourceSheetOrder) || 0) >= (Number(current.sourceSheetOrder) || 0)) {
+      if (row.billingCycle) current.billingCycle = row.billingCycle;
+      if (row.dueDate) current.dueDate = row.dueDate;
+      if (row.agentId) current.agentId = row.agentId;
+      current.sourceSheetOrder = row.sourceSheetOrder;
+    }
+
+    const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
+    if (statuses.includes('overdue')) {
+      current.status = 'overdue';
+    } else if (statuses.includes('pending')) {
+      current.status = 'pending';
+    } else {
+      current.status = 'paid';
+    }
+  });
+
+  return Array.from(grouped.values()).map((item) => {
+    const next = { ...item };
+    delete next.sourceSheetOrder;
+    return next;
+  });
 };
 
 const mapCsByAgentRow = (row) => {
@@ -216,18 +264,20 @@ const parseWorkbook = (arrayBuffer) => {
 
   const debtors = workbook.SheetNames
     .filter((sheetName) => sheetName !== csSheetName)
-    .flatMap((sheetName) => {
+    .flatMap((sheetName, index) => {
       const sheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      return rows.map((row) => mapDebtorRow(row, sheetName));
+      return rows.map((row) => mapDebtorRow(row, sheetName, index));
     })
     .filter((item) => item.company);
+
+  const consolidatedDebtors = consolidateDebtorRows(debtors);
 
   const clientsByAgent = csSheetName
     ? XLSX.utils.sheet_to_json(workbook.Sheets[csSheetName], { defval: '' }).map(mapCsByAgentRow)
     : [];
 
-  return { debtors, clientsByAgent };
+  return { debtors: consolidatedDebtors, clientsByAgent };
 };
 
 export const fetchAllDataFromSheet = async (url = SHEET_XLSX_URL, options = {}) => {

@@ -248,6 +248,35 @@ const IconActionButton = styled.button`
   }
 `;
 
+const FooterBar = styled.div`
+  margin-top: 0.95rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+`;
+
+const Pager = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+`;
+
+const PagerButton = styled.button`
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text-main);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
 const getComputedStatus = (item) => {
   const rawStatus = String(item.status ?? '').toLowerCase();
   if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
@@ -280,6 +309,8 @@ export default function DebtorsList({
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
   const [pendingAmounts, setPendingAmounts] = useState({});
   const [pendingInvoices, setPendingInvoices] = useState({});
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   const commitQuickAmount = (item) => {
     const raw = pendingAmounts[item.id];
@@ -355,6 +386,10 @@ export default function DebtorsList({
     return companyName.includes(searchTerm.toLowerCase()) || agentName.includes(searchTerm.toLowerCase());
   });
 
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedData = filteredData.slice((safePage - 1) * pageSize, safePage * pageSize);
+
   return (
     <Container className="glass-panel">
       <Header>
@@ -366,7 +401,10 @@ export default function DebtorsList({
               type="text"
               placeholder="Search company or agent..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
             />
           </SearchInput>
         </Controls>
@@ -386,7 +424,7 @@ export default function DebtorsList({
             </tr>
           </thead>
           <tbody>
-            {filteredData.length > 0 ? filteredData.map((item) => (
+            {paginatedData.length > 0 ? paginatedData.map((item) => (
               <Tr key={item.id}>
                 <Td style={{ fontWeight: 600 }}>
                   <button
@@ -526,6 +564,17 @@ export default function DebtorsList({
           </tbody>
         </Table>
       </TableWrapper>
+
+      <FooterBar>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+          Showing {(safePage - 1) * pageSize + (paginatedData.length ? 1 : 0)}-{(safePage - 1) * pageSize + paginatedData.length} of {filteredData.length}
+        </span>
+        <Pager>
+          <PagerButton type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</PagerButton>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Page {safePage} / {totalPages}</span>
+          <PagerButton type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</PagerButton>
+        </Pager>
+      </FooterBar>
 
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
