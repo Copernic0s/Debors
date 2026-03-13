@@ -21,11 +21,34 @@ const normalizeText = (value, fallback = '') => {
 
 const normalizeAmount = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+    return Number(value.toFixed(2));
   }
-  const raw = String(value ?? '').replace(/[^0-9.-]/g, '');
+
+  let raw = String(value ?? '').trim();
+  if (!raw) return 0;
+
+  raw = raw.replace(/\$/g, '').replace(/\s/g, '');
+
+  const hasComma = raw.includes(',');
+  const hasDot = raw.includes('.');
+
+  if (hasComma && hasDot) {
+    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) {
+      raw = raw.replace(/\./g, '').replace(',', '.');
+    } else {
+      raw = raw.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    if (/\d+,\d{1,2}$/.test(raw)) {
+      raw = raw.replace(',', '.');
+    } else {
+      raw = raw.replace(/,/g, '');
+    }
+  }
+
+  raw = raw.replace(/[^0-9.-]/g, '');
   const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
 };
 
 const normalizeDate = (value) => {

@@ -145,8 +145,12 @@ const Tr = styled.tr`
 
 const formatAmountInput = (value) => {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '0.00';
-  return numeric.toFixed(2);
+  if (!Number.isFinite(numeric)) return '0,00';
+  return new Intl.NumberFormat('es-ES', {
+    useGrouping: false,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(numeric);
 };
 
 const BillingCycleSelect = styled.select`
@@ -321,9 +325,7 @@ export default function DebtorsList({
   const commitQuickAmount = (item) => {
     const raw = pendingAmounts[item.id];
     if (raw === undefined) return;
-    const parsed = Number.parseFloat(String(raw));
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-    onQuickUpdateAmount?.(item, parsed);
+    onQuickUpdateAmount?.(item, raw);
     setPendingAmounts((prev) => {
       const next = { ...prev };
       delete next[item.id];
@@ -526,9 +528,8 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <DueInput
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
                     onChange={(e) => setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
                     onBlur={() => commitQuickAmount(item)}

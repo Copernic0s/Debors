@@ -37,7 +37,40 @@ const mergeManualEdits = (rows, editsById) => {
     });
 };
 
-const roundMoney = (value) => Number((Number(value) || 0).toFixed(2));
+const parseMoneyValue = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+
+  let raw = String(value ?? '').trim();
+  if (!raw) return Number.NaN;
+
+  raw = raw.replace(/\$/g, '').replace(/\s/g, '');
+
+  const hasComma = raw.includes(',');
+  const hasDot = raw.includes('.');
+
+  if (hasComma && hasDot) {
+    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) {
+      raw = raw.replace(/\./g, '').replace(',', '.');
+    } else {
+      raw = raw.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    if (/\d+,\d{1,2}$/.test(raw)) {
+      raw = raw.replace(',', '.');
+    } else {
+      raw = raw.replace(/,/g, '');
+    }
+  }
+
+  raw = raw.replace(/[^0-9.-]/g, '');
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
+const roundMoney = (value) => {
+  const parsed = parseMoneyValue(value);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : Number.NaN;
+};
 
 const AppContainer = styled.div`
   display: flex;
@@ -269,7 +302,7 @@ const aggregateByCompany = (rows) => {
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const key = company.toLowerCase();
-    const amount = roundMoney(row.amount);
+    const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
 
     const current = grouped.get(key);
     if (!current) {
@@ -293,7 +326,7 @@ const aggregateByCompany = (rows) => {
       return;
     }
 
-    current.amount = roundMoney(current.amount + amount);
+    current.amount = Number.isFinite(roundMoney(current.amount + amount)) ? roundMoney(current.amount + amount) : 0;
     current.agentSet.add(agent);
     if (row.billingCycle) current.cycleSet.add(row.billingCycle);
     if (row.invoiceNumber) current.invoiceCount += 1;
@@ -464,7 +497,7 @@ function App() {
               ...item,
               company: debtor.company || debtor.clientName,
               clientName: debtor.company || debtor.clientName,
-              amount: roundMoney(debtor.amount),
+              amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
               dueDate: debtor.dueDate,
               status: debtor.status,
               agentId: debtor.agentId,
@@ -492,7 +525,7 @@ function App() {
     } else {
       setData([{
         ...debtor,
-        amount: roundMoney(debtor.amount)
+        amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
       }, ...data]);
       toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
