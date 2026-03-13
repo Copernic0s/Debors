@@ -320,6 +320,7 @@ const aggregateByCompany = (rows) => {
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
         invoiceCount: row.invoiceNumber ? 1 : 0,
+        hasInvoice: Boolean(String(row.invoiceNumber || '').trim()),
         invoiceCountOverride: Number.isFinite(Number(row.invoiceCountOverride)) ? Number(row.invoiceCountOverride) : null,
         dueDate: row.dueDate || '',
         id: `CMP-${key}`
@@ -331,6 +332,7 @@ const aggregateByCompany = (rows) => {
     current.agentSet.add(agent);
     if (row.billingCycle) current.cycleSet.add(row.billingCycle);
     if (row.invoiceNumber) current.invoiceCount += 1;
+    if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
     if (Number.isFinite(Number(row.invoiceCountOverride))) {
       current.invoiceCountOverride = Number(row.invoiceCountOverride);
     }
@@ -360,6 +362,7 @@ const aggregateByCompany = (rows) => {
       billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
       invoiceCount: Number.isFinite(Number(item.invoiceCountOverride)) ? Number(item.invoiceCountOverride) : item.invoiceCount,
+      sourceType: item.hasInvoice ? 'invoice' : 'cs',
       agentSet: undefined,
       cycleSet: undefined,
       invoiceCountOverride: item.invoiceCountOverride
@@ -376,6 +379,7 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
   const [statusScope, setStatusScope] = useState('all');
+  const [recordScope, setRecordScope] = useState('invoice');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
@@ -751,7 +755,9 @@ function App() {
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
-    return matchesAgent && matchesWeek && matchesStatus;
+    const hasInvoice = Boolean(String(item.invoiceNumber || '').trim());
+    const matchesRecordScope = recordScope === 'all' || hasInvoice;
+    return matchesAgent && matchesWeek && matchesStatus && matchesRecordScope;
   });
 
   const aggregatedData = aggregateByCompany(scopedInvoiceData);
@@ -840,6 +846,11 @@ function App() {
           <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
             <option value="all">All records</option>
             <option value="open">Open balances only</option>
+          </AgentSelect>
+
+          <AgentSelect value={recordScope} onChange={(e) => setRecordScope(e.target.value)}>
+            <option value="invoice">Invoice records only</option>
+            <option value="all">Include CS clients</option>
           </AgentSelect>
         </FiltersRow>
 

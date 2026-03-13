@@ -191,6 +191,16 @@ const StatusSelect = styled(BillingCycleSelect)`
   }};
 `;
 
+const SourceBadge = styled.span`
+  border: 1px solid ${(props) => (props.$type === 'invoice' ? 'rgba(56, 189, 248, 0.35)' : 'rgba(149, 164, 187, 0.3)')};
+  background: ${(props) => (props.$type === 'invoice' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(149, 164, 187, 0.12)')};
+  color: ${(props) => (props.$type === 'invoice' ? 'var(--brand)' : 'var(--text-muted)')};
+  border-radius: 999px;
+  padding: 0.18rem 0.56rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+`;
+
 const InvoiceStepper = styled.div`
   display: inline-flex;
   align-items: center;
@@ -431,6 +441,7 @@ export default function DebtorsList({
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('invoiceCount')}>Invoices {sortConfig.key === 'invoiceCount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Payment Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('sourceType')}>Source {sortConfig.key === 'sourceType' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
             </tr>
@@ -532,6 +543,9 @@ export default function DebtorsList({
                   </StatusSelect>
                 </Td>
                 <Td>
+                  <SourceBadge $type={item.sourceType || 'invoice'}>{(item.sourceType || 'invoice') === 'invoice' ? 'Invoice' : 'CS'}</SourceBadge>
+                </Td>
+                <Td>
                   <DueInput
                     type="text"
                     inputMode="decimal"
@@ -568,7 +582,7 @@ export default function DebtorsList({
               </Tr>
             )) : (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No records found
                 </td>
               </tr>
