@@ -143,6 +143,12 @@ const Tr = styled.tr`
   }
 `;
 
+const formatAmountInput = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0.00';
+  return numeric.toFixed(2);
+};
+
 const BillingCycleSelect = styled.select`
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
@@ -523,7 +529,7 @@ export default function DebtorsList({
                     type="number"
                     step="0.01"
                     min="0"
-                    value={pendingAmounts[item.id] ?? String(item.amount ?? 0)}
+                    value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
                     onChange={(e) => setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
                     onBlur={() => commitQuickAmount(item)}
                     onKeyDown={(e) => {

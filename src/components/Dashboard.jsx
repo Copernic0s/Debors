@@ -63,8 +63,8 @@ export default function Dashboard({ metrics }) {
         <DashboardGrid>
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Total Active Debt</StatLabel>
-                    <StatValue>{formatCurrency(metrics.totalDebt)}</StatValue>
+                    <StatLabel>Current Balance</StatLabel>
+                    <StatValue>{formatCurrency(metrics.currentBalance)}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(59, 130, 246, 0.2)" $color="var(--accent-color)">
                     <DollarSign size={24} />

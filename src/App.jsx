@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
-import { RefreshCw, Plus, Users } from 'lucide-react';
+import { RefreshCw, Users } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -37,6 +37,8 @@ const mergeManualEdits = (rows, editsById) => {
     });
 };
 
+const roundMoney = (value) => Number((Number(value) || 0).toFixed(2));
+
 const AppContainer = styled.div`
   display: flex;
   min-height: 100vh;
@@ -62,6 +64,7 @@ const Topbar = styled.header`
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   z-index: 10;
+  position: relative;
 
   @media (max-width: 900px) {
     padding: 0.75rem 1rem;
@@ -162,6 +165,9 @@ const TopbarLeft = styled.div`
 `;
 
 const BrandTitle = styled.h1`
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 1.35rem;
   margin: 0;
   color: #39b8ff;
@@ -171,6 +177,11 @@ const BrandTitle = styled.h1`
   span {
     color: #86dbff;
     margin-right: 0.5rem;
+  }
+
+  @media (max-width: 900px) {
+    position: static;
+    transform: none;
   }
 `;
 
@@ -201,14 +212,20 @@ const ActionButtons = styled.div`
   }
 `;
 
-const SyncInfo = styled.span`
-  color: var(--text-muted);
-  font-size: 0.82rem;
+const TopbarMeta = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.45rem;
 
-  @media (max-width: 768px) {
-    width: 100%;
-    font-size: 0.76rem;
+  span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
   }
+`;
+
+const SyncButton = styled.button`
+  padding: 0.45rem 0.72rem !important;
+  font-size: 0.8rem !important;
 `;
 
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
@@ -252,7 +269,7 @@ const aggregateByCompany = (rows) => {
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const key = company.toLowerCase();
-    const amount = Number(row.amount) || 0;
+    const amount = roundMoney(row.amount);
 
     const current = grouped.get(key);
     if (!current) {
@@ -276,7 +293,7 @@ const aggregateByCompany = (rows) => {
       return;
     }
 
-    current.amount += amount;
+    current.amount = roundMoney(current.amount + amount);
     current.agentSet.add(agent);
     if (row.billingCycle) current.cycleSet.add(row.billingCycle);
     if (row.invoiceNumber) current.invoiceCount += 1;
@@ -415,6 +432,18 @@ function App() {
     }
   }, [selectedWeek, data]);
 
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const pressedSyncShortcut = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 's';
+      if (!pressedSyncShortcut) return;
+      event.preventDefault();
+      loadData({ notifyUser: true });
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [loadData]);
+
   const handleSaveDebtor = (debtor) => {
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
@@ -435,7 +464,7 @@ function App() {
               ...item,
               company: debtor.company || debtor.clientName,
               clientName: debtor.company || debtor.clientName,
-              amount: Number(debtor.amount) || 0,
+              amount: roundMoney(debtor.amount),
               dueDate: debtor.dueDate,
               status: debtor.status,
               agentId: debtor.agentId,
@@ -461,7 +490,10 @@ function App() {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
     } else {
-      setData([debtor, ...data]);
+      setData([{
+        ...debtor,
+        amount: roundMoney(debtor.amount)
+      }, ...data]);
       toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
@@ -483,11 +515,6 @@ function App() {
       icon: '🗑️',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
-  };
-
-  const openNewModal = () => {
-    setCurrentDebtor(null);
-    setIsModalOpen(true);
   };
 
   const openCompanyProfile = (companyName) => {
@@ -588,7 +615,7 @@ function App() {
     const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
-    const parsedAmount = Number.parseFloat(String(nextAmount));
+    const parsedAmount = roundMoney(nextAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
 
     setData((prev) => {
@@ -610,7 +637,7 @@ function App() {
       const updated = [...prev];
       if (matchingIndexes.length === 1) {
         const idx = matchingIndexes[0];
-        updated[idx] = { ...updated[idx], amount: parsedAmount };
+        updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount) };
         persistEditedRows([updated[idx]]);
         return updated;
       }
@@ -620,7 +647,7 @@ function App() {
         matchingIndexes.forEach((idx, index) => {
           updated[idx] = {
             ...updated[idx],
-            amount: index === 0 ? parsedAmount : 0
+            amount: index === 0 ? roundMoney(parsedAmount) : 0
           };
         });
         persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
@@ -630,13 +657,13 @@ function App() {
       let runningSum = 0;
       matchingIndexes.forEach((idx, index) => {
         if (index === matchingIndexes.length - 1) {
-          updated[idx] = { ...updated[idx], amount: Number((parsedAmount - runningSum).toFixed(2)) };
+          updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount - runningSum) };
           return;
         }
 
         const ratio = (Number(updated[idx].amount) || 0) / currentTotal;
-        const nextValue = Number((parsedAmount * ratio).toFixed(2));
-        runningSum += nextValue;
+        const nextValue = roundMoney(parsedAmount * ratio);
+        runningSum = roundMoney(runningSum + nextValue);
         updated[idx] = { ...updated[idx], amount: nextValue };
       });
 
@@ -816,18 +843,17 @@ function App() {
 
           <TopbarRight>
             <ActionButtons>
-              <button className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })}>
+              <SyncButton className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
-              </button>
-              <button className="btn btn-primary" onClick={openNewModal}>
-                <Plus size={16} /> New Debtor
-              </button>
+              </SyncButton>
             </ActionButtons>
-            <SyncInfo>Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</SyncInfo>
           </TopbarRight>
         </Topbar>
 
         <ContentScroll>
+          <TopbarMeta>
+            <span>Source: {syncSourceLabel} | Last sync: {syncTimeLabel} | Shortcut: Ctrl+Shift+S</span>
+          </TopbarMeta>
           {overviewContent}
         </ContentScroll>
       </MainContent>
