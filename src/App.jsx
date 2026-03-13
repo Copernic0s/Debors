@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
+import ManagerAnalytics from './components/ManagerAnalytics';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
@@ -262,6 +263,26 @@ const SyncButton = styled.button`
   font-size: 0.8rem !important;
 `;
 
+const ViewSwitch = styled.div`
+  display: inline-flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  padding: 0.3rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+`;
+
+const ViewButton = styled.button`
+  border: 1px solid ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.35)' : 'transparent')};
+  background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.16)' : 'transparent')};
+  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9px;
+  cursor: pointer;
+`;
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = [...debtRows];
   const existingPairs = new Set(
@@ -372,6 +393,7 @@ const aggregateByCompany = (rows) => {
 
 function App() {
   const [data, setData] = useState([]);
+  const [activeView, setActiveView] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
@@ -821,11 +843,14 @@ function App() {
 
   const overviewContent = (
     <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
+      <ViewSwitch>
+        <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
+        <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+      </ViewSwitch>
+
       <div style={{ marginBottom: '1.4rem' }}>
         <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
       </div>
-
-      <Dashboard metrics={metrics} />
 
       <AgentToolbar>
         <FiltersRow>
@@ -862,19 +887,26 @@ function App() {
         </AgentSnapshot>
       </AgentToolbar>
 
-      <DebtorsList
-        data={agentData}
-        onOpenCompanyProfile={openCompanyProfile}
-        onQuickUpdateBillingCycle={quickUpdateBillingCycle}
-        onQuickUpdateStatus={quickUpdatePaymentStatus}
-        onQuickUpdateAmount={quickUpdateTotalDue}
-        onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
-        onEdit={(debtor) => {
-          setCurrentDebtor(debtor);
-          setIsModalOpen(true);
-        }}
-        onDelete={handleDeleteDebtor}
-      />
+      {activeView === 'overview' ? (
+        <>
+          <Dashboard metrics={metrics} />
+          <DebtorsList
+            data={agentData}
+            onOpenCompanyProfile={openCompanyProfile}
+            onQuickUpdateBillingCycle={quickUpdateBillingCycle}
+            onQuickUpdateStatus={quickUpdatePaymentStatus}
+            onQuickUpdateAmount={quickUpdateTotalDue}
+            onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
+            onEdit={(debtor) => {
+              setCurrentDebtor(debtor);
+              setIsModalOpen(true);
+            }}
+            onDelete={handleDeleteDebtor}
+          />
+        </>
+      ) : (
+        <ManagerAnalytics invoiceRows={scopedInvoiceData} aggregatedRows={agentData} />
+      )}
     </div>
   );
 
