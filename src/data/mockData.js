@@ -141,6 +141,7 @@ export const calculateMetrics = (data) => {
   let totalOverdue = 0;
   let totalCollected = 0;
   let currentBalance = 0;
+  let pendingAccounts = 0;
   let overdueAccounts = 0;
 
   const activeClients = new Set();
@@ -162,6 +163,7 @@ export const calculateMetrics = (data) => {
 
     if (status === 'pending') {
       currentBalance += amount;
+      pendingAccounts += 1;
     }
 
     if (status === 'overdue') {
@@ -179,6 +181,7 @@ export const calculateMetrics = (data) => {
     currentBalance,
     totalCollected,
     activeClients: activeClients.size,
+    pendingAccounts,
     overdueAccounts,
     collectionRate
   };

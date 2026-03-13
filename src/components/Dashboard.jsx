@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, AlertCircle, Users, ClipboardList } from 'lucide-react';
+import { Clock3, AlertCircle, Users, ClipboardList } from 'lucide-react';
 import styled from 'styled-components';
 
 const DashboardGrid = styled.div`
@@ -63,11 +63,11 @@ export default function Dashboard({ metrics }) {
         <DashboardGrid>
             <StatCard className="glass-panel">
                 <StatInfo>
-                    <StatLabel>Current Balance</StatLabel>
-                    <StatValue>{formatCurrency(metrics.currentBalance)}</StatValue>
+                    <StatLabel>Pending Accounts</StatLabel>
+                    <StatValue>{metrics.pendingAccounts}</StatValue>
                 </StatInfo>
                 <IconWrapper $bgColor="rgba(59, 130, 246, 0.2)" $color="var(--accent-color)">
-                    <DollarSign size={24} />
+                    <Clock3 size={24} />
                 </IconWrapper>
             </StatCard>
 

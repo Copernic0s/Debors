@@ -27,27 +27,27 @@ const normalizeAmount = (value) => {
   let raw = String(value ?? '').trim();
   if (!raw) return 0;
 
-  raw = raw.replace(/\$/g, '').replace(/\s/g, '');
+  raw = raw
+    .replace(/[$€£]/g, '')
+    .replace(/[\s\u00A0\u202F]/g, '')
+    .replace(/[^0-9,.-]/g, '');
 
-  const hasComma = raw.includes(',');
-  const hasDot = raw.includes('.');
+  if (!raw) return 0;
 
-  if (hasComma && hasDot) {
-    if (raw.lastIndexOf(',') > raw.lastIndexOf('.')) {
-      raw = raw.replace(/\./g, '').replace(',', '.');
-    } else {
-      raw = raw.replace(/,/g, '');
-    }
-  } else if (hasComma) {
-    if (/\d+,\d{1,2}$/.test(raw)) {
-      raw = raw.replace(',', '.');
-    } else {
-      raw = raw.replace(/,/g, '');
-    }
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const sepIndex = Math.max(lastComma, lastDot);
+
+  let normalized;
+  if (sepIndex === -1) {
+    normalized = raw.replace(/[.,]/g, '');
+  } else {
+    const intPart = raw.slice(0, sepIndex).replace(/[.,]/g, '');
+    const decPart = raw.slice(sepIndex + 1).replace(/[.,]/g, '');
+    normalized = `${intPart}.${decPart}`;
   }
 
-  raw = raw.replace(/[^0-9.-]/g, '');
-  const parsed = Number.parseFloat(raw);
+  const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
 };
 
