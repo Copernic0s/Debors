@@ -746,11 +746,12 @@ function App() {
   const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
 
   const scopedInvoiceData = data.filter((item) => {
+    const isDebtRow = Boolean(String(item.invoiceNumber || '').trim());
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
     const isOpen = String(item.status || '').toLowerCase() !== 'paid';
     const matchesStatus = statusScope === 'all' || isOpen;
-    return matchesAgent && matchesWeek && matchesStatus;
+    return isDebtRow && matchesAgent && matchesWeek && matchesStatus;
   });
 
   const aggregatedData = aggregateByCompany(scopedInvoiceData);
