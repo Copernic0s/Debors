@@ -30,9 +30,10 @@ const mergeManualEdits = (rows, editsById) => {
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
+      const { amount: _ignoredAmount, ...safePatch } = patch;
       return {
         ...row,
-        ...patch
+        ...safePatch
       };
     });
 };
@@ -565,7 +566,6 @@ function App() {
         next[row.id] = {
           ...(next[row.id] || {}),
           __deleted: false,
-          amount: row.amount,
           status: row.status,
           billingCycle: row.billingCycle,
           dueDate: row.dueDate,
