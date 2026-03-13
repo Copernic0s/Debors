@@ -213,9 +213,11 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
   const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
 
   const amountInput = rd['total due ($)']
+    ?? rd['total due ()']
     ?? rd.amount
     ?? rd.totaldue
     ?? r['total due ($)']
+    ?? r['total due ()']
     ?? r.amount
     ?? r.totaldue;
 
