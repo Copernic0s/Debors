@@ -1,5 +1,5 @@
 import React from 'react';
-import styled from 'styled-components';
+import styled, { createGlobalStyle } from 'styled-components';
 import {
   ResponsiveContainer,
   BarChart,
@@ -23,6 +23,14 @@ const Grid = styled.div`
 
   @media (max-width: 1100px) {
     grid-template-columns: 1fr;
+  }
+`;
+
+const RechartsVisualFix = createGlobalStyle`
+  .recharts-wrapper:focus,
+  .recharts-wrapper *:focus,
+  .recharts-surface:focus {
+    outline: none !important;
   }
 `;
 
@@ -160,7 +168,9 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
     .slice(0, 10);
 
   return (
-    <Grid>
+    <>
+      <RechartsVisualFix />
+      <Grid>
       <Panel>
         <PanelTitle>Debt Distribution by Agent</PanelTitle>
         <PanelHint>Click a bar to focus the dashboard on that agent.</PanelHint>
@@ -185,9 +195,9 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
             <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
             <XAxis dataKey="agent" tick={{ fill: '#95a4bb', fontSize: 11 }} />
             <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
             <Legend />
-            <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer">
+            <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" activeBar={false}>
               {agentChartData.map((entry) => (
                 <Cell key={entry.agent} fill={entry.color} />
               ))}
@@ -250,6 +260,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
           </tbody>
         </Table>
       </Panel>
-    </Grid>
+      </Grid>
+    </>
   );
 }
