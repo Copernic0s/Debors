@@ -200,6 +200,7 @@ const mapDebtorRow = (row, sheetName, sheetOrder) => {
     dueDate,
     status: normalizeStatus(r['payment status'] || r.status, dueDate),
     notes: normalizeText(r.notes),
+    weekLabel: sheetName,
     sourceSheetOrder: sheetOrder
   };
 };
@@ -227,6 +228,7 @@ const consolidateDebtorRows = (rows) => {
       if (row.billingCycle) current.billingCycle = row.billingCycle;
       if (row.dueDate) current.dueDate = row.dueDate;
       if (row.agentId) current.agentId = row.agentId;
+      if (row.weekLabel) current.weekLabel = row.weekLabel;
       current.sourceSheetOrder = row.sourceSheetOrder;
     }
 

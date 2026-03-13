@@ -95,6 +95,12 @@ const AgentToolbar = styled.div`
   }
 `;
 
+const FiltersRow = styled.div`
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+`;
+
 const AgentSelect = styled.select`
   min-width: 260px;
   max-width: 380px;
@@ -317,6 +323,8 @@ function App() {
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState('all');
+  const [selectedWeek, setSelectedWeek] = useState('all');
+  const [statusScope, setStatusScope] = useState('open');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
@@ -399,6 +407,14 @@ function App() {
     }
   }, [selectedAgent, data]);
 
+  useEffect(() => {
+    if (selectedWeek === 'all') return;
+    const exists = data.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
+    if (!exists) {
+      setSelectedWeek('all');
+    }
+  }, [selectedWeek, data]);
+
   const handleSaveDebtor = (debtor) => {
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
@@ -412,7 +428,8 @@ function App() {
             if (!sameCompany) return item;
 
             const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-            if (!inAgentScope) return item;
+            const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+            if (!inAgentScope || !inWeekScope) return item;
 
             const updatedRow = {
               ...item,
@@ -516,7 +533,8 @@ function App() {
         if (!sameCompany) return item;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        if (!inAgentScope) return item;
+        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+        if (!inAgentScope || !inWeekScope) return item;
 
         const updatedRow = {
           ...item,
@@ -547,7 +565,8 @@ function App() {
         if (!sameCompany) return item;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        if (!inAgentScope) return item;
+        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+        if (!inAgentScope || !inWeekScope) return item;
 
         const updatedRow = {
           ...item,
@@ -580,7 +599,8 @@ function App() {
         if (!sameCompany) return;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        if (!inAgentScope) return;
+        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+        if (!inAgentScope || !inWeekScope) return;
 
         matchingIndexes.push(index);
       });
@@ -643,7 +663,8 @@ function App() {
         if (!sameCompany) return item;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        if (!inAgentScope) return item;
+        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+        if (!inAgentScope || !inWeekScope) return item;
 
         const updatedRow = {
           ...item,
@@ -661,11 +682,19 @@ function App() {
     });
   };
 
-  const aggregatedData = aggregateByCompany(data);
-  const agentOptions = Array.from(new Set(aggregatedData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
-  const agentData = selectedAgent === 'all'
-    ? aggregatedData
-    : aggregatedData.filter((item) => String(item.agentId || '').trim() === selectedAgent);
+  const weekOptions = Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort();
+  const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
+
+  const scopedInvoiceData = data.filter((item) => {
+    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+    const isOpen = String(item.status || '').toLowerCase() !== 'paid';
+    const matchesStatus = statusScope === 'all' || isOpen;
+    return matchesAgent && matchesWeek && matchesStatus;
+  });
+
+  const aggregatedData = aggregateByCompany(scopedInvoiceData);
+  const agentData = aggregatedData;
   const metrics = calculateMetrics(agentData);
 
   const clientDebtMap = new Map();
@@ -691,8 +720,9 @@ function App() {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
-      if (selectedAgent === 'all') return true;
-      return String(item.agentId || '').trim() === selectedAgent;
+      const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+      return byAgent && byWeek;
     });
 
     const invoiceRows = scopedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
@@ -720,7 +750,7 @@ function App() {
         }))
         .sort((a, b) => String(a.invoiceNumber).localeCompare(String(b.invoiceNumber)))
     };
-  }, [activeCompany, data, selectedAgent]);
+  }, [activeCompany, data, selectedAgent, selectedWeek]);
 
   const overviewContent = (
     <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
@@ -731,12 +761,26 @@ function App() {
       <Dashboard metrics={metrics} />
 
       <AgentToolbar>
-        <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-          <option value="all">All agents</option>
-          {agentOptions.map((agentName) => (
-            <option key={agentName} value={agentName}>{agentName}</option>
-          ))}
-        </AgentSelect>
+        <FiltersRow>
+          <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+            <option value="all">All agents</option>
+            {agentOptions.map((agentName) => (
+              <option key={agentName} value={agentName}>{agentName}</option>
+            ))}
+          </AgentSelect>
+
+          <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
+            <option value="all">All weeks</option>
+            {weekOptions.map((weekName) => (
+              <option key={weekName} value={weekName}>{weekName}</option>
+            ))}
+          </AgentSelect>
+
+          <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
+            <option value="open">Open only</option>
+            <option value="all">All statuses</option>
+          </AgentSelect>
+        </FiltersRow>
 
         <AgentSnapshot>
           <Users size={16} color="var(--brand)" />
