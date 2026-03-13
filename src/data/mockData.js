@@ -130,6 +130,7 @@ const isPastCutoffInCentral = (dueDate) => {
 
 const normalizeStatus = (status, dueDate) => {
   const raw = String(status ?? '').trim().toLowerCase();
+  if (raw === 'no_invoice') return 'paid';
   if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) return 'paid';
   if (raw.includes('overdue') || raw.includes('mora') || raw.includes('vencido')) return 'overdue';
   if (isPastCutoffInCentral(dueDate)) return 'overdue';

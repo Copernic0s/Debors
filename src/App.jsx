@@ -286,7 +286,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
       billingCycle: 'CS by agent',
       amount: 0,
       dueDate: '',
-      status: row.hasDebt ? 'pending' : 'paid',
+      status: row.hasDebt ? 'no_invoice' : 'paid',
       notes: row.debtStatus || ''
     });
   });
@@ -375,7 +375,7 @@ function App() {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
-  const [statusScope, setStatusScope] = useState('open');
+  const [statusScope, setStatusScope] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
@@ -746,12 +746,12 @@ function App() {
   const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
 
   const scopedInvoiceData = data.filter((item) => {
-    const isDebtRow = Boolean(String(item.invoiceNumber || '').trim());
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-    const isOpen = String(item.status || '').toLowerCase() !== 'paid';
+    const status = String(item.status || '').toLowerCase();
+    const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
-    return isDebtRow && matchesAgent && matchesWeek && matchesStatus;
+    return matchesAgent && matchesWeek && matchesStatus;
   });
 
   const aggregatedData = aggregateByCompany(scopedInvoiceData);
@@ -838,8 +838,8 @@ function App() {
           </AgentSelect>
 
           <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
-            <option value="open">Open only</option>
-            <option value="all">All statuses</option>
+            <option value="all">All records</option>
+            <option value="open">Open balances only</option>
           </AgentSelect>
         </FiltersRow>
 

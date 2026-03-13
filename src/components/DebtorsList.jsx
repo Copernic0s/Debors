@@ -174,16 +174,19 @@ const StatusSelect = styled(BillingCycleSelect)`
   color: ${(props) => {
     if (props.$tone === 'paid') return 'var(--ok)';
     if (props.$tone === 'overdue') return 'var(--danger)';
+    if (props.$tone === 'no_invoice') return 'var(--text-muted)';
     return 'var(--warn)';
   }};
   border-color: ${(props) => {
     if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.35)';
     if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.35)';
+    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.3)';
     return 'rgba(245, 158, 11, 0.35)';
   }};
   background: ${(props) => {
     if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.12)';
     if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.12)';
+    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.12)';
     return 'rgba(245, 158, 11, 0.12)';
   }};
 `;
@@ -289,6 +292,7 @@ const PagerButton = styled.button`
 
 const getComputedStatus = (item) => {
   const rawStatus = String(item.status ?? '').toLowerCase();
+  if (rawStatus === 'no_invoice') return 'no_invoice';
   if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
   if (rawStatus === 'overdue' || rawStatus === 'mora' || rawStatus === 'vencido') return 'overdue';
 
@@ -524,6 +528,7 @@ export default function DebtorsList({
                     <option value="pending">Pending</option>
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
+                    <option value="no_invoice">No invoice</option>
                   </StatusSelect>
                 </Td>
                 <Td>
