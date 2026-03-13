@@ -401,7 +401,6 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
   const [statusScope, setStatusScope] = useState('all');
-  const [recordScope, setRecordScope] = useState('invoice');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
@@ -777,9 +776,7 @@ function App() {
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
-    const hasInvoice = Boolean(String(item.invoiceNumber || '').trim());
-    const matchesRecordScope = recordScope === 'all' || hasInvoice;
-    return matchesAgent && matchesWeek && matchesStatus && matchesRecordScope;
+    return matchesAgent && matchesWeek && matchesStatus;
   });
 
   const aggregatedData = aggregateByCompany(scopedInvoiceData);
@@ -873,10 +870,6 @@ function App() {
             <option value="open">Open balances only</option>
           </AgentSelect>
 
-          <AgentSelect value={recordScope} onChange={(e) => setRecordScope(e.target.value)}>
-            <option value="invoice">Invoice records only</option>
-            <option value="all">Include CS clients</option>
-          </AgentSelect>
         </FiltersRow>
 
         <AgentSnapshot>
@@ -905,7 +898,12 @@ function App() {
           />
         </>
       ) : (
-        <ManagerAnalytics invoiceRows={scopedInvoiceData} aggregatedRows={agentData} />
+        <ManagerAnalytics
+          invoiceRows={scopedInvoiceData}
+          aggregatedRows={agentData}
+          selectedAgent={selectedAgent}
+          onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+        />
       )}
     </div>
   );

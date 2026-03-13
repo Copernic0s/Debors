@@ -39,6 +39,23 @@ const PanelTitle = styled.h3`
   font-size: 0.95rem;
 `;
 
+const PanelHint = styled.p`
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+`;
+
+const FilterChip = styled.button`
+  border: 1px solid ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.35)' : 'var(--border-color)')};
+  background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.12)' : 'var(--surface-2)')};
+  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+`;
+
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
@@ -72,7 +89,16 @@ const normalizeStatus = (status) => {
   return 'pending';
 };
 
-export default function ManagerAnalytics({ invoiceRows, aggregatedRows }) {
+const AGENT_COLORS = ['#22d3ee', '#a78bfa', '#f59e0b', '#f87171', '#34d399', '#60a5fa', '#f472b6', '#facc15'];
+
+const tooltipStyle = {
+  background: 'rgba(15, 25, 45, 0.96)',
+  border: '1px solid rgba(255,255,255,0.12)',
+  borderRadius: '10px',
+  color: '#d9e3f0'
+};
+
+export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent }) {
   const cleanRows = (invoiceRows || []).filter((row) => String(row.invoiceNumber || '').trim());
 
   const statusMap = {
@@ -96,22 +122,33 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows }) {
   const byAgent = new Map();
   cleanRows.forEach((row) => {
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const current = byAgent.get(agent) || { agent, pending: 0, overdue: 0, paid: 0 };
+    const current = byAgent.get(agent) || { agent, pending: 0, overdue: 0, paid: 0, open: 0 };
     const status = normalizeStatus(row.status);
     if (status !== 'no_invoice') {
       current[status] += Number(row.amount) || 0;
+      if (status === 'pending' || status === 'overdue') {
+        current.open += Number(row.amount) || 0;
+      }
     }
     byAgent.set(agent, current);
   });
-  const agentChartData = Array.from(byAgent.values()).sort((a, b) => (b.pending + b.overdue) - (a.pending + a.overdue));
+  const agentChartData = Array.from(byAgent.values())
+    .sort((a, b) => b.open - a.open)
+    .map((row, idx) => ({ ...row, color: AGENT_COLORS[idx % AGENT_COLORS.length] }));
 
   const byWeek = new Map();
   cleanRows.forEach((row) => {
     const week = String(row.weekLabel || 'Unknown week');
-    const current = byWeek.get(week) || { week, pending: 0, overdue: 0, paid: 0 };
+    const current = byWeek.get(week) || { week, pending: 0, overdue: 0, paid: 0, open: 0, collected: 0 };
     const status = normalizeStatus(row.status);
     if (status !== 'no_invoice') {
       current[status] += Number(row.amount) || 0;
+      if (status === 'pending' || status === 'overdue') {
+        current.open += Number(row.amount) || 0;
+      }
+      if (status === 'paid') {
+        current.collected += Number(row.amount) || 0;
+      }
     }
     byWeek.set(week, current);
   });
@@ -126,16 +163,35 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows }) {
     <Grid>
       <Panel>
         <PanelTitle>Debt Distribution by Agent</PanelTitle>
+        <PanelHint>Click a bar to focus the dashboard on that agent.</PanelHint>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <FilterChip
+            type="button"
+            $active={selectedAgent === 'all'}
+            onClick={() => onSelectAgent?.('all')}
+          >
+            All agents
+          </FilterChip>
+        </div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={agentChartData}>
+          <BarChart
+            data={agentChartData}
+            onClick={(state) => {
+              const nextAgent = state?.activePayload?.[0]?.payload?.agent;
+              if (!nextAgent) return;
+              onSelectAgent?.(nextAgent);
+            }}
+          >
             <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
             <XAxis dataKey="agent" tick={{ fill: '#95a4bb', fontSize: 11 }} />
             <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
             <Legend />
-            <Bar dataKey="pending" stackId="a" fill="#f59e0b" name="Pending" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="overdue" stackId="a" fill="#f87171" name="Overdue" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="paid" stackId="a" fill="#10b981" name="Paid" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer">
+              {agentChartData.map((entry) => (
+                <Cell key={entry.agent} fill={entry.color} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Panel>
@@ -149,24 +205,24 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows }) {
                 <Cell key={entry.name} fill={entry.color} />
               ))}
             </Pie>
-            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
             <Legend />
           </PieChart>
         </ResponsiveContainer>
       </Panel>
 
       <Panel>
-        <PanelTitle>Weekly Trend (Amounts)</PanelTitle>
+        <PanelTitle>Weekly Open vs Collected</PanelTitle>
+        <PanelHint>Open = Pending + Overdue. Collected = Paid.</PanelHint>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={weekTrendData}>
             <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
             <XAxis dataKey="week" tick={{ fill: '#95a4bb', fontSize: 11 }} />
             <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
             <Legend />
-            <Line type="monotone" dataKey="pending" stroke="#f59e0b" strokeWidth={2.2} dot={{ r: 3 }} name="Pending" />
-            <Line type="monotone" dataKey="overdue" stroke="#f87171" strokeWidth={2.2} dot={{ r: 3 }} name="Overdue" />
-            <Line type="monotone" dataKey="paid" stroke="#10b981" strokeWidth={2.2} dot={{ r: 3 }} name="Paid" />
+            <Line type="monotone" dataKey="open" stroke="#f59e0b" strokeWidth={2.2} dot={{ r: 3 }} name="Open Balance" />
+            <Line type="monotone" dataKey="collected" stroke="#10b981" strokeWidth={2.2} dot={{ r: 3 }} name="Collected" />
           </LineChart>
         </ResponsiveContainer>
       </Panel>
