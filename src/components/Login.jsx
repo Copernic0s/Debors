@@ -195,40 +195,11 @@ function Login({ onLogin }) {
     }
   };
 
-  const particles = Array.from({ length: 15 }).map((_, i) => ({
-    id: i,
-    size: Math.random() * 150 + 50,
-    top: Math.random() * 100,
-    left: Math.random() * 100,
-    blur: Math.random() * 40 + 20,
-    duration: Math.random() * 20 + 15,
-    delay: Math.random() * -20,
-    tx: Math.random() * 100 - 50,
-    ty: Math.random() * 100 - 50,
-    color: i % 3 === 0 ? 'rgba(56, 189, 248, 0.15)' : i % 3 === 1 ? 'rgba(129, 140, 248, 0.1)' : 'rgba(14, 165, 233, 0.05)'
-  }));
-
   return (
-    <LoginContainer>
-      <BackgroundParticles>
-        {particles.map(p => (
-          <Particle
-            key={p.id}
-            $size={p.size}
-            $top={p.top}
-            $left={p.left}
-            $blur={p.blur}
-            $duration={p.duration}
-            $delay={p.delay}
-            $tx={p.tx}
-            $ty={p.ty}
-            $color={p.color}
-          />
-        ))}
-      </BackgroundParticles>
+    <LoginContainer style={{ background: 'transparent' }}>
       <LoginCard style={{ zIndex: 1, position: 'relative' }}>
         <Header>
-          <Title>Deb<span>ors</span></Title>
+          <Title style={{ fontSize: '1.8rem' }}>DEBORS <span>ALMAFUEL</span></Title>
           <Subtitle>Sign in to access the dashboard</Subtitle>
         </Header>
         <Form onSubmit={handleLogin}>

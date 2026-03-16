@@ -85,13 +85,12 @@ const roundMoney = (value) => {
 
 const AppContainer = styled.div`
   min-height: 100vh;
-  background: radial-gradient(circle at top left, #111827 0%, #0f172a 40%, #030712 100%);
+  background: transparent;
   color: var(--text-main);
   font-family: 'Manrope', sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;
-  overflow: hidden;
 `;
 
 const BackgroundParticles = styled.div`
@@ -129,8 +128,6 @@ const MainContent = styled.main`
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
   background: transparent;
 `;
 
@@ -1118,10 +1115,26 @@ function App() {
 
   if (!user) {
     return (
-      <>
+      <AppContainer>
+        <BackgroundParticles>
+          {backgroundElements.map(p => (
+            <Particle
+              key={p.id}
+              $size={p.size}
+              $top={p.top}
+              $left={p.left}
+              $blur={p.blur}
+              $duration={p.duration}
+              $delay={p.delay}
+              $tx={p.tx}
+              $ty={p.ty}
+              $color={p.color}
+            />
+          ))}
+        </BackgroundParticles>
         <Login onLogin={setUser} />
         <Toaster position="bottom-right" />
-      </>
+      </AppContainer>
     );
   }
 
