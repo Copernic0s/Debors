@@ -15,6 +15,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
+import InvoiceRoadmap from './InvoiceRoadmap';
 
 const Grid = styled.div`
   display: grid;
@@ -342,6 +343,12 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
               </tbody>
             </Table>
           </TableWrapper>
+        </Panel>
+
+        <Panel style={{ gridColumn: 'span 2' }}>
+          <PanelTitle>Invoicing Roadmap</PanelTitle>
+          <PanelHint>Companies grouped by their next scheduled invoice generation day.</PanelHint>
+          <InvoiceRoadmap data={aggregatedRows} />
         </Panel>
       </Grid>
     </>
