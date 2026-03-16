@@ -8,7 +8,7 @@ import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
-import { supabase } from './lib/supabase';
+import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
@@ -412,6 +412,8 @@ function App() {
   const manualEditsRef = useRef({});
 
   useEffect(() => {
+    if (!hasSupabaseConfig || !supabase) return;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
@@ -1017,6 +1019,18 @@ function App() {
       )}
     </div>
   );
+
+  if (!hasSupabaseConfig) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', color: 'white', fontFamily: 'sans-serif', textAlign: 'center', padding: '2rem' }}>
+        <div>
+          <h1 style={{ color: '#39b8ff' }}>Missing Configuration</h1>
+          <p>Please check your Vercel Environment Variables.</p>
+          <code style={{ background: '#1e293b', padding: '0.5rem', borderRadius: '4px', display: 'block', marginTop: '1rem' }}>VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY</code>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
