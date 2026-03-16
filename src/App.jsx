@@ -14,8 +14,6 @@ import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import './index.css';
 
-const TABLE_NAME = 'manual_edits';
-
 // Table used for cloud persistence
 const TABLE_NAME = 'manual_edits';
 
