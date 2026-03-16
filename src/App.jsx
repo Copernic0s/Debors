@@ -23,11 +23,10 @@ const mergeManualEdits = (rows, editsById) => {
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
-      if (patch.__isNew) return { ...row, ...patch };
-      const { amount: _ignoredAmount, ...safePatch } = patch;
+      // Merge all edits, prioritizing manual overrides
       return {
         ...row,
-        ...safePatch
+        ...patch
       };
     });
 
@@ -400,6 +399,7 @@ const aggregateByCompany = (rows) => {
 
 function App() {
   const [data, setData] = useState([]);
+  const [rawZohoData, setRawZohoData] = useState([]);
   const [activeView, setActiveView] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -443,7 +443,11 @@ function App() {
       edits.forEach(edit => {
         editsById[edit.id] = {
           ...edit,
-          // Handle legacy flags if needed or just use database values
+          // Map DB snake_case to App camelCase
+          clientName: edit.client_name,
+          agentId: edit.agent_id,
+          dueDate: edit.due_date,
+          billingCycle: edit.billing_cycle,
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -462,6 +466,15 @@ function App() {
     }
   }, [user, fetchManualEdits]);
 
+  // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
+  useEffect(() => {
+    if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
+    
+    // Always merge from the LATEST reference of manualEdits
+    const hydrated = mergeManualEdits(rawZohoData, manualEdits);
+    setData(hydrated);
+  }, [rawZohoData, manualEdits]);
+
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
     if (syncInFlightRef.current) return;
     syncInFlightRef.current = true;
@@ -474,18 +487,17 @@ function App() {
     try {
       const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
-      const hydratedData = mergeManualEdits(mergedData, manualEditsRef.current);
-
-      if (hydratedData && hydratedData.length > 0) {
-        setData(hydratedData);
+      
+      if (mergedData && mergedData.length > 0) {
+        setRawZohoData(mergedData);
         setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
-          toast.success(`Sync completed (${hydratedData.length} records)`, {
+          toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
-        setData([]);
+        setRawZohoData([]);
         setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.error('Zoho returned no rows.', {
