@@ -1,6 +1,6 @@
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
-const LOCAL_API_URL = 'http://localhost:3001/api/debtors';
+const LOCAL_API_URL = `http://${window.location.hostname}:3001/api/debtors`;
 
 const buildUrl = (url, cacheBust) => {
   if (!cacheBust) return url;

@@ -7,10 +7,14 @@ import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
+import Login from './components/Login';
+import { supabase } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import './index.css';
+
+const TABLE_NAME = 'manual_edits';
 
 const MANUAL_EDITS_STORAGE_KEY = 'debors_manual_edits_v1';
 
@@ -414,14 +418,54 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [manualEdits, setManualEdits] = useState(() => safeReadManualEdits());
+  const [manualEdits, setManualEdits] = useState({});
+  const [user, setUser] = useState(null);
   const syncInFlightRef = useRef(false);
-  const manualEditsRef = useRef(manualEdits);
+  const manualEditsRef = useRef({});
 
   useEffect(() => {
-    manualEditsRef.current = manualEdits;
-    localStorage.setItem(MANUAL_EDITS_STORAGE_KEY, JSON.stringify(manualEdits));
-  }, [manualEdits]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchManualEdits = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data: edits, error } = await supabase
+        .from(TABLE_NAME)
+        .select('*');
+      
+      if (error) throw error;
+      
+      const editsById = {};
+      edits.forEach(edit => {
+        editsById[edit.id] = {
+          ...edit,
+          // Handle legacy flags if needed or just use database values
+          __isNew: edit.is_new,
+          __deleted: edit.is_deleted
+        };
+      });
+      
+      setManualEdits(editsById);
+      manualEditsRef.current = editsById;
+    } catch (error) {
+      console.error('Error fetching manual edits:', error.message);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchManualEdits();
+    }
+  }, [user, fetchManualEdits]);
 
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
     if (syncInFlightRef.current) return;
@@ -622,29 +666,44 @@ function App() {
     setActiveCompany(companyName);
   };
 
-  const persistEditedRows = (rows) => {
-    if (!rows || rows.length === 0) return;
+  const persistEditedRows = async (rows) => {
+    if (!rows || rows.length === 0 || !user) return;
 
-    setManualEdits((prev) => {
-      const next = { ...prev };
-      rows.forEach((row) => {
-        if (!row?.id) return;
-        next[row.id] = {
-          ...(next[row.id] || {}),
-          __deleted: false,
-          status: row.status,
-          billingCycle: row.billingCycle,
-          dueDate: row.dueDate,
-          agentId: row.agentId,
-          company: row.company,
-          clientName: row.clientName,
-          notes: row.notes,
-          amount: row.amount,
-          invoiceCountOverride: row.invoiceCountOverride
-        };
+    const upserts = rows.map(row => ({
+      id: row.id,
+      amount: row.amount,
+      status: row.status,
+      notes: row.notes,
+      agent_id: row.agentId,
+      billing_cycle: row.billingCycle,
+      due_date: row.dueDate,
+      company: row.company || row.clientName,
+      is_new: row.__isNew || false,
+      is_deleted: row.__deleted || false,
+      updated_by: user.id,
+      updated_at: new Date().toISOString()
+    }));
+
+    try {
+      const { error } = await supabase
+        .from(TABLE_NAME)
+        .upsert(upserts);
+
+      if (error) throw error;
+
+      // Update local ref after successful DB update
+      setManualEdits(prev => {
+        const next = { ...prev };
+        rows.forEach(row => {
+          next[row.id] = { ...row };
+        });
+        manualEditsRef.current = next;
+        return next;
       });
-      return next;
-    });
+    } catch (error) {
+      toast.error('Failed to save changes to cloud');
+      console.error(error);
+    }
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
@@ -956,6 +1015,15 @@ function App() {
     </div>
   );
 
+  if (!user) {
+    return (
+      <>
+        <Login onLogin={setUser} />
+        <Toaster position="bottom-right" />
+      </>
+    );
+  }
+
   return (
     <AppContainer>
       <MainContent>
@@ -969,13 +1037,20 @@ function App() {
               <SyncButton className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
               </SyncButton>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => supabase.auth.signOut()}
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.72rem' }}
+              >
+                Logout
+              </button>
             </ActionButtons>
           </TopbarRight>
         </Topbar>
 
         <ContentScroll>
           <TopbarMeta>
-            <span>Source: {syncSourceLabel} | Last sync: {syncTimeLabel} | Shortcut: Ctrl+Shift+S</span>
+            <span>User: {user.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
           </TopbarMeta>
           {overviewContent}
         </ContentScroll>
