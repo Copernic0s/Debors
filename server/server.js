@@ -126,7 +126,8 @@ const createLookup = (row) => {
 
 const parseSheetWeekStart = (sheetName) => {
   const raw = String(sheetName || '').trim();
-  const match = raw.match(/^([A-Za-z]+)\s+(\d+)\s*-\s*(\d+)$/);
+  // Matches "Month Day - Day" (e.g., "March 16 - 20" or "Feb 10-16")
+  const match = raw.match(/^([A-Za-z]+)\s+(\d+)\s*[-\s]*(\d+)$/);
   if (!match) return null;
   const [, monthName, startDay] = match;
   const currentYear = new Date().getFullYear();

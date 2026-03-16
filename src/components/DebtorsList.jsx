@@ -455,8 +455,11 @@ export default function DebtorsList({
                     <option value="no_invoice">No invoice</option>
                   </StatusSelect>
                 </Td>
-                <Td style={{ fontSize: '0.78rem', color: item.isAutoOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: item.isAutoOverdue ? 700 : 500 }}>
-                  {item.dueDate || 'N/A'}
+                <Td style={{ fontSize: '0.78rem', color: item.isAutoOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: item.isAutoOverdue ? 700 : 500, whiteSpace: 'nowrap' }}>
+                  {item.dueDate ? (() => {
+                    const [y, m, d] = item.dueDate.split('-');
+                    return `${d}-${m}-${y.slice(2)}`;
+                  })() : 'N/A'}
                 </Td>
                 <Td>
                   <SourceBadge $type={item.sourceType || 'invoice'}>{(item.sourceType || 'invoice') === 'invoice' ? 'Invoice' : 'CS'}</SourceBadge>
