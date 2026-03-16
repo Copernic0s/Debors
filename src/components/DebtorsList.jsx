@@ -279,7 +279,6 @@ export default function DebtorsList({
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
   const [pendingAmounts, setPendingAmounts] = useState({});
-  const [pendingAmounts, setPendingAmounts] = useState({});
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
