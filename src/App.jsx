@@ -99,16 +99,35 @@ const MainContent = styled.main`
 
 const Topbar = styled.header`
   min-height: 72px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 2rem;
-  background: var(--surface);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   z-index: 10;
   position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brand), transparent);
+    background-size: 200% 100%;
+    animation: borderGlow 4s ease-in-out infinite;
+    opacity: 0.5;
+  }
+
+  @keyframes borderGlow {
+    0% { background-position: -100% 0; opacity: 0.3; }
+    50% { opacity: 0.6; }
+    100% { background-position: 100% 0; opacity: 0.3; }
+  }
 
   @media (max-width: 900px) {
     padding: 0.75rem 1rem;
@@ -212,20 +231,24 @@ const BrandTitle = styled.h1`
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 1.5rem;
-  font-weight: 800;
+  font-size: 1.6rem;
+  font-weight: 900;
   margin: 0;
-  background: linear-gradient(135deg, var(--brand), var(--accent-secondary));
+  background: linear-gradient(135deg, #fff 0%, var(--brand) 50%, #fff 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.02em;
-  font-family: 'Montserrat', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: 'Outfit', sans-serif;
+  animation: shine 5s linear infinite;
+
+  @keyframes shine {
+    to { background-position: 200% center; }
+  }
 
   span {
-    opacity: 0.8;
-    margin-right: 0.4rem;
-    font-weight: 500;
-    -webkit-text-fill-color: var(--text-main);
+    display: none;
   }
 
   @media (max-width: 900px) {
@@ -279,22 +302,36 @@ const SyncButton = styled.button`
 
 const ViewSwitch = styled.div`
   display: inline-flex;
-  gap: 0.4rem;
-  margin-bottom: 1rem;
-  padding: 0.3rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  gap: 0.3rem;
+  margin-bottom: 1.5rem;
+  padding: 0.4rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
 `;
 
 const ViewButton = styled.button`
-  border: 1px solid ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.35)' : 'transparent')};
-  background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.16)' : 'transparent')};
+  border: 1px solid ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.4)' : 'transparent')};
+  background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.18)' : 'transparent')};
   color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
   font-weight: 700;
-  padding: 0.35rem 0.7rem;
-  border-radius: 9px;
+  padding: 0.45rem 1rem;
+  border-radius: 10px;
   cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+
+  &:hover {
+    color: var(--text-main);
+    background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.05)')};
+    transform: ${(props) => (props.$active ? 'none' : 'translateY(-1px)')};
+  }
+
+  ${(props) => props.$active && `
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.1);
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  `}
 `;
 
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
@@ -1003,11 +1040,12 @@ function App() {
           />
         </>
       ) : (
-        <ManagerAnalytics
-          invoiceRows={scopedInvoiceData}
-          aggregatedRows={agentData}
+        <ManagerAnalytics 
+          invoiceRows={scopedInvoiceData} 
+          aggregatedRows={agentData} 
           selectedAgent={selectedAgent}
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+          onOpenCompanyProfile={openCompanyProfile}
         />
       )}
     </div>
@@ -1039,7 +1077,7 @@ function App() {
       <MainContent>
         <Topbar>
           <TopbarLeft>
-            <BrandTitle><span>Flow Collect</span> Almafuel</BrandTitle>
+            <BrandTitle>DEBORS ALMAFUEL</BrandTitle>
           </TopbarLeft>
 
           <TopbarRight>

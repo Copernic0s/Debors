@@ -8,8 +8,8 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
@@ -43,6 +43,13 @@ const Panel = styled.section`
   min-height: 320px;
   animation: fadeIn 0.8s ease-out;
   box-shadow: var(--shadow-lg);
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: rgba(56, 189, 248, 0.4);
+    background: rgba(15, 23, 42, 0.4);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.05);
+  }
 `;
 
 const PanelTitle = styled.h3`
@@ -68,6 +75,11 @@ const FilterChip = styled.button`
   font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255,255,255,0.05)')};
+  }
 `;
 
 const Table = styled.table`
@@ -91,8 +103,19 @@ const Table = styled.table`
   }
 
   tr:hover td {
-    color: var(--brand);
     background: rgba(255, 255, 255, 0.02);
+  }
+`;
+
+const TableWrapper = styled.div`
+  max-height: 280px;
+  overflow-y: auto;
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
   }
 `;
 
@@ -118,7 +141,31 @@ const tooltipStyle = {
   color: '#d9e3f0'
 };
 
-export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent }) {
+const AreaChartVisual = ({ data }) => (
+  <ResponsiveContainer width="100%" height={280}>
+    <AreaChart data={data}>
+      <defs>
+        <linearGradient id="colorOpen" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+        </linearGradient>
+        <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+        </linearGradient>
+      </defs>
+      <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" vertical={false} />
+      <XAxis dataKey="week" tick={{ fill: '#95a4bb', fontSize: 10 }} axisLine={false} tickLine={false} />
+      <YAxis tick={{ fill: '#95a4bb', fontSize: 10 }} axisLine={false} tickLine={false} />
+      <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
+      <Legend verticalAlign="top" height={36} />
+      <Area type="monotone" dataKey="open" name="Open Balance" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorOpen)" />
+      <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCollected)" />
+    </AreaChart>
+  </ResponsiveContainer>
+);
+
+export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
   const cleanRows = (invoiceRows || []).filter((row) => String(row.invoiceNumber || '').trim());
 
   const statusMap = {
@@ -157,7 +204,9 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
     .map((row, idx) => ({ ...row, color: AGENT_COLORS[idx % AGENT_COLORS.length] }));
 
   const byWeek = new Map();
-  cleanRows.forEach((row) => {
+  const sortedInvoiceRows = [...cleanRows].sort((a, b) => (a.sourceSheetOrder || 0) - (b.sourceSheetOrder || 0));
+  
+  sortedInvoiceRows.forEach((row) => {
     const week = String(row.weekLabel || 'Unknown week');
     const current = byWeek.get(week) || { week, pending: 0, overdue: 0, paid: 0, open: 0, collected: 0 };
     const status = normalizeStatus(row.status);
@@ -183,95 +232,117 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
     <>
       <RechartsVisualFix />
       <Grid>
-      <Panel>
-        <PanelTitle>Debt Distribution by Agent</PanelTitle>
-        <PanelHint>Click a bar to focus the dashboard on that agent.</PanelHint>
-        <div style={{ marginBottom: '0.75rem' }}>
-          <FilterChip
-            type="button"
-            $active={selectedAgent === 'all'}
-            onClick={() => onSelectAgent?.('all')}
-          >
-            All agents
-          </FilterChip>
-        </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart
-            data={agentChartData}
-            onClick={(state) => {
-              const nextAgent = state?.activePayload?.[0]?.payload?.agent;
-              if (!nextAgent) return;
-              onSelectAgent?.(nextAgent);
-            }}
-          >
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-            <XAxis dataKey="agent" tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
-            <Legend />
-            <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" activeBar={false}>
-              {agentChartData.map((entry) => (
-                <Cell key={entry.agent} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </Panel>
+        <Panel>
+          <PanelTitle>Debt Distribution by Agent</PanelTitle>
+          <PanelHint>Click a bar to focus the dashboard on that agent.</PanelHint>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <FilterChip
+              type="button"
+              $active={selectedAgent === 'all'}
+              onClick={() => onSelectAgent?.('all')}
+            >
+              All agents
+            </FilterChip>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart
+              data={agentChartData}
+              onClick={(state) => {
+                const nextAgent = state?.activePayload?.[0]?.payload?.agent;
+                if (!nextAgent) return;
+                onSelectAgent?.(nextAgent);
+              }}
+            >
+              <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="agent" tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
+              <Legend />
+              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" activeBar={false}>
+                {agentChartData.map((entry) => (
+                  <Cell key={entry.agent} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
 
-      <Panel>
-        <PanelTitle>Portfolio Status Split</PanelTitle>
-        <ResponsiveContainer width="100%" height={280}>
-          <PieChart>
-            <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3}>
-              {statusDonutData.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </Panel>
+        <Panel>
+          <PanelTitle>Portfolio Status Split</PanelTitle>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none">
+                {statusDonutData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
+              <Legend verticalAlign="bottom" height={36} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Panel>
 
-      <Panel>
-        <PanelTitle>Weekly Open vs Collected</PanelTitle>
-        <PanelHint>Open = Pending + Overdue. Collected = Paid.</PanelHint>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={weekTrendData}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-            <XAxis dataKey="week" tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
-            <Legend />
-            <Line type="monotone" dataKey="open" stroke="#f59e0b" strokeWidth={2.2} dot={{ r: 3 }} name="Open Balance" />
-            <Line type="monotone" dataKey="collected" stroke="#10b981" strokeWidth={2.2} dot={{ r: 3 }} name="Collected" />
-          </LineChart>
-        </ResponsiveContainer>
-      </Panel>
+        <Panel>
+          <PanelTitle>Weekly Open vs Collected</PanelTitle>
+          <PanelHint>Open = Pending + Overdue totals. Collected = Paid amounts.</PanelHint>
+          <AreaChartVisual data={weekTrendData} />
+        </Panel>
 
-      <Panel>
-        <PanelTitle>Top 10 Accounts to Prioritize</PanelTitle>
-        <Table>
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th>Agent</th>
-              <th>Status</th>
-              <th>Due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {topAccounts.map((item) => (
-              <tr key={item.id}>
-                <td>{item.company}</td>
-                <td>{item.agentId}</td>
-                <td>{normalizeStatus(item.status)}</td>
-                <td>{formatCurrency(item.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </Panel>
+        <Panel>
+          <PanelTitle>Top 10 Accounts to Prioritize</PanelTitle>
+          <PanelHint>Click on a company name to view historical data.</PanelHint>
+          <TableWrapper>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Agent</th>
+                  <th style={{ textAlign: 'center' }}>Status</th>
+                  <th style={{ textAlign: 'right' }}>Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topAccounts.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--brand)',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: 0,
+                          textAlign: 'left',
+                          fontSize: 'inherit'
+                        }}
+                      >
+                        {item.company}
+                      </button>
+                    </td>
+                    <td style={{ fontSize: '0.78rem' }}>{item.agentId}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <span style={{ 
+                        padding: '0.15rem 0.5rem', 
+                        borderRadius: '12px', 
+                        fontSize: '0.7rem', 
+                        fontWeight: 700,
+                        background: normalizeStatus(item.status) === 'overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: normalizeStatus(item.status) === 'overdue' ? 'var(--danger)' : 'var(--warn)',
+                        textTransform: 'uppercase'
+                      }}>
+                        {normalizeStatus(item.status)}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCurrency(item.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrapper>
+        </Panel>
       </Grid>
     </>
   );
