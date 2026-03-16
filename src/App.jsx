@@ -114,7 +114,7 @@ const Particle = styled.div`
   filter: blur(${props => props.$blur}px);
   animation: float ${props => props.$duration}s ease-in-out infinite;
   animation-delay: ${props => props.$delay}s;
-  opacity: 0.12;
+  opacity: ${props => props.$opacity || 0.15};
   will-change: transform;
 
   @keyframes float {
@@ -1085,20 +1085,42 @@ function App() {
     </div>
   );
 
-  // Atmospheric ALMAFUEL Particles
+  // Atmospheric ALMAFUEL Particles (Nebulas + White Stars)
   const backgroundElements = React.useMemo(() => {
-    return Array.from({ length: 12 }).map((_, i) => ({
-      id: i,
-      size: Math.random() * 400 + 200,
-      top: Math.random() * 100,
-      left: Math.random() * 100,
-      blur: Math.random() * 60 + 40,
-      duration: Math.random() * 25 + 20,
-      delay: Math.random() * -25,
-      tx: Math.random() * 150 - 75,
-      ty: Math.random() * 150 - 75,
-      color: i % 3 === 0 ? 'rgba(56, 189, 248, 0.08)' : i % 3 === 1 ? 'rgba(129, 140, 248, 0.06)' : 'rgba(14, 165, 233, 0.04)'
-    }));
+    const items = [];
+    // Large Atmospheric Nebulas (8 items)
+    for (let i = 0; i < 8; i++) {
+      items.push({
+        id: `neb-${i}`,
+        size: Math.random() * 500 + 300,
+        top: Math.random() * 100,
+        left: Math.random() * 100,
+        blur: Math.random() * 80 + 60,
+        duration: Math.random() * 30 + 20,
+        delay: Math.random() * -30,
+        tx: Math.random() * 200 - 100,
+        ty: Math.random() * 200 - 100,
+        opacity: 0.15,
+        color: i % 2 === 0 ? 'rgba(56, 189, 248, 0.12)' : 'rgba(129, 140, 248, 0.1)'
+      });
+    }
+    // Small Bright White Stars (20 items)
+    for (let i = 0; i < 20; i++) {
+      items.push({
+        id: `star-${i}`,
+        size: Math.random() * 4 + 2,
+        top: Math.random() * 100,
+        left: Math.random() * 100,
+        blur: Math.random() * 2 + 1,
+        duration: Math.random() * 10 + 10,
+        delay: Math.random() * -10,
+        tx: Math.random() * 40 - 20,
+        ty: Math.random() * 40 - 20,
+        opacity: Math.random() * 0.5 + 0.3,
+        color: '#ffffff'
+      });
+    }
+    return items;
   }, []);
 
   if (!hasSupabaseConfig) {
@@ -1153,6 +1175,7 @@ function App() {
             $tx={p.tx}
             $ty={p.ty}
             $color={p.color}
+            $opacity={p.opacity}
           />
         ))}
       </BackgroundParticles>
