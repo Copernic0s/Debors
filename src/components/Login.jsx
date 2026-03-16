@@ -10,6 +10,38 @@ const LoginContainer = styled.div`
   justify-content: center;
   min-height: 100vh;
   background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 40%, #0a0f1d 100%);
+  position: relative;
+  overflow: hidden;
+`;
+
+const BackgroundParticles = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+`;
+
+const Particle = styled.div`
+  position: absolute;
+  width: ${props => props.$size}px;
+  height: ${props => props.$size}px;
+  background: ${props => props.$color || 'rgba(56, 189, 248, 0.2)'};
+  border-radius: 50%;
+  top: ${props => props.$top}%;
+  left: ${props => props.$left}%;
+  filter: blur(${props => props.$blur}px);
+  animation: float ${props => props.$duration}s ease-in-out infinite;
+  animation-delay: ${props => props.$delay}s;
+  opacity: 0.4;
+
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(${props => props.$tx}px, ${props => props.$ty}px) scale(1.1); }
+    66% { transform: translate(${props => props.$tx * -0.5}px, ${props => props.$ty * 1.2}px) scale(0.9); }
+  }
 `;
 
 const LoginCard = styled.div`
@@ -163,9 +195,38 @@ function Login({ onLogin }) {
     }
   };
 
+  const particles = Array.from({ length: 15 }).map((_, i) => ({
+    id: i,
+    size: Math.random() * 150 + 50,
+    top: Math.random() * 100,
+    left: Math.random() * 100,
+    blur: Math.random() * 40 + 20,
+    duration: Math.random() * 20 + 15,
+    delay: Math.random() * -20,
+    tx: Math.random() * 100 - 50,
+    ty: Math.random() * 100 - 50,
+    color: i % 3 === 0 ? 'rgba(56, 189, 248, 0.15)' : i % 3 === 1 ? 'rgba(129, 140, 248, 0.1)' : 'rgba(14, 165, 233, 0.05)'
+  }));
+
   return (
     <LoginContainer>
-      <LoginCard>
+      <BackgroundParticles>
+        {particles.map(p => (
+          <Particle
+            key={p.id}
+            $size={p.size}
+            $top={p.top}
+            $left={p.left}
+            $blur={p.blur}
+            $duration={p.duration}
+            $delay={p.delay}
+            $tx={p.tx}
+            $ty={p.ty}
+            $color={p.color}
+          />
+        ))}
+      </BackgroundParticles>
+      <LoginCard style={{ zIndex: 1, position: 'relative' }}>
         <Header>
           <Title>Deb<span>ors</span></Title>
           <Subtitle>Sign in to access the dashboard</Subtitle>
