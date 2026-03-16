@@ -2,11 +2,15 @@ import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycle
 
 const getBaseApiUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
+  console.log('[API] Environment VITE_API_URL:', envUrl);
   if (envUrl) {
-    // Ensure we don't double up or miss the /api/debtors path
-    return envUrl.endsWith('/api/debtors') ? envUrl : `${envUrl.replace(/\/$/, '')}/api/debtors`;
+    const finalUrl = envUrl.endsWith('/api/debtors') ? envUrl : `${envUrl.replace(/\/$/, '')}/api/debtors`;
+    console.log('[API] Using production URL:', finalUrl);
+    return finalUrl;
   }
-  return `http://${window.location.hostname}:3001/api/debtors`;
+  const fallback = `http://${window.location.hostname}:3001/api/debtors`;
+  console.log('[API] Using local fallback URL:', fallback);
+  return fallback;
 };
 
 const LOCAL_API_URL = getBaseApiUrl();
@@ -24,9 +28,11 @@ export const fetchAllDataFromSheet = async (url = LOCAL_API_URL, options = {}) =
   const sourceUrl = buildUrl(url, cacheBust);
   let response;
 
+  console.log('[API] Fetching data from:', sourceUrl); // Log the actual URL being fetched
   try {
     response = await fetch(sourceUrl);
   } catch (error) {
+    console.error('[API] Network error during fetch:', error); // Log network error details
     throw new Error(`Failed to fetch from backend: ${error.message}`);
   }
 

@@ -489,7 +489,8 @@ function App() {
           });
         }
       }
-    } catch {
+    } catch (err) {
+      console.error('[Sync] Load data failed:', err);
       // No data wiping
       setSyncSourceLabel('Offline Data');
       if (notifyUser) {
