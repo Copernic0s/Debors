@@ -31,10 +31,13 @@ const StatCard = styled.div`
   }
 
   &:hover {
-    transform: translateY(-5px);
-    border-color: rgba(56, 189, 248, 0.3);
-    box-shadow: var(--shadow-glow), var(--shadow-lg);
-    background: rgba(30, 41, 59, 0.6);
+    transform: translateY(-8px) scale(1.02);
+    border-color: rgba(56, 189, 248, 0.5);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.4),
+      0 0 25px rgba(56, 189, 248, 0.2),
+      inset 0 0 15px rgba(56, 189, 248, 0.05);
+    background: rgba(30, 41, 59, 0.65);
   }
 `;
 

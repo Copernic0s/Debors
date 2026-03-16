@@ -4,7 +4,6 @@ import { RefreshCw, Users } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
-import DebtChart from './components/DebtChart';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
@@ -970,7 +969,6 @@ function App() {
       {activeView === 'overview' ? (
         <>
           <Dashboard metrics={metrics} />
-          <DebtChart data={agentData} />
           <DebtorsList
             data={agentData}
             onOpenCompanyProfile={openCompanyProfile}

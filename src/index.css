@@ -35,7 +35,13 @@
 
 body {
   font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 40%, #0a0f1d 100%);
+  background: #0a0f1d;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(200, 95%, 15%, 0.4) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(160, 95%, 15%, 0.3) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(240, 95%, 15%, 0.4) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(280, 95%, 15%, 0.3) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, hsla(200, 95%, 10%, 1) 0px, transparent 80%);
   color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -43,6 +49,24 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   background-attachment: fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.03), transparent 80%);
+  z-index: -1;
+  pointer-events: none;
+  animation: pulseBg 15s ease-in-out infinite alternate;
+}
+
+@keyframes pulseBg {
+  0% { transform: scale(1) translate(0, 0); }
+  100% { transform: scale(1.1) translate(2%, 2%); }
 }
 
 h1,
@@ -56,13 +80,15 @@ h6 {
 }
 
 .glass-panel {
-  background: var(--surface);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--glass-border);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: 1.5rem;
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 1.75rem;
 }
 
 .btn {

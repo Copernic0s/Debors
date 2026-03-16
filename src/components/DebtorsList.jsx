@@ -5,12 +5,13 @@ import ConfirmDialog from './ConfirmDialog';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Container = styled.div`
-  padding: 1.5rem;
+  padding: 2rem;
   margin-top: 1.5rem;
   animation: fadeIn 0.6s ease-out;
   border: 1px solid var(--glass-border);
-  background: var(--surface);
-  backdrop-filter: blur(20px);
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(24px);
+  border-radius: var(--radius-xl);
 
   @media (max-width: 768px) {
     padding: 1rem;
@@ -45,18 +46,49 @@ const Controls = styled.div`
 
 const SearchInput = styled.div`
   position: relative;
+  display: flex;
+  align-items: center;
   
   input {
-    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: 0.7rem 1rem 0.7rem 2.8rem;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+    width: min(320px, 80vw);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &::placeholder {
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: var(--brand);
+      background: rgba(0, 0, 0, 0.4);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
+      width: min(360px, 85vw);
+    }
+  }
+
+  svg {
+    position: absolute;
+    left: 1rem;
     color: var(--text-muted);
+    transition: color 0.3s;
+    pointer-events: none;
+  }
+
+  &:focus-within svg {
+    color: var(--brand);
   }
 
   @media (max-width: 768px) {
     width: 100%;
-
-    input {
-      width: 100%;
-    }
+    input { width: 100% !important; }
   }
 `;
 
