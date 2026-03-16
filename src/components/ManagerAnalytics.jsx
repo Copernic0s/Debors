@@ -35,16 +35,22 @@ const RechartsVisualFix = createGlobalStyle`
 `;
 
 const Panel = styled.section`
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  padding: 1rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: rgba(15, 23, 42, 0.3);
+  backdrop-filter: blur(24px);
+  padding: 1.5rem;
   min-height: 320px;
+  animation: fadeIn 0.8s ease-out;
+  box-shadow: var(--shadow-lg);
 `;
 
 const PanelTitle = styled.h3`
-  margin: 0 0 0.8rem;
-  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
 `;
 
 const PanelHint = styled.p`
@@ -70,17 +76,23 @@ const Table = styled.table`
 
   th,
   td {
-    font-size: 0.8rem;
-    padding: 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.85rem;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     text-align: left;
   }
 
   th {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+  }
+
+  tr:hover td {
+    color: var(--brand);
+    background: rgba(255, 255, 255, 0.02);
   }
 `;
 
