@@ -212,24 +212,25 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
   const explicitDueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
   const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
 
-  const amountInput = rd['total due ($)']
-    ?? rd['total due ()']
-    ?? rd.amount
-    ?? rd.totaldue
-    ?? r['total due ($)']
-    ?? r['total due ()']
-    ?? r.amount
-    ?? r.totaldue;
+  const amountNormalized = normalizeAmount(amountInput);
+
+  const generateId = () => {
+    const inv = normalizeText(r['invoice number'] || r.id);
+    if (inv) return inv;
+    const compStr = company.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
+    const weekStr = String(sheetName || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 8);
+    return `GEN-${compStr}-${Math.floor(amountNormalized)}-${weekStr}-${sheetOrder}`;
+  };
 
   return {
-    id: normalizeText(r['invoice number'] || r.id, `INV-${Math.floor(Math.random() * 100000)}`),
+    id: generateId(),
     invoiceNumber: normalizeText(r['invoice number'] || r.id),
     company,
     clientName: company,
     contactPerson: normalizeText(r['contact person'] || r.contact || r.contactperson),
     agentId: normalizeText(r['sales rep'] || r.agentid || r.agent, 'Unassigned'),
     billingCycle,
-    amount: normalizeAmount(amountInput),
+    amount: amountNormalized,
     dueDate,
     status: normalizeStatus(r['payment status'] || r.status, dueDate),
     notes: normalizeText(r.notes),

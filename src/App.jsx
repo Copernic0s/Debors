@@ -26,17 +26,27 @@ const safeReadManualEdits = () => {
 };
 
 const mergeManualEdits = (rows, editsById) => {
-  return rows
+  const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
+      if (patch.__isNew) return { ...row, ...patch };
       const { amount: _ignoredAmount, ...safePatch } = patch;
       return {
         ...row,
         ...safePatch
       };
     });
+
+  const existingIds = new Set(merged.map((r) => r.id));
+  Object.values(editsById).forEach((edit) => {
+    if (edit.__isNew && !edit.__deleted && !existingIds.has(edit.id)) {
+      merged.unshift({ ...edit });
+    }
+  });
+
+  return merged;
 };
 
 const parseMoneyValue = (value) => {
@@ -446,10 +456,10 @@ function App() {
         }
       }
     } catch {
-      setData([]);
-      setSyncSourceLabel('Zoho WorkDrive');
+      // No data wiping
+      setSyncSourceLabel('Offline Data');
       if (notifyUser) {
-        toast.error('Unable to connect to Zoho.', {
+        toast.error('Unable to connect to Zoho. Using offline data.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
         });
       }
@@ -549,10 +559,21 @@ function App() {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
     } else {
-      setData([{
+      const newId = debtor.id || `MANUAL-${Date.now()}`;
+      const newDebtor = {
         ...debtor,
+        id: newId,
         amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
-      }, ...data]);
+      };
+      setData([newDebtor, ...data]);
+      setManualEdits((prev) => ({
+        ...prev,
+        [newId]: {
+          ...newDebtor,
+          __isNew: true,
+          __deleted: false
+        }
+      }));
       toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
@@ -562,14 +583,34 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
-    setData((prev) => prev.filter((d) => d.id !== id));
-    setManualEdits((prev) => ({
-      ...prev,
-      [id]: {
-        ...(prev[id] || {}),
-        __deleted: true
-      }
-    }));
+    if (String(id).startsWith('CMP-')) {
+      const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
+      
+      const rowsToDelete = data.filter((d) => 
+        String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
+      );
+      
+      setData((prev) => prev.filter((d) => 
+        String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
+      ));
+      
+      setManualEdits((prev) => {
+        const next = { ...prev };
+        rowsToDelete.forEach((d) => {
+          next[d.id] = { ...(next[d.id] || {}), __deleted: true };
+        });
+        return next;
+      });
+    } else {
+      setData((prev) => prev.filter((d) => d.id !== id));
+      setManualEdits((prev) => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || {}),
+          __deleted: true
+        }
+      }));
+    }
     toast.success('Record deleted', {
       icon: '🗑️',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -598,6 +639,7 @@ function App() {
           company: row.company,
           clientName: row.clientName,
           notes: row.notes,
+          amount: row.amount,
           invoiceCountOverride: row.invoiceCountOverride
         };
       });
@@ -767,34 +809,40 @@ function App() {
     });
   };
 
-  const weekOptions = Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort();
-  const agentOptions = Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort();
+  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
 
-  const scopedInvoiceData = data.filter((item) => {
+  const scopedInvoiceData = React.useMemo(() => data.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  });
+  }), [data, selectedAgent, selectedWeek, statusScope]);
 
-  const aggregatedData = aggregateByCompany(scopedInvoiceData);
+  const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
-  const metrics = calculateMetrics(agentData);
+  const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
 
-  const clientDebtMap = new Map();
-  agentData.forEach((item) => {
-    const key = String(item.company || item.clientName || '').trim().toLowerCase();
-    if (!key) return;
-    const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
-    const previous = clientDebtMap.get(key) || false;
-    clientDebtMap.set(key, previous || isInDebt);
-  });
+  const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
+    const map = new Map();
+    agentData.forEach((item) => {
+      const key = String(item.company || item.clientName || '').trim().toLowerCase();
+      if (!key) return;
+      const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
+      const previous = map.get(key) || false;
+      map.set(key, previous || isInDebt);
+    });
 
-  const snapshotClients = clientDebtMap.size;
-  const snapshotClientsInDebt = Array.from(clientDebtMap.values()).filter(Boolean).length;
-  const snapshotClientsClear = snapshotClients - snapshotClientsInDebt;
+    const size = map.size;
+    const inDebt = Array.from(map.values()).filter(Boolean).length;
+    return {
+      snapshotClients: size,
+      snapshotClientsInDebt: inDebt,
+      snapshotClientsClear: size - inDebt
+    };
+  }, [agentData]);
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
