@@ -1,7 +1,15 @@
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
-const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:3001/api/debtors`;
-const LOCAL_API_URL = API_URL;
+const getBaseApiUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) {
+    // Ensure we don't double up or miss the /api/debtors path
+    return envUrl.endsWith('/api/debtors') ? envUrl : `${envUrl.replace(/\/$/, '')}/api/debtors`;
+  }
+  return `http://${window.location.hostname}:3001/api/debtors`;
+};
+
+const LOCAL_API_URL = getBaseApiUrl();
 
 const buildUrl = (url, cacheBust) => {
   if (!cacheBust) return url;
