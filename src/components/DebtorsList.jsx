@@ -280,23 +280,7 @@ const PagerButton = styled.button`
   }
 `;
 
-const getComputedStatus = (item) => {
-  const rawStatus = String(item.status ?? '').toLowerCase();
-  if (rawStatus === 'no_invoice') return 'no_invoice';
-  if (rawStatus === 'paid' || rawStatus === 'pagado' || rawStatus === 'cobrado') return 'paid';
-  if (rawStatus === 'overdue' || rawStatus === 'mora' || rawStatus === 'vencido') return 'overdue';
-
-  if (item.dueDate) {
-    const dueDate = new Date(`${item.dueDate}T00:00:00`);
-    const today = new Date();
-    const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if (!Number.isNaN(dueDate.getTime()) && dueDate < dayStart) {
-      return 'overdue';
-    }
-  }
-
-  return 'pending';
-};
+// Status logic is now handled in App.jsx during data hydration
 
 export default function DebtorsList({
   data,
@@ -336,8 +320,8 @@ export default function DebtorsList({
 
   const sortedData = [...data].sort((a, b) => {
     if (sortConfig.key === 'status') {
-      const aStatus = getComputedStatus(a);
-      const bStatus = getComputedStatus(b);
+      const aStatus = String(a.status || '');
+      const bStatus = String(b.status || '');
       if (aStatus < bStatus) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aStatus > bStatus) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
@@ -405,7 +389,8 @@ export default function DebtorsList({
               <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('status')}>Payment Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('dueDate')}>Due Date {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('sourceType')}>Source {sortConfig.key === 'sourceType' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
@@ -458,15 +443,20 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <StatusSelect
-                    $tone={getComputedStatus(item)}
-                    value={getComputedStatus(item)}
+                    $tone={item.status}
+                    value={item.status}
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
+                    title={item.isAutoOverdue ? 'Automatically marked as overdue based on policy' : ''}
+                    style={item.isAutoOverdue ? { border: '1px solid var(--danger)', boxShadow: '0 0 8px rgba(239, 68, 68, 0.2)' } : {}}
                   >
                     <option value="pending">Pending</option>
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
                     <option value="no_invoice">No invoice</option>
                   </StatusSelect>
+                </Td>
+                <Td style={{ fontSize: '0.78rem', color: item.isAutoOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: item.isAutoOverdue ? 700 : 500 }}>
+                  {item.dueDate || 'N/A'}
                 </Td>
                 <Td>
                   <SourceBadge $type={item.sourceType || 'invoice'}>{(item.sourceType || 'invoice') === 'invoice' ? 'Invoice' : 'CS'}</SourceBadge>

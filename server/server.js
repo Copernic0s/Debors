@@ -144,9 +144,11 @@ const toDateKey = (date) => {
 
 const getWeekdayInSheet = (sheetStartDate, targetWeekday) => {
   if (!sheetStartDate) return null;
-  for (let i = 0; i <= 6; i += 1) {
+  // Look ahead up to 9 days to find the target weekday in the "Next Week" context
+  for (let i = 0; i < 10; i += 1) {
     const current = new Date(sheetStartDate);
     current.setDate(sheetStartDate.getDate() + i);
+    // getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
     if (current.getDay() === targetWeekday) return current;
   }
   return null;
@@ -165,21 +167,47 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
   const weekStart = parseSheetWeekStart(sheetName);
   if (!weekStart) return '';
 
-  if (profile === BILLING_PROFILE.OWNER_B) {
-    const friday = getWeekdayInSheet(weekStart, 5);
-    return friday ? toDateKey(friday) : '';
-  }
-  if (profile === BILLING_PROFILE.COMPANY_DUAL) {
-    const normalized = normalizeBillingCycle(billingCycleText);
-    if (normalized === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-      const friday = getWeekdayInSheet(weekStart, 5);
-      return friday ? toDateKey(friday) : '';
+  // Rule A: Monday -> Sunday cycle. Works ends Sunday. 
+  // Invoice sent Monday. Due TUESDAY (next week start + 8 or 9 days depending on sheet start)
+  if (profile === BILLING_PROFILE.OWNER_A) {
+    const nextTuesday = getWeekdayInSheet(weekStart, 2);
+    // Ensure it's at least 7 days after week start to be in the "following" week
+    if (nextTuesday) {
+      const dayDiff = Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24));
+      if (dayDiff < 7) {
+        nextTuesday.setDate(nextTuesday.getDate() + 7);
+      }
+      return toDateKey(nextTuesday);
     }
-    const tuesday = getWeekdayInSheet(weekStart, 2);
-    return tuesday ? toDateKey(tuesday) : '';
   }
-  const tuesday = getWeekdayInSheet(weekStart, 2);
-  return tuesday ? toDateKey(tuesday) : '';
+
+  // Rule B: Thursday -> Wednesday cycle. Work ends Wednesday.
+  // Invoice sent Thursday. Due FRIDAY.
+  if (profile === BILLING_PROFILE.OWNER_B) {
+    const nextFriday = getWeekdayInSheet(weekStart, 5);
+    if (nextFriday) {
+      const dayDiff = Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24));
+      // FRIDAY of Rule B usually comes 8 days after the Thursday start
+      if (dayDiff < 7) {
+        nextFriday.setDate(nextFriday.getDate() + 7);
+      }
+      return toDateKey(nextFriday);
+    }
+  }
+
+  // Rule Twice: Monday & Thursday. Default to Tuesday of full week completion.
+  if (profile === BILLING_PROFILE.COMPANY_DUAL) {
+    const nextTuesday = getWeekdayInSheet(weekStart, 2);
+    if (nextTuesday) {
+      const dayDiff = Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24));
+      if (dayDiff < 7) {
+        nextTuesday.setDate(nextTuesday.getDate() + 7);
+      }
+      return toDateKey(nextTuesday);
+    }
+  }
+
+  return '';
 };
 
 const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {

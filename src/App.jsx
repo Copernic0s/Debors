@@ -551,7 +551,28 @@ function App() {
     
     // Always merge from the LATEST reference of manualEdits
     const hydrated = mergeManualEdits(rawZohoData, manualEdits);
-    setData(hydrated);
+    
+    // Apply Smart Billing Logic: Auto-Overdue
+    const today = new Date();
+    const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    const withSmartStatus = hydrated.map(row => {
+      let status = row.status || 'pending';
+      let isAutoOverdue = false;
+
+      // Only attempt auto-overdue if the status isn't already 'paid'
+      if (status !== 'paid' && row.dueDate) {
+        const parsedDue = new Date(`${row.dueDate}T00:00:00`);
+        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < dayStart) {
+          status = 'overdue';
+          isAutoOverdue = true;
+        }
+      }
+
+      return { ...row, status, isAutoOverdue };
+    });
+
+    setData(withSmartStatus);
   }, [rawZohoData, manualEdits]);
 
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
