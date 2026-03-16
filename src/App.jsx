@@ -16,18 +16,8 @@ import './index.css';
 
 const TABLE_NAME = 'manual_edits';
 
-const MANUAL_EDITS_STORAGE_KEY = 'debors_manual_edits_v1';
-
-const safeReadManualEdits = () => {
-  try {
-    const raw = localStorage.getItem(MANUAL_EDITS_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-};
+// Table used for cloud persistence
+const TABLE_NAME = 'manual_edits';
 
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
@@ -610,14 +600,19 @@ function App() {
         amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
       };
       setData([newDebtor, ...data]);
-      setManualEdits((prev) => ({
-        ...prev,
-        [newId]: {
+      setManualEdits((prev) => {
+        const nextEdit = {
           ...newDebtor,
           __isNew: true,
           __deleted: false
-        }
-      }));
+        };
+        const next = {
+          ...prev,
+          [newId]: nextEdit
+        };
+        persistEditedRows([nextEdit]);
+        return next;
+      });
       toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
@@ -640,20 +635,30 @@ function App() {
       
       setManualEdits((prev) => {
         const next = { ...prev };
+        const changed = [];
         rowsToDelete.forEach((d) => {
-          next[d.id] = { ...(next[d.id] || {}), __deleted: true };
+          const edit = { ...(next[d.id] || {}), id: d.id, __deleted: true };
+          next[d.id] = edit;
+          changed.push(edit);
         });
+        persistEditedRows(changed);
         return next;
       });
     } else {
       setData((prev) => prev.filter((d) => d.id !== id));
-      setManualEdits((prev) => ({
-        ...prev,
-        [id]: {
+      setManualEdits((prev) => {
+        const edit = {
           ...(prev[id] || {}),
+          id,
           __deleted: true
-        }
-      }));
+        };
+        const next = {
+          ...prev,
+          [id]: edit
+        };
+        persistEditedRows([edit]);
+        return next;
+      });
     }
     toast.success('Record deleted', {
       icon: '🗑️',
