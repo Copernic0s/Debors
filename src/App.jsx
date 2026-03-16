@@ -560,8 +560,8 @@ function App() {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
-      // Only attempt auto-overdue if the status isn't already 'paid'
-      if (status !== 'paid' && row.dueDate) {
+      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
+      if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
         const parsedDue = new Date(`${row.dueDate}T00:00:00`);
         if (!Number.isNaN(parsedDue.getTime()) && parsedDue < dayStart) {
           status = 'overdue';
