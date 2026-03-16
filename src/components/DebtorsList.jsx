@@ -6,9 +6,11 @@ import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '..
 
 const Container = styled.div`
   padding: 1.5rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
   animation: fadeIn 0.6s ease-out;
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  background: var(--surface);
+  backdrop-filter: blur(20px);
 
   @media (max-width: 768px) {
     padding: 1rem;
@@ -45,27 +47,6 @@ const SearchInput = styled.div`
   position: relative;
   
   input {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    padding: 0.6rem 1rem 0.6rem 2.5rem;
-    color: var(--text-main);
-    font-family: 'Manrope', inherit;
-    font-size: 0.875rem;
-    width: min(250px, 75vw);
-    transition: all 0.2s;
-
-    &:focus {
-      outline: none;
-      border-color: var(--brand);
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-    }
-  }
-
-  svg {
-    position: absolute;
-    left: 0.75rem;
-    top: 50%;
     transform: translateY(-50%);
     color: var(--text-muted);
   }
@@ -201,40 +182,7 @@ const SourceBadge = styled.span`
   font-weight: 700;
 `;
 
-const InvoiceStepper = styled.div`
-  display: inline-flex;
-  align-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  overflow: hidden;
-`;
-
-const StepButton = styled.button`
-  border: none;
-  background: transparent;
-  color: var(--text-main);
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  font-weight: 700;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-`;
-
-const StepValue = styled.input`
-  width: 46px;
-  border: none;
-  background: transparent;
-  color: var(--text-main);
-  text-align: center;
-  font-size: 0.8rem;
-  font-weight: 700;
-  outline: none;
-`;
+// Removed InvoiceStepper and StepButton as they are no longer needed
 
 const DueInput = styled.input`
   width: 112px;
@@ -325,14 +273,13 @@ export default function DebtorsList({
   onOpenCompanyProfile,
   onQuickUpdateBillingCycle,
   onQuickUpdateStatus,
-  onQuickUpdateAmount,
-  onQuickUpdateInvoiceCount
+  onQuickUpdateAmount
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, item: null });
   const [pendingAmounts, setPendingAmounts] = useState({});
-  const [pendingInvoices, setPendingInvoices] = useState({});
+  const [pendingAmounts, setPendingAmounts] = useState({});
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
@@ -347,18 +294,6 @@ export default function DebtorsList({
     });
   };
 
-  const commitInvoiceCount = (item) => {
-    const raw = pendingInvoices[item.id];
-    if (raw === undefined) return;
-    const parsed = Number.parseInt(String(raw), 10);
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-    onQuickUpdateInvoiceCount?.(item, parsed);
-    setPendingInvoices((prev) => {
-      const next = { ...prev };
-      delete next[item.id];
-      return next;
-    });
-  };
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -439,7 +374,6 @@ export default function DebtorsList({
               <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('invoiceCount')}>Invoices {sortConfig.key === 'invoiceCount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Payment Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('sourceType')}>Source {sortConfig.key === 'sourceType' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
@@ -490,45 +424,6 @@ export default function DebtorsList({
                       <option key={cycle} value={cycle}>{cycle}</option>
                     ))}
                   </BillingCycleSelect>
-                </Td>
-                <Td>
-                  <InvoiceStepper>
-                    <StepButton
-                      type="button"
-                      onClick={() => {
-                        const current = Number.parseInt(String(pendingInvoices[item.id] ?? item.invoiceCount ?? 0), 10) || 0;
-                        const next = Math.max(0, current - 1);
-                        setPendingInvoices((prev) => ({ ...prev, [item.id]: next }));
-                        onQuickUpdateInvoiceCount?.(item, next);
-                      }}
-                    >
-                      -
-                    </StepButton>
-                    <StepValue
-                      type="number"
-                      min="0"
-                      value={pendingInvoices[item.id] ?? String(item.invoiceCount ?? 0)}
-                      onChange={(e) => setPendingInvoices((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                      onBlur={() => commitInvoiceCount(item)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          commitInvoiceCount(item);
-                        }
-                      }}
-                    />
-                    <StepButton
-                      type="button"
-                      onClick={() => {
-                        const current = Number.parseInt(String(pendingInvoices[item.id] ?? item.invoiceCount ?? 0), 10) || 0;
-                        const next = current + 1;
-                        setPendingInvoices((prev) => ({ ...prev, [item.id]: next }));
-                        onQuickUpdateInvoiceCount?.(item, next);
-                      }}
-                    >
-                      +
-                    </StepButton>
-                  </InvoiceStepper>
                 </Td>
                 <Td>
                   <StatusSelect
@@ -582,7 +477,7 @@ export default function DebtorsList({
               </Tr>
             )) : (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No records found
                 </td>
               </tr>

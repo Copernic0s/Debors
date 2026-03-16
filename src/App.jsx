@@ -4,6 +4,7 @@ import { RefreshCw, Users } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
+import DebtChart from './components/DebtChart';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
@@ -205,15 +206,20 @@ const BrandTitle = styled.h1`
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 1.35rem;
+  font-size: 1.5rem;
+  font-weight: 800;
   margin: 0;
-  color: #39b8ff;
-  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--brand), var(--accent-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.02em;
   font-family: 'Montserrat', sans-serif;
 
   span {
-    color: #86dbff;
-    margin-right: 0.5rem;
+    opacity: 0.8;
+    margin-right: 0.4rem;
+    font-weight: 500;
+    -webkit-text-fill-color: var(--text-main);
   }
 
   @media (max-width: 900px) {
@@ -841,38 +847,6 @@ function App() {
     });
   };
 
-  const quickUpdateInvoiceCount = (row, nextCount) => {
-    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
-
-    const parsed = Number.parseInt(String(nextCount), 10);
-    if (!Number.isFinite(parsed) || parsed < 0) return;
-
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return item;
-
-        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-        if (!inAgentScope || !inWeekScope) return item;
-
-        const updatedRow = {
-          ...item,
-          invoiceCountOverride: parsed
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
-    });
-
-    toast.success('Invoice count updated', {
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
 
   const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
   const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
@@ -996,13 +970,13 @@ function App() {
       {activeView === 'overview' ? (
         <>
           <Dashboard metrics={metrics} />
+          <DebtChart data={agentData} />
           <DebtorsList
             data={agentData}
             onOpenCompanyProfile={openCompanyProfile}
             onQuickUpdateBillingCycle={quickUpdateBillingCycle}
             onQuickUpdateStatus={quickUpdatePaymentStatus}
             onQuickUpdateAmount={quickUpdateTotalDue}
-            onQuickUpdateInvoiceCount={quickUpdateInvoiceCount}
             onEdit={(debtor) => {
               setCurrentDebtor(debtor);
               setIsModalOpen(true);

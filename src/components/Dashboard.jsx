@@ -11,20 +11,33 @@ const DashboardGrid = styled.div`
 `;
 
 const StatCard = styled.div`
-  padding: 1.5rem;
+  padding: 1.75rem;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-  box-shadow: 0 12px 26px rgba(4, 12, 28, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--glass-border);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  }
 
   &:hover {
-    transform: translateY(-6px) scale(1.01);
-    box-shadow: 0 18px 36px rgba(3, 12, 29, 0.45), 0 0 0 1px rgba(56, 189, 248, 0.16);
-    border-color: rgba(56, 189, 248, 0.25);
+    transform: translateY(-5px);
+    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: var(--shadow-glow), var(--shadow-lg);
+    background: rgba(30, 41, 59, 0.6);
   }
 `;
+
 
 const StatInfo = styled.div`
   display: flex;
@@ -32,23 +45,30 @@ const StatInfo = styled.div`
 `;
 
 const StatLabel = styled.span`
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
-  font-weight: 500;
-  margin-bottom: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.6rem;
 `;
 
 const StatValue = styled.span`
-  font-size: 1.875rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 800;
   color: var(--text-main);
+  letter-spacing: -0.02em;
 `;
 
 const IconWrapper = styled.div`
-  padding: 0.75rem;
-  border-radius: 12px;
-  background-color: ${props => props.$bgColor || 'rgba(255, 255, 255, 0.1)'};
+  padding: 0.85rem;
+  border-radius: 16px;
+  background-color: ${props => props.$bgColor || 'rgba(255, 255, 255, 0.05)'};
   color: ${props => props.$color || 'white'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
 `;
 
 const formatCurrency = (value) => {
@@ -57,6 +77,7 @@ const formatCurrency = (value) => {
         currency: 'USD',
     }).format(value);
 };
+
 
 export default function Dashboard({ metrics }) {
     return (
