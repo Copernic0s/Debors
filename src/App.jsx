@@ -57,13 +57,21 @@ const parseMoneyValue = (value) => {
   const lastDot = raw.lastIndexOf('.');
   const sepIndex = Math.max(lastComma, lastDot);
 
-  let normalized;
   if (sepIndex === -1) {
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+
+  const hasBoth = lastComma !== -1 && lastDot !== -1;
+  const decPart = raw.slice(sepIndex + 1);
+  const intPart = raw.slice(0, sepIndex);
+
+  let normalized;
+  if (!hasBoth && decPart.length === 3) {
     normalized = raw.replace(/[.,]/g, '');
   } else {
-    const intPart = raw.slice(0, sepIndex).replace(/[.,]/g, '');
-    const decPart = raw.slice(sepIndex + 1).replace(/[.,]/g, '');
-    normalized = `${intPart}.${decPart}`;
+    const cleanInt = intPart.replace(/[.,]/g, '');
+    normalized = `${cleanInt}.${decPart.replace(/[.,]/g, '')}`;
   }
 
   const parsed = Number.parseFloat(normalized);

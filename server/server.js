@@ -39,6 +39,8 @@ const normalizeAmount = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) return Number(value.toFixed(2));
   let raw = String(value ?? '').trim();
   if (!raw) return 0;
+  
+  // Basic cleanup: remove symbols and whitespace
   raw = raw.replace(/[$€£]/g, '').replace(/[\s\u00A0\u202F]/g, '').replace(/[^0-9,.-]/g, '');
   if (!raw) return 0;
   
@@ -46,14 +48,24 @@ const normalizeAmount = (value) => {
   const lastDot = raw.lastIndexOf('.');
   const sepIndex = Math.max(lastComma, lastDot);
 
-  let normalized;
   if (sepIndex === -1) {
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+  }
+
+  const hasBoth = lastComma !== -1 && lastDot !== -1;
+  const decPart = raw.slice(sepIndex + 1);
+  const intPart = raw.slice(0, sepIndex);
+  
+  let normalized;
+  // If only one type of separator and followed by exactly 3 digits, it's ambiguous but likely thousands
+  if (!hasBoth && decPart.length === 3) {
     normalized = raw.replace(/[.,]/g, '');
   } else {
-    const intPart = raw.slice(0, sepIndex).replace(/[.,]/g, '');
-    const decPart = raw.slice(sepIndex + 1).replace(/[.,]/g, '');
-    normalized = `${intPart}.${decPart}`;
+    const cleanInt = intPart.replace(/[.,]/g, '');
+    normalized = `${cleanInt}.${decPart.replace(/[.,]/g, '')}`;
   }
+
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
 };
@@ -170,7 +182,7 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
   return tuesday ? toDateKey(tuesday) : '';
 };
 
-const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
+const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
   const r = createLookup(row);
   const rd = createLookup(rowDisplay || {});
   const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
@@ -178,7 +190,10 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
   const explicitDueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
   const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
   
-  const amountInput = rd['total due ($)'] ?? rd['total due ()'] ?? rd.amount ?? rd.totaldue ?? r['total due ($)'] ?? r['total due ()'] ?? r.amount ?? r.totaldue;
+  // Preference: 1. Raw number from Zoho, 2. Formatted display string, 3. Raw string
+  const rAmt = r['total due ($)'] ?? r['total due ()'] ?? r.amount ?? r.totaldue;
+  const rdAmt = rd['total due ($)'] ?? rd['total due ()'] ?? rd.amount ?? rd.totaldue;
+  const amountInput = (typeof rAmt === 'number') ? rAmt : (rdAmt || rAmt);
   const amountNormalized = normalizeAmount(amountInput);
   
   const generateId = () => {
@@ -186,7 +201,8 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
     if (inv) return inv;
     const compStr = company.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
     const weekStr = String(sheetName || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 8);
-    return `GEN-${compStr}-${Math.floor(amountNormalized)}-${weekStr}-${sheetOrder}`;
+    // Include rowIndex and sheetOrder to prevent collisions in the same folder
+    return `GEN-${compStr}-${sheetOrder}-${rowIndex}`;
   };
 
   return {
@@ -209,8 +225,10 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
 const consolidateDebtorRows = (rows) => {
   const grouped = new Map();
   rows.forEach((row) => {
-    const invoice = String(row.invoiceNumber || row.id || '').trim();
+    const invoice = String(row.invoiceNumber || '').trim();
     const company = String(row.company || row.clientName || '').trim().toLowerCase();
+    // If there's an invoice, group by company+invoice. 
+    // If not, use the unique generated ID (which now includes rowIndex).
     const key = invoice ? `${company}|${invoice.toLowerCase()}` : `${company}|row:${row.id}`;
 
     if (!grouped.has(key)) {
@@ -219,22 +237,23 @@ const consolidateDebtorRows = (rows) => {
     }
 
     const current = grouped.get(key);
+    
+    // If it's the same record across different sheets/weeks, we take the one from the "latest" sheet 
+    // or the one with the highest amount (since debt usually grows or is corrected up).
     if ((Number(row.amount) || 0) > (Number(current.amount) || 0)) {
       current.amount = Number(row.amount) || 0;
     }
 
     if ((Number(row.sourceSheetOrder) || 0) >= (Number(current.sourceSheetOrder) || 0)) {
-      if (row.billingCycle) current.billingCycle = row.billingCycle;
+      if (row.billingCycle && row.billingCycle !== BILLING_CYCLES.UNSPECIFIED) {
+        current.billingCycle = row.billingCycle;
+      }
       if (row.dueDate) current.dueDate = row.dueDate;
-      if (row.agentId) current.agentId = row.agentId;
+      if (row.agentId && row.agentId !== 'Unassigned') current.agentId = row.agentId;
       if (row.weekLabel) current.weekLabel = row.weekLabel;
+      current.status = row.status;
       current.sourceSheetOrder = row.sourceSheetOrder;
     }
-
-    const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
-    if (statuses.includes('overdue')) current.status = 'overdue';
-    else if (statuses.includes('pending')) current.status = 'pending';
-    else current.status = 'paid';
   });
 
   return Array.from(grouped.values()).map((item) => {
