@@ -84,8 +84,45 @@ const roundMoney = (value) => {
 };
 
 const AppContainer = styled.div`
-  display: flex;
   min-height: 100vh;
+  background: radial-gradient(circle at top left, #111827 0%, #0f172a 40%, #030712 100%);
+  color: var(--text-main);
+  font-family: 'Manrope', sans-serif;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+`;
+
+const BackgroundParticles = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+`;
+
+const Particle = styled.div`
+  position: absolute;
+  width: ${props => props.$size}px;
+  height: ${props => props.$size}px;
+  background: ${props => props.$color || 'rgba(56, 189, 248, 0.2)'};
+  border-radius: 50%;
+  top: ${props => props.$top}%;
+  left: ${props => props.$left}%;
+  filter: blur(${props => props.$blur}px);
+  animation: float ${props => props.$duration}s ease-in-out infinite;
+  animation-delay: ${props => props.$delay}s;
+  opacity: 0.12;
+  will-change: transform;
+
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(${props => props.$tx}px, ${props => props.$ty}px) scale(1.1); }
+    66% { transform: translate(${props => props.$tx * -0.5}px, ${props => props.$ty * 1.2}px) scale(0.95); }
+  }
 `;
 
 const MainContent = styled.main`
@@ -1051,6 +1088,22 @@ function App() {
     </div>
   );
 
+  // Atmospheric ALMAFUEL Particles
+  const backgroundElements = React.useMemo(() => {
+    return Array.from({ length: 12 }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 400 + 200,
+      top: Math.random() * 100,
+      left: Math.random() * 100,
+      blur: Math.random() * 60 + 40,
+      duration: Math.random() * 25 + 20,
+      delay: Math.random() * -25,
+      tx: Math.random() * 150 - 75,
+      ty: Math.random() * 150 - 75,
+      color: i % 3 === 0 ? 'rgba(56, 189, 248, 0.08)' : i % 3 === 1 ? 'rgba(129, 140, 248, 0.06)' : 'rgba(14, 165, 233, 0.04)'
+    }));
+  }, []);
+
   if (!hasSupabaseConfig) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', color: 'white', fontFamily: 'sans-serif', textAlign: 'center', padding: '2rem' }}>
@@ -1074,7 +1127,23 @@ function App() {
 
   return (
     <AppContainer>
-      <MainContent>
+      <BackgroundParticles>
+        {backgroundElements.map(p => (
+          <Particle
+            key={p.id}
+            $size={p.size}
+            $top={p.top}
+            $left={p.left}
+            $blur={p.blur}
+            $duration={p.duration}
+            $delay={p.delay}
+            $tx={p.tx}
+            $ty={p.ty}
+            $color={p.color}
+          />
+        ))}
+      </BackgroundParticles>
+      <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
             <BrandTitle>DEBORS ALMAFUEL</BrandTitle>
