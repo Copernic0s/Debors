@@ -540,6 +540,7 @@ function App() {
           agentId: edit.agent_id,
           dueDate: edit.due_date,
           billingCycle: edit.billing_cycle,
+          lastInvoicedDate: edit.last_invoiced_date,
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -816,6 +817,7 @@ function App() {
       company: row.company || row.clientName,
       is_new: row.__isNew || false,
       is_deleted: row.__deleted || false,
+      last_invoiced_date: row.lastInvoicedDate,
       updated_by: user.id,
       updated_at: new Date().toISOString()
     }));
@@ -967,6 +969,33 @@ function App() {
     });
 
     toast.success('Total due updated', {
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
+  const handleMarkInvoiced = (debtor) => {
+    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const todayDate = new Date().toISOString().split('T')[0];
+
+    setData((prev) => {
+      const changed = [];
+      const next = prev.map((item) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return item;
+
+        const updated = { ...item, lastInvoicedDate: todayDate };
+        changed.push(updated);
+        return updated;
+      });
+
+      persistEditedRows(changed);
+      return next;
+    });
+
+    toast.success(`${debtor.company} marked as invoiced`, {
+      icon: '✅',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
   };
@@ -1133,7 +1162,7 @@ function App() {
       )}
 
       {activeView === 'sla' && (
-        <InvoiceRoadmap data={agentData} />
+        <InvoiceRoadmap data={agentData} onMarkInvoiced={handleMarkInvoiced} />
       )}
     </div>
   );
