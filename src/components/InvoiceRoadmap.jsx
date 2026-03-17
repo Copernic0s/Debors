@@ -306,32 +306,32 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); // 2 days buffer
-        periodStr = `Mon - Sun Cycle`;
+        due.setDate(inv.getDate() + 5); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
         let diff = day - 4;
         if (diff < 0) diff += 7;
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); // 2 days buffer
-        periodStr = `Thu - Wed Cycle`;
+        due.setDate(inv.getDate() + 5); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       } else if (type === 'TWICE_A') {
         let diff = day - 4;
         if (diff < 0) diff += 7;
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 3);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); // 2 days buffer
-        periodStr = `Mon - Wed Window`;
+        due.setDate(inv.getDate() + 2); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       } else if (type === 'TWICE_B') {
         let diff = day - 1;
         if (diff < 0) diff += 7;
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 4);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); // 2 days buffer
-        periodStr = `Thu - Sun Window`;
+        due.setDate(inv.getDate() + 2); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       }
       return { inv, due, start, end, periodStr };
     };
@@ -431,7 +431,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       }))
       .filter(item => {
         if (statusFilter === 'all') return true;
-        if (statusFilter === 'priority') return item.sla.status.highlight;
         return item.sla.status.id === statusFilter;
       })
       .sort((a, b) => {
@@ -500,7 +499,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         </SearchBox>
         <MiniFilter>
           <FilterButton $active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</FilterButton>
-          <FilterButton $active={statusFilter === 'priority'} onClick={() => setStatusFilter('priority')}>🔥 Priority</FilterButton>
           <FilterButton $active={statusFilter === 'overdue'} onClick={() => setStatusFilter('overdue')}>Overdue</FilterButton>
           <FilterButton $active={statusFilter === 'generation'} onClick={() => setStatusFilter('generation')}>Generation</FilterButton>
           <FilterButton $active={statusFilter === 'invoiced'} onClick={() => setStatusFilter('invoiced')}>Processed</FilterButton>

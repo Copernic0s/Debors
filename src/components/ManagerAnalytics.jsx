@@ -166,7 +166,10 @@ const AreaChartVisual = ({ data }) => (
 );
 
 export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
-  const cleanRows = (invoiceRows || []).filter((row) => String(row.invoiceNumber || '').trim());
+  const cleanRows = (invoiceRows || []).filter((row) => {
+    const status = normalizeStatus(row.status);
+    return status !== 'no_invoice' && (Number(row.amount) > 0 || status === 'paid');
+  });
 
   const statusMap = {
     pending: 0,
