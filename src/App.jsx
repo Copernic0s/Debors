@@ -742,14 +742,29 @@ function App() {
             changed.push(updatedRow);
             return updatedRow;
           });
-          persistEditedRows(changed);
+          
+          if (changed.length > 0) {
+            setManualEdits(prevEdits => {
+              const nextEdits = { ...prevEdits };
+              changed.forEach(row => {
+                nextEdits[row.id] = row;
+              });
+              manualEditsRef.current = nextEdits;
+              return nextEdits;
+            });
+            persistEditedRows(changed);
+          }
           return next;
         });
       } else {
         setData((prev) => {
           const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
-          const changed = next.filter((d) => d.id === debtor.id);
-          persistEditedRows(changed);
+          setManualEdits(prevEdits => {
+            const nextEdits = { ...prevEdits, [debtor.id]: debtor };
+            manualEditsRef.current = nextEdits;
+            return nextEdits;
+          });
+          persistEditedRows([debtor]);
           return next;
         });
       }
@@ -1080,17 +1095,33 @@ function App() {
         if (!sameCompany) return item;
 
         // Sync: If it's the target company, mark lastInvoicedDate
+        // If status was 'no_invoice' and we have an invoice, move to 'pending'
+        let newStatus = item.status;
+        if ((!item.status || item.status === 'no_invoice') && invNumber) {
+          newStatus = 'pending';
+        }
+
         const updated = {
           ...item,
           lastInvoicedDate: todayDate,
-          invoiceNumber: invNumber || item.invoiceNumber
-          // Explicitly keeping the previous status to avoid auto-marking as 'paid'
+          invoiceNumber: invNumber || item.invoiceNumber,
+          status: newStatus
         };
         changed.push(updated);
         return updated;
       });
 
-      persistEditedRows(changed);
+      if (changed.length > 0) {
+        setManualEdits(prevEdits => {
+          const nextEdits = { ...prevEdits };
+          changed.forEach(row => {
+            nextEdits[row.id] = row;
+          });
+          manualEditsRef.current = nextEdits;
+          return nextEdits;
+        });
+        persistEditedRows(changed);
+      }
       return next;
     });
 
