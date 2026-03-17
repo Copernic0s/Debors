@@ -324,14 +324,21 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         end.setDate(inv.getDate() - 1);
         due.setDate(inv.getDate() + 1);
         periodStr = `Mon - Wed Window`;
-      } else if (type === 'TWICE_B') {
-        let diff = day - 1;
-        if (diff < 0) diff += 7;
-        inv.setDate(refDate.getDate() - diff);
-        start.setDate(inv.getDate() - 4);
-        end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1);
         periodStr = `Thu - Sun Window`;
+      } else if (type === 'SEMI_MONTHLY_A') {
+        // Window 1: 1st to 14th. Generation on 15th
+        inv = new Date(refDate.getFullYear(), refDate.getMonth(), 15);
+        start = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+        end = new Date(refDate.getFullYear(), refDate.getMonth(), 14);
+        due = new Date(refDate.getFullYear(), refDate.getMonth(), 16);
+        periodStr = `1st - 14th Window`;
+      } else if (type === 'SEMI_MONTHLY_B') {
+        // Window 2: 15th to Last Day. Generation on 1st of next month
+        inv = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 1);
+        start = new Date(refDate.getFullYear(), refDate.getMonth(), 15);
+        end = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0); // Last day of ref month
+        due = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 2);
+        periodStr = `15th - End Window`;
       }
       return { inv, due, start, end, periodStr };
     };
@@ -350,6 +357,22 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         const tA = getTargetDates('TWICE_A', currentRef);
         const tB = getTargetDates('TWICE_B', currentRef);
         target = tA.inv > tB.inv ? tA : tB;
+      } else if (cycle === BILLING_CYCLES.SEMI_MONTHLY) {
+        // Find which semi-monthly window we are in
+        const dayOfMonth = currentRef.getDate();
+        if (dayOfMonth < 15) {
+          // In Window A or just finished B (1st of month)
+          // If we are on 1st-14th, the "earliest pending" could be the Window B of PREVIOUS month
+          // or Window A of current month.
+          const currentA = getTargetDates('SEMI_MONTHLY_A', currentRef);
+          const prevB = getTargetDates('SEMI_MONTHLY_B', new Date(currentRef.getFullYear(), currentRef.getMonth() - 1, 15));
+          target = prevB.inv > currentA.inv ? prevB : currentA; // Actually prevB.inv is usually before currentA.inv
+          // But wait, the task finder wants the earliest un-processed. 
+          // Let's just pick the one closest to currentRef for iterations.
+          target = (dayOfMonth === 1) ? prevB : currentA;
+        } else {
+          target = getTargetDates('SEMI_MONTHLY_B', currentRef);
+        }
       } else break;
 
       const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= target.inv) ||
@@ -371,7 +394,15 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       // Move iteration forward to find NEXT window
       currentRef = new Date(target.inv);
       if (cycle === BILLING_CYCLES.TWICE) {
-        currentRef.setDate(target.inv.getDate() + (target.inv.getDay() === 1 ? 4 : 3)); // Mon->Thu is 3, Thu->Mon is 4. Fixed offset.
+        currentRef.setDate(target.inv.getDate() + (target.inv.getDay() === 1 ? 4 : 3));
+      } else if (cycle === BILLING_CYCLES.SEMI_MONTHLY) {
+        // If we just processed Window A (15th), next is Window B (1st of next month)
+        // If we just processed Window B (1st), next is Window A (15th)
+        if (target.inv.getDate() === 15) {
+          currentRef = new Date(target.inv.getFullYear(), target.inv.getMonth(), 20); // Move to late month
+        } else {
+          currentRef = new Date(target.inv.getFullYear(), target.inv.getMonth(), 5); // Move to early month
+        }
       } else {
         currentRef.setDate(target.inv.getDate() + 7);
       }

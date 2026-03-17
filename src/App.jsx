@@ -542,12 +542,14 @@ function App() {
         editsById[edit.id] = {
           ...edit,
           // Map DB snake_case to App camelCase
-          clientName: edit.client_name,
+          company: edit.company || edit.client_name,
+          clientName: edit.client_name || edit.company,
           agentId: edit.agent_id,
           dueDate: edit.due_date,
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
+          invoiceNumber: edit.invoice_number,
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -814,35 +816,41 @@ function App() {
     if (!rows || rows.length === 0 || !user) return;
 
     // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
-    // This prevents "Fail to save" errors for Sheet-only rows.
+    // We also filter out any null or undefined IDs.
     const upserts = rows
       .filter(row => row.id && !String(row.id).startsWith('CS-'))
       .map(row => ({
-        id: row.id,
-        amount: row.amount,
-        status: row.status,
-        notes: row.notes,
-        agent_id: row.agentId,
-        billing_cycle: row.billingCycle,
-        due_date: row.dueDate,
-        company: row.company || row.clientName,
-        is_new: row.__isNew || false,
-        is_deleted: row.__deleted || false,
-        last_invoiced_date: row.lastInvoicedDate,
-        last_no_usage_date: row.lastNoUsageDate,
+        id: String(row.id),
+        amount: Number(row.amount) || 0,
+        status: String(row.status || 'pending'),
+        notes: String(row.notes || ''),
+        agent_id: String(row.agentId || 'Unassigned'),
+        billing_cycle: String(row.billingCycle || 'Unspecified'),
+        due_date: row.dueDate || null,
+        company: String(row.company || row.clientName || 'Unknown'),
+        client_name: String(row.company || row.clientName || 'Unknown'),
+        is_new: Boolean(row.__isNew),
+        is_deleted: Boolean(row.__deleted),
+        last_invoiced_date: row.lastInvoicedDate || null,
+        last_no_usage_date: row.lastNoUsageDate || null,
         updated_by: user?.id,
         updated_at: new Date().toISOString(),
-        invoice_number: row.invoiceNumber // Ensure we save the invoice number
+        invoice_number: row.invoiceNumber || null
       }));
 
     if (upserts.length === 0) return;
+
+    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
 
     try {
       const { error } = await supabase
         .from(TABLE_NAME)
         .upsert(upserts);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Persistence] Supabase Error:', error);
+        throw error;
+      }
 
       // Update local ref after successful DB update
       setManualEdits(prev => {
