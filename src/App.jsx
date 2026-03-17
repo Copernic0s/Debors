@@ -367,6 +367,18 @@ const ViewButton = styled.button`
     box-shadow: 0 0 15px rgba(56, 189, 248, 0.1);
     text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
   `}
+
+  .priority-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
+    background: #ef4444;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #ef4444;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
 `;
 
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
@@ -1037,12 +1049,24 @@ function App() {
     };
   }, [activeCompany, data, selectedAgent, selectedWeek]);
 
+  const slaPriorityCount = useMemo(() => {
+    return agentData.filter(item => {
+      const cycle = normalizeBillingCycle(item.billingCycle);
+      return cycle !== BILLING_CYCLES.CS_BY_AGENT && 
+             cycle !== BILLING_CYCLES.UNSPECIFIED && 
+             cycle !== BILLING_CYCLES.MULTIPLE;
+    }).length;
+  }, [agentData]);
+
   const overviewContent = (
     <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        <ViewButton type="button" $active={activeView === 'sla'} onClick={() => setActiveView('sla')}>SLA Monitor</ViewButton>
+        <ViewButton type="button" $statusColor="#38bdf8" $active={activeView === 'sla'} onClick={() => setActiveView('sla')} style={{ position: 'relative' }}>
+          SLA Monitor
+          {slaPriorityCount > 0 && <div className="priority-badge" />}
+        </ViewButton>
       </ViewSwitch>
 
       <div style={{ marginBottom: '1.4rem' }}>

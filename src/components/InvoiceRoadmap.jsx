@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { Calendar, AlertCircle, ArrowRight, CheckCircle2, Clock, Zap, Info } from 'lucide-react';
+import { Calendar, AlertCircle, ArrowRight, CheckCircle2, Clock, Zap, Info, Search, Filter, ChevronDown } from 'lucide-react';
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const RoadmapContainer = styled.div`
@@ -8,21 +8,70 @@ const RoadmapContainer = styled.div`
   flex-direction: column;
   gap: 2rem;
   padding-bottom: 3rem;
+  animation: fadeIn 0.6s ease-out;
 `;
 
-const SectionHeader = styled.div`
-  margin-bottom: 2.5rem;
+const FilterBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+`;
+
+const SearchBox = styled.div`
+  position: relative;
+  flex: 1;
+  min-width: 300px;
   
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    margin-bottom: 0.5rem;
+  input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 0.8rem 1rem 0.8rem 2.8rem;
     color: var(--text-main);
-  }
-  
-  p {
-    color: var(--text-muted);
     font-size: 0.9rem;
+    transition: all 0.3s ease;
+
+    &:focus {
+      outline: none;
+      border-color: var(--brand);
+      background: rgba(0, 0, 0, 0.4);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
+    }
+  }
+
+  svg {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+`;
+
+const MiniFilter = styled.div`
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+`;
+
+const FilterButton = styled.button`
+  background: ${props => props.$active ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)'};
+  border: 1px solid ${props => props.$active ? 'var(--brand)' : 'var(--glass-border)'};
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: ${props => props.$active ? 'var(--brand)' : 'var(--text-muted)'};
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
   }
 `;
 
@@ -33,14 +82,17 @@ const CardGrid = styled.div`
 `;
 
 const SLACard = styled.div`
-  background: rgba(15, 23, 42, 0.4);
+  background: ${props => props.$highlight 
+    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, ${props.$statusColor}10 100%)` 
+    : 'rgba(15, 23, 42, 0.4)'};
   backdrop-filter: blur(20px);
-  border: 1px solid ${props => props.$highlight ? 'var(--brand)' : 'var(--glass-border)'};
+  border: 1px solid ${props => props.$highlight ? props.$statusColor : 'var(--glass-border)'};
   border-radius: var(--radius-xl);
   padding: 1.5rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+  box-shadow: ${props => props.$highlight ? `0 10px 30px ${props.$statusColor}15` : 'none'};
 
   &::before {
     content: '';
@@ -55,7 +107,7 @@ const SLACard = styled.div`
   &:hover {
     transform: translateY(-5px);
     border-color: ${props => props.$statusColor};
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4), 0 0 20px ${props => props.$statusColor}20;
   }
 `;
 
@@ -72,6 +124,7 @@ const CompanyName = styled.h4`
   font-weight: 800;
   color: var(--text-main);
   letter-spacing: -0.02em;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
 `;
 
 const CycleTag = styled.div`
@@ -107,6 +160,7 @@ const Milestone = styled.div`
     justify-content: center;
     background: ${props => props.$active ? props.$color : 'rgba(255,255,255,0.05)'};
     color: ${props => props.$active ? 'white' : 'var(--text-muted)'};
+    box-shadow: ${props => props.$active ? `0 0 10px ${props.$color}` : 'none'};
   }
 
   .content {
@@ -166,6 +220,28 @@ const StatusBadge = styled.div`
   border-radius: 999px;
   background: ${props => props.$color}15;
   border: 1px solid ${props => props.$color}40;
+  backdrop-filter: blur(4px);
+`;
+
+const LoadMoreBtn = styled.button`
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+  padding: 1rem 2rem;
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  cursor: pointer;
+  margin: 2rem auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: var(--brand);
+    transform: translateY(-2px);
+  }
 `;
 
 const EmptyState = styled.div`
@@ -180,13 +256,17 @@ const EmptyState = styled.div`
 `;
 
 export default function InvoiceRoadmap({ data }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [pageSize, setPageSize] = useState(12);
+
   const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
 
-  const currentDay = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const currentDay = today.getDay();
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
@@ -199,7 +279,6 @@ export default function InvoiceRoadmap({ data }) {
   };
 
   const getSLADetails = (item) => {
-    // Normalización de ciclo para evitar N/A
     const cycle = normalizeBillingCycle(item.billingCycle);
     
     const details = {
@@ -207,7 +286,7 @@ export default function InvoiceRoadmap({ data }) {
       invoiceDate: null,
       dueDate: null,
       percent: 0,
-      status: { label: 'Scheduled', color: 'var(--text-muted)', icon: <Clock size={14} />, highlight: false }
+      status: { label: 'Scheduled', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' }
     };
 
     const startOfWeek = new Date(today);
@@ -250,16 +329,16 @@ export default function InvoiceRoadmap({ data }) {
 
       if (daysToInv === 0) {
         details.percent = 66;
-        details.status = { label: 'GENERATE TODAY', color: 'var(--brand)', icon: <Zap size={14} />, highlight: true };
+        details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generate' };
       } else if (daysToInv < 0 && today < details.dueDate) {
         details.percent = 85;
-        details.status = { label: 'GRACE PERIOD', color: '#818cf8', icon: <Info size={14} />, highlight: true };
+        details.status = { label: 'GRACE PERIOD', color: '#818cf8', icon: <Info size={14} />, highlight: true, id: 'grace' };
       } else if (today.getTime() === details.dueDate?.getTime()) {
         details.percent = 100;
-        details.status = { label: 'DUE TODAY', color: 'var(--warn)', icon: <AlertCircle size={14} />, highlight: true };
+        details.status = { label: 'DUE TODAY', color: '#f59e0b', icon: <AlertCircle size={14} />, highlight: true, id: 'due' };
       } else {
         details.percent = 33;
-        details.status = { label: 'SCHEDULED', color: 'var(--text-muted)', icon: <Clock size={14} />, highlight: false };
+        details.status = { label: 'SCHEDULED', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' };
       }
     }
 
@@ -270,21 +349,36 @@ export default function InvoiceRoadmap({ data }) {
     return data
       .filter(item => {
         const c = normalizeBillingCycle(item.billingCycle);
-        return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
+        if (c === BILLING_CYCLES.CS_BY_AGENT || c === BILLING_CYCLES.UNSPECIFIED || c === BILLING_CYCLES.MULTIPLE) return false;
+        
+        // Apply search
+        const company = String(item.company || '').toLowerCase();
+        const search = searchTerm.toLowerCase();
+        if (search && !company.includes(search)) return false;
+
+        return true;
       })
       .map(item => ({
         ...item,
         sla: getSLADetails(item)
       }))
+      .filter(item => {
+        // Apply status filter
+        if (statusFilter === 'all') return true;
+        if (statusFilter === 'priority') return item.sla.status.highlight;
+        return item.sla.status.id === statusFilter;
+      })
       .sort((a, b) => {
         // Prioritize due today or generate today
         if (a.sla.status.highlight && !b.sla.status.highlight) return -1;
         if (!a.sla.status.highlight && b.sla.status.highlight) return 1;
         return (a.sla.invoiceDate?.getTime() || 0) - (b.sla.invoiceDate?.getTime() || 0);
       });
-  }, [data, today]);
+  }, [data, today, searchTerm, statusFilter]);
 
-  if (slaData.length === 0) {
+  const paginatedData = slaData.slice(0, pageSize);
+
+  if (slaData.length === 0 && !searchTerm && statusFilter === 'all') {
     return (
       <EmptyState>
         <Zap size={48} color="var(--brand)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
@@ -296,68 +390,95 @@ export default function InvoiceRoadmap({ data }) {
 
   return (
     <RoadmapContainer>
-      <SectionHeader>
-        <h2>Billing SLA Monitor</h2>
-        <p>A proactive view of your billing lifecycle. Cards move through stages automatically based on ALMAFUEL policies.</p>
-      </SectionHeader>
+      <FilterBar>
+        <SearchBox>
+          <Search size={18} />
+          <input 
+            type="text" 
+            placeholder="Search company in SLA roadmap..." 
+            value={searchTerm}
+            onChange={(e) => { setSearchTerm(e.target.value); setPageSize(12); }}
+          />
+        </SearchBox>
+        <MiniFilter>
+          <FilterButton $active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</FilterButton>
+          <FilterButton $active={statusFilter === 'priority'} onClick={() => setStatusFilter('priority')}>🔥 Priority</FilterButton>
+          <FilterButton $active={statusFilter === 'due'} onClick={() => setStatusFilter('due')}>Vencimientos</FilterButton>
+          <FilterButton $active={statusFilter === 'generate'} onClick={() => setStatusFilter('generate')}>Generación</FilterButton>
+        </MiniFilter>
+      </FilterBar>
 
-      <CardGrid>
-        {slaData.map(item => (
-          <SLACard key={item.id} $statusColor={item.sla.status.color} $highlight={item.sla.status.highlight}>
-            <CardHead>
-              <div>
-                <CompanyName>{item.company}</CompanyName>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Agent: {item.agentId}</div>
-              </div>
-              <CycleTag>{item.billingCycle}</CycleTag>
-            </CardHead>
+      {paginatedData.length > 0 ? (
+        <CardGrid>
+          {paginatedData.map(item => (
+            <SLACard key={item.id} $statusColor={item.sla.status.color} $highlight={item.sla.status.highlight}>
+              <CardHead>
+                <div>
+                  <CompanyName>{item.company}</CompanyName>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Sales: {item.agentId}</div>
+                </div>
+                <CycleTag>{item.billingCycle}</CycleTag>
+              </CardHead>
 
-            <TimelineWrapper>
-              <Milestone $dim={item.sla.percent > 33}>
-                <div className="icon-box">
-                  <Calendar size={14} />
-                </div>
-                <div className="content">
-                  <div className="label">Work window</div>
-                  <div className="value">{item.sla.period}</div>
-                </div>
-              </Milestone>
+              <TimelineWrapper>
+                <Milestone $dim={item.sla.percent > 33}>
+                  <div className="icon-box">
+                    <Calendar size={14} />
+                  </div>
+                  <div className="content">
+                    <div className="label">Work window</div>
+                    <div className="value">{item.sla.period}</div>
+                  </div>
+                </Milestone>
 
-              <Milestone $active={item.sla.percent === 66} $color="rgba(56, 189, 248, 0.2)">
-                <div className="icon-box">
-                  <Zap size={14} />
-                </div>
-                <div className="content">
-                  <div className="label">Generation day</div>
-                  <div className="value">{formatDate(item.sla.invoiceDate)}</div>
-                </div>
-              </Milestone>
+                <Milestone $active={item.sla.percent === 66} $color={`${item.sla.status.color}40`}>
+                  <div className="icon-box">
+                    <Zap size={14} />
+                  </div>
+                  <div className="content">
+                    <div className="label">Generation day</div>
+                    <div className="value">{formatDate(item.sla.invoiceDate)}</div>
+                  </div>
+                </Milestone>
 
-              <Milestone $active={item.sla.percent === 100} $color="rgba(245, 158, 11, 0.2)">
-                <div className="icon-box">
-                  <AlertCircle size={14} />
-                </div>
-                <div className="content">
-                  <div className="label">Due Deadline</div>
-                  <div className="value">{formatDate(item.sla.dueDate)}</div>
-                </div>
-              </Milestone>
-            </TimelineWrapper>
+                <Milestone $active={item.sla.percent === 100} $color={`${item.sla.status.color}40`}>
+                  <div className="icon-box">
+                    <AlertCircle size={14} />
+                  </div>
+                  <div className="content">
+                    <div className="label">Due Deadline</div>
+                    <div className="value">{formatDate(item.sla.dueDate)}</div>
+                  </div>
+                </Milestone>
+              </TimelineWrapper>
 
-            <SLAProgress $percent={item.sla.percent} $color={item.sla.status.color} />
+              <SLAProgress $percent={item.sla.percent} $color={item.sla.status.color} />
 
-            <ActionFooter>
-              <StatusBadge $color={item.sla.status.color}>
-                {item.sla.status.icon}
-                {item.sla.status.label}
-              </StatusBadge>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                {item.sla.status.highlight ? 'Action Required' : 'On Track'}
-              </div>
-            </ActionFooter>
-          </SLACard>
-        ))}
-      </CardGrid>
+              <ActionFooter>
+                <StatusBadge $color={item.sla.status.color}>
+                  {item.sla.status.icon}
+                  {item.sla.status.label}
+                </StatusBadge>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {item.sla.status.highlight ? 'Action Required' : 'On Track'}
+                </div>
+              </ActionFooter>
+            </SLACard>
+          ))}
+        </CardGrid>
+      ) : (
+        <EmptyState>
+          <Zap size={32} opacity={0.3} />
+          <h3>No results for these filters</h3>
+        </EmptyState>
+      )}
+
+      {pageSize < slaData.length && (
+        <LoadMoreBtn onClick={() => setPageSize(prev => prev + 12)}>
+          <ChevronDown size={18} />
+          Load More Companies
+        </LoadMoreBtn>
+      )}
     </RoadmapContainer>
   );
 }
