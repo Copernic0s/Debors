@@ -1025,12 +1025,12 @@ function App() {
         const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
-        // Sync: If it's the target company, mark lastInvoicedDate AND set status to paid if pending
+        // Sync: If it's the target company, mark lastInvoicedDate
         const updated = {
           ...item,
           lastInvoicedDate: todayDate,
-          invoiceNumber: invNumber || item.invoiceNumber,
-          status: (item.status === 'pending' || item.status === 'overdue') ? 'paid' : item.status
+          invoiceNumber: invNumber || item.invoiceNumber
+          // Removed status update to 'paid' to keep tracking debt
         };
         changed.push(updated);
         return updated;
@@ -1040,7 +1040,7 @@ function App() {
       return next;
     });
 
-    toast.success(`${processingDebtor.company} processed (Inv: ${invNumber || 'N/A'})`, {
+    toast.success(`${processingDebtor.company} confirmed (Inv: ${invNumber || 'N/A'})`, {
       icon: '✅',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });

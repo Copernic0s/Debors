@@ -229,14 +229,14 @@ export default function ProcessInvoiceModal({ isOpen, onClose, onConfirm, compan
         <Overlay onClick={onClose}>
             <ModalContent onClick={e => e.stopPropagation()}>
                 <ModalHeader>
-                    <h3><CheckCircle2 size={20} /> Process Billing</h3>
+                    <h3><CheckCircle2 size={20} /> Confirm Weekly Generation</h3>
                     <button onClick={onClose}><X size={18} /></button>
                 </ModalHeader>
 
                 <form onSubmit={handleConfirm}>
                     <ModalBody>
                         <CompanyInfo>
-                            <div className="label">Processing Invoices For</div>
+                            <div className="label">Confirming Generation For</div>
                             <div className="name">{companyName}</div>
                         </CompanyInfo>
 
@@ -266,7 +266,7 @@ export default function ProcessInvoiceModal({ isOpen, onClose, onConfirm, compan
                     <ModalFooter>
                         <button type="button" className="btn-cancel" onClick={onClose}>Cancel</button>
                         <button type="submit" className="btn-confirm">
-                            Commit & Flip Card
+                            Confirm Generation
                         </button>
                     </ModalFooter>
                 </form>

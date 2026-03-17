@@ -601,7 +601,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                         boxShadow: '0 4px 10px rgba(56, 189, 248, 0.3)'
                       }}
                     >
-                      Process Bill
+                      Confirm Generat.
                     </button>
                   </div>
                 )}
