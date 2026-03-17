@@ -306,7 +306,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 5); 
+        due.setDate(inv.getDate() + 1); 
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
         let diff = day - 4;
@@ -314,23 +314,25 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 5); 
+        due.setDate(inv.getDate() + 1); 
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       } else if (type === 'TWICE_A') {
-        let diff = day - 4;
-        if (diff < 0) diff += 7;
-        inv.setDate(refDate.getDate() - diff);
-        start.setDate(inv.getDate() - 3);
-        end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); 
-        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-      } else if (type === 'TWICE_B') {
+        // Monday invoice (twice a week) - Window usually Thu-Sun (4 days)
         let diff = day - 1;
         if (diff < 0) diff += 7;
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 4);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 2); 
+        due.setDate(inv.getDate() + 1); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
+      } else if (type === 'TWICE_B') {
+        // Thursday invoice (twice a week) - Window usually Mon-Wed (3 days)
+        let diff = day - 4;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 3);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1); 
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       }
       return { inv, due, start, end, periodStr };
