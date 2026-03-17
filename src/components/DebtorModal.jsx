@@ -30,6 +30,9 @@ const ModalContent = styled.div`
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   animation: slideUp 0.3s ease-out;
@@ -47,7 +50,7 @@ const ModalContent = styled.div`
 `;
 
 const ModalHeader = styled.div`
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -73,10 +76,12 @@ const ModalHeader = styled.div`
 `;
 
 const ModalBody = styled.form`
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
+  overflow-y: auto;
+  flex: 1;
 
   @media (max-width: 768px) {
     padding: 1rem;
@@ -92,14 +97,13 @@ const FormRow = styled.div`
     grid-template-columns: 1fr;
   }
 `;
-
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 
   label {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -108,7 +112,7 @@ const FormGroup = styled.div`
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 0.85rem;
     color: var(--text-main);
     font-family: 'Manrope', inherit;
     font-size: 0.875rem;
@@ -123,7 +127,7 @@ const FormGroup = styled.div`
 
   textarea {
     resize: vertical;
-    min-height: 80px;
+    min-height: 60px;
   }
   
   option {
@@ -133,7 +137,7 @@ const FormGroup = styled.div`
 `;
 
 const ModalFooter = styled.div`
-  padding: 1.5rem;
+  padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
