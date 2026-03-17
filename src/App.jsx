@@ -93,6 +93,8 @@ const AppContainer = styled.div`
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow-x: hidden;
+  width: 100%;
 `;
 
 const BackgroundParticles = styled.div`
@@ -1215,7 +1217,17 @@ function App() {
   }, [agentData]);
 
   const overviewContent = (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', opacity: loading ? 0.5 : 1, transition: 'opacity 0.3s' }}>
+    <div style={{ 
+      maxWidth: '1400px', 
+      margin: '0 auto', 
+      width: '100%',
+      opacity: loading ? 0.5 : 1, 
+      transition: 'opacity 0.3s' 
+    }}>
+      <TopbarMeta>
+        <span>User: {user.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
+      </TopbarMeta>
+
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
@@ -1387,9 +1399,6 @@ function App() {
         </Topbar>
 
         <ContentScroll>
-          <TopbarMeta>
-            <span>User: {user.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-          </TopbarMeta>
           {overviewContent}
         </ContentScroll>
       </MainContent>
