@@ -1429,6 +1429,7 @@ function App() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveDebtor}
+        onReset={handleResetDebtor}
         debtor={currentDebtor}
       />
 

@@ -181,7 +181,7 @@ const createFormDataFromDebtor = (debtor) => {
   };
 };
 
-export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
+export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }) {
   const [formData, setFormData] = useState(() => createFormDataFromDebtor(debtor));
 
   if (!isOpen) return null;
@@ -317,6 +317,20 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
           </FormGroup>
         </ModalBody>
         <ModalFooter>
+          {debtor && (
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              style={{ marginRight: 'auto', color: 'var(--brand)', borderColor: 'var(--brand-glow)' }}
+              onClick={() => {
+                if (window.confirm('Are you sure you want to discard manual changes and restore Zoho data for this record?')) {
+                  onReset(debtor.id);
+                }
+              }}
+            >
+              Restore Zoho Data
+            </button>
+          )}
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button type="submit" form="debtor-form" className="btn btn-primary">Save Changes</button>
         </ModalFooter>
