@@ -1196,15 +1196,9 @@ function App() {
       invoiceCount: invoiceRows.length,
       agents: Array.from(new Set(scopedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
       contacts: Array.from(new Set(scopedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
-      invoices: invoiceRows
-        .map((item) => ({
-          id: item.id,
-          invoiceNumber: item.invoiceNumber || item.id,
-          billingCycle: item.billingCycle,
-          status: item.status,
-          amount: Number(item.amount) || 0
-        }))
-        .sort((a, b) => String(a.invoiceNumber).localeCompare(String(b.invoiceNumber)))
+      invoices: invoiceRows.sort((a, b) => 
+        String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
+      )
     };
   }, [activeCompany, data, selectedAgent, selectedWeek]);
 
@@ -1469,6 +1463,7 @@ function App() {
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
         onEditInvoice={(inv) => {
+          setActiveCompany(null);
           setCurrentDebtor(inv);
           setIsModalOpen(true);
         }}

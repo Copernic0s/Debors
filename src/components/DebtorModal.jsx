@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { X } from 'lucide-react';
+import { X, RefreshCw } from 'lucide-react';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Overlay = styled.div`
@@ -321,14 +321,23 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <button 
               type="button" 
               className="btn btn-secondary" 
-              style={{ marginRight: 'auto', color: 'var(--brand)', borderColor: 'var(--brand-glow)' }}
+              style={{ 
+                marginRight: 'auto', 
+                color: 'var(--brand)', 
+                borderColor: 'rgba(56, 189, 248, 0.4)',
+                background: 'rgba(56, 189, 248, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}
               onClick={() => {
-                if (window.confirm('Are you sure you want to discard manual changes and restore Zoho data for this record?')) {
+                const msg = '¿Estás seguro de que quieres descartar los cambios manuales y restaurar los datos del Sheet para este registro?';
+                if (window.confirm(msg)) {
                   onReset(debtor.id);
                 }
               }}
             >
-              Restore Zoho Data
+              <RefreshCw size={14} /> Restaurar Datos Zoho
             </button>
           )}
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
