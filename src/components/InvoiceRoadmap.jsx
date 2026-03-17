@@ -450,6 +450,12 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
     });
 
+    const total = activeClients.length;
+    const invoicedCount = activeClients.filter(item => {
+      const details = getSLADetails(item);
+      return details.isRecentlyInvoiced || details.isRecentlyNoUsage;
+    }).length;
+
     const sentAmount = activeClients.reduce((sum, item) => {
       const details = getSLADetails(item);
       return (details.isRecentlyInvoiced || details.isRecentlyNoUsage) ? sum + (Number(item.amount) || 0) : sum;
