@@ -786,6 +786,37 @@ function App() {
     setCurrentDebtor(null);
   };
 
+  const handleResetDebtor = async (id) => {
+    if (!user || !id) return;
+    try {
+      // 1. Delete from Supabase to effectively remove the override
+      const { error } = await supabase
+        .from(TABLE_NAME)
+        .delete()
+        .eq('id', String(id));
+
+      if (error) throw error;
+
+      // 2. Remove from local state
+      setManualEdits((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        manualEditsRef.current = next;
+        return next;
+      });
+
+      toast.success('Override removed. Restoring Zoho data...', {
+        icon: '🔄',
+        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+      });
+      setIsModalOpen(false);
+      setCurrentDebtor(null);
+    } catch (error) {
+      toast.error('Failed to reset record');
+      console.error(error);
+    }
+  };
+
   const handleDeleteDebtor = (id) => {
     if (String(id).startsWith('CMP-')) {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
