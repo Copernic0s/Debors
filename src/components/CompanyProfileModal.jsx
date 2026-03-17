@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { X, Building2, Users, FileText, AlertTriangle } from 'lucide-react';
+import { X, Building2, Users, FileText, AlertTriangle, Edit2 } from 'lucide-react';
 
 const Overlay = styled.div`
   position: fixed;
@@ -122,7 +122,7 @@ const getStatusTone = (status) => {
   return { label: 'Pending', color: 'var(--warn)' };
 };
 
-export default function CompanyProfileModal({ isOpen, onClose, profile }) {
+export default function CompanyProfileModal({ isOpen, onClose, profile, onEditInvoice }) {
   if (!isOpen || !profile) return null;
 
   return (
@@ -186,6 +186,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile }) {
                 <th>Cycle</th>
                 <th>Status</th>
                 <th>Amount</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -197,11 +198,21 @@ export default function CompanyProfileModal({ isOpen, onClose, profile }) {
                     <td>{item.billingCycle || '-'}</td>
                     <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
                     <td>{formatCurrency(item.amount)}</td>
+                    <td>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ padding: '0.25rem', minWidth: 'auto' }}
+                        onClick={() => onEditInvoice(item)}
+                        title="Edit this invoice"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                    </td>
                   </tr>
                 );
               }) : (
                 <tr>
-                  <td colSpan={4} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                  <td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
                 </tr>
               )}
             </tbody>

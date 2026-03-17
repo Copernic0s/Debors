@@ -1436,6 +1436,10 @@ function App() {
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
+        onEditInvoice={(inv) => {
+          setCurrentDebtor(inv);
+          setIsModalOpen(true);
+        }}
       />
 
       <ProcessInvoiceModal
