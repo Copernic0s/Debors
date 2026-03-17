@@ -549,9 +549,8 @@ function App() {
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
-          // Extract invoiceNumber from notes if it was saved via workaround
-          invoiceNumber: edit.invoice_number || (edit.notes?.match(/\[Inv: (.*?)\]/)?.[1] || ''),
-          notes: edit.notes?.replace(/\[Inv: .*?\]\s*/, '') || '',
+          invoiceNumber: edit.invoice_number,
+          notes: edit.notes || '',
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -825,10 +824,7 @@ function App() {
         id: String(row.id),
         amount: Number(row.amount) || 0,
         status: String(row.status || 'pending'),
-        // Workaround: Prepend invoice number to notes since column is missing in Supabase
-        notes: row.invoiceNumber 
-          ? `[Inv: ${row.invoiceNumber}] ${row.notes || ''}`.trim() 
-          : String(row.notes || ''),
+        notes: String(row.notes || ''),
         agent_id: String(row.agentId || 'Unassigned'),
         billing_cycle: String(row.billingCycle || 'Unspecified'),
         due_date: row.dueDate || null,
@@ -838,8 +834,8 @@ function App() {
         last_invoiced_date: row.lastInvoicedDate || null,
         last_no_usage_date: row.lastNoUsageDate || null,
         updated_by: user?.id,
-        updated_at: new Date().toISOString()
-        // invoice_number removed due to schema mismatch
+        updated_at: new Date().toISOString(),
+        invoice_number: row.invoiceNumber || null
       }));
 
     if (upserts.length === 0) return;
