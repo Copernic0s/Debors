@@ -82,8 +82,8 @@ const CardGrid = styled.div`
 `;
 
 const SLACard = styled.div`
-  background: ${props => props.$highlight 
-    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, ${props.$statusColor}10 100%)` 
+  background: ${props => props.$highlight
+    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, ${props.$statusColor}10 100%)`
     : 'rgba(15, 23, 42, 0.4)'};
   backdrop-filter: blur(20px);
   border: 1px solid ${props => props.$highlight ? props.$statusColor : 'var(--glass-border)'};
@@ -280,7 +280,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
 
   const getSLADetails = (item) => {
     const cycle = normalizeBillingCycle(item.billingCycle);
-    
+
     const details = {
       period: 'N/A',
       invoiceDate: null,
@@ -291,61 +291,73 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       isRecentlyNoUsage: false
     };
 
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
+    // Helper to get dates for a specific generation day in the current week or previous
+    const getTargetDates = (targetGenDay) => {
+      const inv = new Date(today);
+      const day = today.getDay();
+
+      let diff = day - targetGenDay;
+      if (diff < 0) diff += 7;
+
+      inv.setDate(today.getDate() - diff);
+
+      const start = new Date(inv);
+      const end = new Date(inv);
+      const due = new Date(inv);
+      due.setDate(inv.getDate() + 1);
+
+      return { inv, due, start, end };
+    };
+
+    let target = null;
 
     if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
-      const invDate = new Date(startOfWeek);
-      invDate.setDate(startOfWeek.getDate() + 7);
-      const dueDate = new Date(invDate);
-      dueDate.setDate(invDate.getDate() + 1);
-      details.period = 'Mon - Sun';
-      details.invoiceDate = invDate;
-      details.dueDate = dueDate;
+      target = getTargetDates(1); // Mon
+      target.start.setDate(target.inv.getDate() - 7);
+      target.end.setDate(target.inv.getDate() - 1);
+      details.period = `Mon-Sun (${formatDate(target.start)} - ${formatDate(target.end)})`;
     } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-      const invDate = new Date(startOfWeek);
-      invDate.setDate(startOfWeek.getDate() + 3);
-      if (currentDay >= 4 || currentDay === 0) invDate.setDate(invDate.getDate() + 7);
-      const dueDate = new Date(invDate);
-      dueDate.setDate(invDate.getDate() + 1);
-      details.period = 'Thu - Wed';
-      details.invoiceDate = invDate;
-      details.dueDate = dueDate;
+      target = getTargetDates(4); // Thu
+      target.start.setDate(target.inv.getDate() - 7);
+      target.end.setDate(target.inv.getDate() - 1);
+      details.period = `Thu-Wed (${formatDate(target.start)} - ${formatDate(target.end)})`;
     } else if (cycle === BILLING_CYCLES.TWICE) {
-      const nextMon = new Date(startOfWeek);
-      if (currentDay >= 1) nextMon.setDate(nextMon.getDate() + 7);
-      const nextThu = new Date(startOfWeek);
-      nextThu.setDate(startOfWeek.getDate() + 3);
-      if (currentDay >= 4 || currentDay === 0) nextThu.setDate(nextThu.getDate() + 7);
-      const invDate = nextMon < nextThu ? nextMon : nextThu;
-      const dueDate = new Date(invDate);
-      dueDate.setDate(invDate.getDate() + 1);
-      details.period = 'Dual Cycle';
-      details.invoiceDate = invDate;
-      details.dueDate = dueDate;
+      // Split windows
+      const targetThu = getTargetDates(4);
+      const targetMon = getTargetDates(1);
+
+      // Determine which one is more relevant based on today
+      if (currentDay >= 1 && currentDay <= 3) {
+        target = targetMon;
+        target.start.setDate(target.inv.getDate() - 4);
+        target.end.setDate(target.inv.getDate() - 1);
+        details.period = `Thu-Sun Window (${formatDate(target.start)}-${formatDate(target.end)})`;
+      } else {
+        target = targetThu;
+        target.start.setDate(target.inv.getDate() - 3);
+        target.end.setDate(target.inv.getDate() - 1);
+        details.period = `Mon-Wed Window (${formatDate(target.start)}-${formatDate(target.end)})`;
+      }
     }
 
-    if (details.invoiceDate) {
-      // Check if item was ALREADY invoiced for this period
+    if (target) {
+      details.invoiceDate = target.inv;
+      details.dueDate = target.due;
+
       if (item.lastInvoicedDate) {
         const lastInv = new Date(item.lastInvoicedDate + 'T00:00:00');
-        const diffDays = Math.abs(lastInv - details.invoiceDate) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 4 || lastInv >= details.invoiceDate) {
-           details.isRecentlyInvoiced = true;
+        if (Math.abs(lastInv - target.inv) / (1000 * 60 * 60 * 24) <= 2 || lastInv >= target.inv) {
+          details.isRecentlyInvoiced = true;
         }
       }
-
-      // Check if item was ALREADY marked as No Usage for this period
       if (item.lastNoUsageDate) {
-        const lastNoUse = new Date(item.lastNoUsageDate + 'T00:00:00');
-        const diffDays = Math.abs(lastNoUse - details.invoiceDate) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 4 || lastNoUse >= details.invoiceDate) {
-           details.isRecentlyNoUsage = true;
+        const lastNo = new Date(item.lastNoUsageDate + 'T00:00:00');
+        if (Math.abs(lastNo - target.inv) / (1000 * 60 * 60 * 24) <= 2 || lastNo >= target.inv) {
+          details.isRecentlyNoUsage = true;
         }
       }
 
-      const timeToInv = details.invoiceDate.getTime() - today.getTime();
-      const daysToInv = Math.round(timeToInv / (1000 * 60 * 60 * 24));
+      const diff = Math.floor((today - target.inv) / (1000 * 60 * 60 * 24));
 
       if (details.isRecentlyInvoiced) {
         details.percent = 100;
@@ -353,15 +365,15 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       } else if (details.isRecentlyNoUsage) {
         details.percent = 100;
         details.status = { label: 'NO ACTIVITY', color: '#f87171', icon: <Info size={14} />, highlight: false, id: 'invoiced' };
-      } else if (daysToInv === 0) {
+      } else if (diff === 0) {
         details.percent = 66;
         details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generation' };
-      } else if (daysToInv < 0 && today < (details.dueDate || today)) {
+      } else if (diff === 1) {
         details.percent = 85;
-        details.status = { label: 'GRACE PERIOD', color: '#818cf8', icon: <Info size={14} />, highlight: true, id: 'grace' };
-      } else if (details.dueDate && today.getTime() === details.dueDate.getTime()) {
-        details.percent = 100;
         details.status = { label: 'DUE TODAY', color: '#f59e0b', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
+      } else if (diff > 1) {
+        details.percent = 100;
+        details.status = { label: 'OVERDUE', color: '#ef4444', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
       } else {
         details.percent = 33;
         details.status = { label: 'SCHEDULED', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' };
@@ -376,7 +388,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       .filter(item => {
         const c = normalizeBillingCycle(item.billingCycle);
         if (c === BILLING_CYCLES.CS_BY_AGENT || c === BILLING_CYCLES.UNSPECIFIED || c === BILLING_CYCLES.MULTIPLE) return false;
-        
+
         const company = String(item.company || '').toLowerCase();
         const search = searchTerm.toLowerCase();
         if (search && !company.includes(search)) return false;
@@ -410,10 +422,8 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
     const total = activeClients.length;
 
     const invoicedCount = activeClients.filter(item => {
-      if (!item.lastInvoicedDate) return false;
-      const last = new Date(item.lastInvoicedDate + 'T00:00:00');
-      const diff = Math.abs(today - last) / (1000 * 60 * 60 * 24);
-      return diff <= 7; 
+      const details = getSLADetails(item);
+      return details.isRecentlyInvoiced || details.isRecentlyNoUsage;
     }).length;
 
     const totalAmount = data.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -451,9 +461,9 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       <FilterBar>
         <SearchBox>
           <Search size={18} />
-          <input 
-            type="text" 
-            placeholder="Search company in SLA roadmap..." 
+          <input
+            type="text"
+            placeholder="Search company in SLA roadmap..."
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setPageSize(12); }}
           />
@@ -528,44 +538,44 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                   {item.sla.status.icon}
                   {item.sla.status.label}
                 </StatusBadge>
-                
-                {item.sla.status.id === 'generation' && !item.sla.isRecentlyInvoiced && !item.sla.isRecentlyNoUsage && (
-                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button 
+
+                {(item.sla.status.id === 'generation' || item.sla.status.id === 'overdue') && !item.sla.isRecentlyInvoiced && !item.sla.isRecentlyNoUsage && (
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
                       onClick={() => onMarkNoUsage(item)}
                       title="No usage recorded this week"
-                      style={{ 
-                        background: 'rgba(248, 113, 113, 0.1)', 
-                        color: '#f87171', 
-                        border: '1px solid rgba(248, 113, 113, 0.3)', 
-                        borderRadius: '6px', 
-                        padding: '0.3rem 0.5rem', 
-                        fontSize: '0.65rem', 
-                        fontWeight: '800', 
+                      style={{
+                        background: 'rgba(248, 113, 113, 0.1)',
+                        color: '#f87171',
+                        border: '1px solid rgba(248, 113, 113, 0.3)',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.5rem',
+                        fontSize: '0.65rem',
+                        fontWeight: '800',
                         cursor: 'pointer'
                       }}
                     >
                       No Usage
                     </button>
-                    <button 
+                    <button
                       onClick={() => onMarkInvoiced(item)}
-                      style={{ 
-                        background: 'var(--brand)', 
-                        color: 'white', 
-                        border: 'none', 
-                        borderRadius: '6px', 
-                        padding: '0.3rem 0.5rem', 
-                        fontSize: '0.65rem', 
-                        fontWeight: '800', 
+                      style={{
+                        background: 'var(--brand)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '0.3rem 0.5rem',
+                        fontSize: '0.65rem',
+                        fontWeight: '800',
                         cursor: 'pointer',
                         boxShadow: '0 4px 10px rgba(56, 189, 248, 0.3)'
                       }}
                     >
                       Process Bill
                     </button>
-                   </div>
+                  </div>
                 )}
-                
+
                 {(item.sla.isRecentlyInvoiced || item.sla.isRecentlyNoUsage) && (
                   <div style={{ fontSize: '0.7rem', color: item.sla.isRecentlyInvoiced ? '#10b981' : '#f87171', fontWeight: '800' }}>
                     {item.sla.isRecentlyInvoiced ? 'BILL SENT' : 'NO USAGE'}

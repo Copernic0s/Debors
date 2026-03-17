@@ -528,9 +528,9 @@ function App() {
       const { data: edits, error } = await supabase
         .from(TABLE_NAME)
         .select('*');
-      
+
       if (error) throw error;
-      
+
       const editsById = {};
       edits.forEach(edit => {
         editsById[edit.id] = {
@@ -546,7 +546,7 @@ function App() {
           __deleted: edit.is_deleted
         };
       });
-      
+
       setManualEdits(editsById);
       manualEditsRef.current = editsById;
     } catch (error) {
@@ -563,14 +563,14 @@ function App() {
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
   useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
-    
+
     // Always merge from the LATEST reference of manualEdits
     const hydrated = mergeManualEdits(rawZohoData, manualEdits);
-    
+
     // Apply Smart Billing Logic: Auto-Overdue
     const today = new Date();
     const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
+
     const withSmartStatus = hydrated.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
@@ -602,7 +602,7 @@ function App() {
     try {
       const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
-      
+
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
         setSyncSourceLabel('Zoho WorkDrive');
@@ -757,15 +757,15 @@ function App() {
   const handleDeleteDebtor = (id) => {
     if (String(id).startsWith('CMP-')) {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
-      
-      const rowsToDelete = data.filter((d) => 
+
+      const rowsToDelete = data.filter((d) =>
         String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
       );
-      
-      setData((prev) => prev.filter((d) => 
+
+      setData((prev) => prev.filter((d) =>
         String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
       ));
-      
+
       setManualEdits((prev) => {
         const next = { ...prev };
         const changed = [];
@@ -1108,43 +1108,45 @@ function App() {
   }, [activeCompany, data, selectedAgent, selectedWeek]);
 
   const slaPriorityCount = useMemo(() => {
-    // We only want to alert if there are items needing immediate action:
-    // 1. GENERATE TODAY
-    // 2. OVERDUE (DUE TODAY)
-    // 3. GRACE PERIOD
-    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const day = today.getDay();
+
+    const getTargetInvDate = (cycleRaw) => {
+      const c = normalizeBillingCycle(cycleRaw);
+      if (c === BILLING_CYCLES.CS_BY_AGENT || c === BILLING_CYCLES.UNSPECIFIED || c === BILLING_CYCLES.MULTIPLE) return null;
+
+      const getDates = (target) => {
+        const inv = new Date(today);
+        let diff = day - target;
+        if (diff < 0) diff += 7;
+        inv.setDate(today.getDate() - diff);
+        return inv;
+      };
+
+      if (c === BILLING_CYCLES.MONDAY_SUNDAY) return getDates(1);
+      if (c === BILLING_CYCLES.THURSDAY_WEDNESDAY) return getDates(4);
+      if (c === BILLING_CYCLES.TWICE) {
+        return (day >= 1 && day <= 3) ? getDates(1) : getDates(4);
+      }
+      return null;
+    };
+
     return agentData.filter(item => {
-      const cycle = normalizeBillingCycle(item.billingCycle);
-      if (cycle === BILLING_CYCLES.CS_BY_AGENT || cycle === BILLING_CYCLES.UNSPECIFIED) return false;
+      const invDate = getTargetInvDate(item.billingCycle);
+      if (!invDate) return false;
 
-      // Simplistic check for priority: If it would be 'highlight' in InvoiceRoadmap
-      // We can't easily import getSLADetails here without refactoring, 
-      // so we'll use a simplified version of the logic
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const currentDay = today.getDay();
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
-
-      let invDate = null;
-      if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
-        invDate = new Date(startOfWeek);
-        invDate.setDate(startOfWeek.getDate() + 7);
-      } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-        invDate = new Date(startOfWeek);
-        invDate.setDate(startOfWeek.getDate() + 3);
-        if (currentDay >= 4 || currentDay === 0) invDate.setDate(invDate.getDate() + 7);
+      // Check if processed
+      if (item.lastInvoicedDate) {
+        const last = new Date(item.lastInvoicedDate + 'T00:00:00');
+        if (Math.abs(last - invDate) / (1000 * 60 * 60 * 24) <= 2 || last >= invDate) return false;
+      }
+      if (item.lastNoUsageDate) {
+        const last = new Date(item.lastNoUsageDate + 'T00:00:00');
+        if (Math.abs(last - invDate) / (1000 * 60 * 60 * 24) <= 2 || last >= invDate) return false;
       }
 
-      if (invDate) {
-        // If already invoiced or no usage, skip
-        if (item.lastInvoicedDate === today.toISOString().split('T')[0]) return false;
-        if (item.lastNoUsageDate === today.toISOString().split('T')[0]) return false;
-
-        const daysToInv = Math.round((invDate - today) / (1000 * 60 * 60 * 24));
-        return daysToInv <= 0; // It's highlight if today is inv day or later (but not yet processed)
-      }
-      return false;
+      return today >= invDate;
     }).length;
   }, [agentData]);
 
@@ -1213,9 +1215,9 @@ function App() {
       )}
 
       {activeView === 'analytics' && (
-        <ManagerAnalytics 
-          invoiceRows={scopedInvoiceData} 
-          aggregatedRows={agentData} 
+        <ManagerAnalytics
+          invoiceRows={scopedInvoiceData}
+          aggregatedRows={agentData}
           selectedAgent={selectedAgent}
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
@@ -1223,10 +1225,10 @@ function App() {
       )}
 
       {activeView === 'sla' && (
-        <InvoiceRoadmap 
-          data={agentData} 
-          onMarkInvoiced={handleMarkInvoiced} 
-          onMarkNoUsage={handleMarkNoUsage} 
+        <InvoiceRoadmap
+          data={agentData}
+          onMarkInvoiced={handleMarkInvoiced}
+          onMarkNoUsage={handleMarkNoUsage}
         />
       )}
     </div>
@@ -1337,8 +1339,8 @@ function App() {
               <SyncButton className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
               </SyncButton>
-              <button 
-                className="btn btn-outline" 
+              <button
+                className="btn btn-outline"
                 onClick={() => supabase.auth.signOut()}
                 style={{ fontSize: '0.8rem', padding: '0.45rem 0.72rem' }}
               >
