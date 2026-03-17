@@ -1225,7 +1225,7 @@ function App() {
       transition: 'opacity 0.3s' 
     }}>
       <TopbarMeta>
-        <span>User: {user.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
+        <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
       </TopbarMeta>
 
       <ViewSwitch>
