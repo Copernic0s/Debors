@@ -187,22 +187,22 @@ const StatusSelect = styled(BillingCycleSelect)`
   background: ${(props) => {
     if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.12)';
     if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.12)';
-    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.12)';
-    if (props.$tone === 'inactive') return 'rgba(148, 163, 184, 0.12)';
+    if (props.$tone === 'no_invoice') return 'rgba(167, 139, 250, 0.12)';
+    if (props.$tone === 'inactive') return 'rgba(217, 119, 6, 0.12)';
     return 'rgba(245, 158, 11, 0.12)';
   }};
   color: ${(props) => {
     if (props.$tone === 'paid') return 'var(--ok)';
     if (props.$tone === 'overdue') return 'var(--danger)';
-    if (props.$tone === 'no_invoice') return 'var(--text-muted)';
-    if (props.$tone === 'inactive') return 'var(--text-muted)';
+    if (props.$tone === 'no_invoice') return 'var(--violet)';
+    if (props.$tone === 'inactive') return 'var(--bronze)';
     return 'var(--warn)';
   }};
   border-color: ${(props) => {
     if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.35)';
     if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.35)';
-    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.18)';
-    if (props.$tone === 'inactive') return 'rgba(148, 163, 184, 0.18)';
+    if (props.$tone === 'no_invoice') return 'rgba(167, 139, 250, 0.35)';
+    if (props.$tone === 'inactive') return 'rgba(217, 119, 6, 0.35)';
     return 'rgba(245, 158, 11, 0.35)';
   }};
 `;

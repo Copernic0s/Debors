@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
   ResponsiveContainer,
@@ -41,7 +41,7 @@ const Panel = styled.section`
   backdrop-filter: blur(24px);
   padding: 1.5rem;
   min-height: 320px;
-  animation: fadeIn 0.8s ease-out;
+  animation: fadeIn 0.4s ease-out forwards;
   box-shadow: var(--shadow-lg);
   transition: all 0.3s ease;
 
@@ -142,7 +142,7 @@ const tooltipStyle = {
   color: '#d9e3f0'
 };
 
-const AreaChartVisual = ({ data }) => (
+const AreaChartVisual = React.memo(({ data }) => (
   <ResponsiveContainer width="100%" height={280}>
     <AreaChart data={data}>
       <defs>
@@ -164,75 +164,93 @@ const AreaChartVisual = ({ data }) => (
       <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCollected)" />
     </AreaChart>
   </ResponsiveContainer>
-);
+));
 
 export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
-  const cleanRows = (invoiceRows || []).filter((row) => {
-    const status = normalizeStatus(row.status);
-    return status !== 'no_invoice' && status !== 'inactive' && (Number(row.amount) > 0 || status === 'paid');
-  });
+  // 1. Process Status Data
+  const statusDonutData = useMemo(() => {
+    const statusMap = {
+      pending: 0,
+      overdue: 0,
+      paid: 0,
+      inactive: 0
+    };
 
-  const statusMap = {
-    pending: 0,
-    overdue: 0,
-    paid: 0,
-    inactive: 0
-  };
+    (invoiceRows || []).forEach((row) => {
+      const status = normalizeStatus(row.status);
+      if (status === 'no_invoice') return;
+      statusMap[status] += Number(row.amount) || 0;
+    });
 
-  (invoiceRows || []).forEach((row) => {
-    const status = normalizeStatus(row.status);
-    if (status === 'no_invoice') return;
-    statusMap[status] += Number(row.amount) || 0;
-  });
+    return [
+      { name: 'Pending', value: statusMap.pending, color: '#f59e0b' },
+      { name: 'Overdue', value: statusMap.overdue, color: '#f87171' },
+      { name: 'Paid', value: statusMap.paid, color: '#10b981' },
+      { name: 'Inactive', value: statusMap.inactive, color: '#d97706' }
+    ];
+  }, [invoiceRows]);
 
-  const statusDonutData = [
-    { name: 'Pending', value: statusMap.pending, color: '#f59e0b' },
-    { name: 'Overdue', value: statusMap.overdue, color: '#f87171' },
-    { name: 'Paid', value: statusMap.paid, color: '#10b981' },
-    { name: 'Inactive', value: statusMap.inactive, color: '#94a3b8' }
-  ];
+  // 2. Process Agent Chart Data
+  const agentChartData = useMemo(() => {
+    const byAgent = new Map();
+    const cleanRows = (invoiceRows || []).filter((row) => {
+      const status = normalizeStatus(row.status);
+      return status !== 'no_invoice' && status !== 'inactive' && (Number(row.amount) > 0 || status === 'paid');
+    });
 
-  const byAgent = new Map();
-  cleanRows.forEach((row) => {
-    const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const current = byAgent.get(agent) || { agent, pending: 0, overdue: 0, paid: 0, open: 0 };
-    const status = normalizeStatus(row.status);
-    if (status !== 'no_invoice') {
-      current[status] += Number(row.amount) || 0;
-      if (status === 'pending' || status === 'overdue') {
-        current.open += Number(row.amount) || 0;
+    cleanRows.forEach((row) => {
+      const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
+      const current = byAgent.get(agent) || { agent, pending: 0, overdue: 0, paid: 0, open: 0 };
+      const status = normalizeStatus(row.status);
+      if (status !== 'no_invoice') {
+        current[status] += Number(row.amount) || 0;
+        if (status === 'pending' || status === 'overdue') {
+          current.open += Number(row.amount) || 0;
+        }
       }
-    }
-    byAgent.set(agent, current);
-  });
-  const agentChartData = Array.from(byAgent.values())
-    .sort((a, b) => b.open - a.open)
-    .map((row, idx) => ({ ...row, color: AGENT_COLORS[idx % AGENT_COLORS.length] }));
+      byAgent.set(agent, current);
+    });
 
-  const byWeek = new Map();
-  const sortedInvoiceRows = [...cleanRows].sort((a, b) => (a.sourceSheetOrder || 0) - (b.sourceSheetOrder || 0));
-  
-  sortedInvoiceRows.forEach((row) => {
-    const week = String(row.weekLabel || 'Unknown week');
-    const current = byWeek.get(week) || { week, pending: 0, overdue: 0, paid: 0, open: 0, collected: 0 };
-    const status = normalizeStatus(row.status);
-    if (status !== 'no_invoice') {
-      current[status] += Number(row.amount) || 0;
-      if (status === 'pending' || status === 'overdue') {
-        current.open += Number(row.amount) || 0;
-      }
-      if (status === 'paid') {
-        current.collected += Number(row.amount) || 0;
-      }
-    }
-    byWeek.set(week, current);
-  });
-  const weekTrendData = Array.from(byWeek.values());
+    return Array.from(byAgent.values())
+      .sort((a, b) => b.open - a.open)
+      .map((row, idx) => ({ ...row, color: AGENT_COLORS[idx % AGENT_COLORS.length] }));
+  }, [invoiceRows]);
 
-  const topAccounts = (aggregatedRows || [])
-    .filter((row) => normalizeStatus(row.status) !== 'paid')
-    .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))
-    .slice(0, 10);
+  // 3. Process Weekly Data
+  const weekTrendData = useMemo(() => {
+    const byWeek = new Map();
+    const cleanRows = (invoiceRows || []).filter((row) => {
+      const status = normalizeStatus(row.status);
+      return status !== 'no_invoice' && status !== 'inactive' && (Number(row.amount) > 0 || status === 'paid');
+    });
+    
+    const sortedInvoiceRows = [...cleanRows].sort((a, b) => (a.sourceSheetOrder || 0) - (b.sourceSheetOrder || 0));
+    
+    sortedInvoiceRows.forEach((row) => {
+      const week = String(row.weekLabel || 'Unknown week');
+      const current = byWeek.get(week) || { week, pending: 0, overdue: 0, paid: 0, open: 0, collected: 0 };
+      const status = normalizeStatus(row.status);
+      if (status !== 'no_invoice') {
+        current[status] += Number(row.amount) || 0;
+        if (status === 'pending' || status === 'overdue') {
+          current.open += Number(row.amount) || 0;
+        }
+        if (status === 'paid') {
+          current.collected += Number(row.amount) || 0;
+        }
+      }
+      byWeek.set(week, current);
+    });
+    return Array.from(byWeek.values());
+  }, [invoiceRows]);
+
+  // 4. Process Top Accounts
+  const topAccounts = useMemo(() => {
+    return (aggregatedRows || [])
+      .filter((row) => normalizeStatus(row.status) !== 'paid')
+      .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))
+      .slice(0, 10);
+  }, [aggregatedRows]);
 
   return (
     <>
@@ -264,7 +282,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
               <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
               <Legend />
-              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" activeBar={false}>
+              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive={false}>
                 {agentChartData.map((entry) => (
                   <Cell key={entry.agent} fill={entry.color} />
                 ))}
@@ -277,7 +295,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
           <PanelTitle>Portfolio Status Split</PanelTitle>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none">
+              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive={false}>
                 {statusDonutData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
@@ -335,8 +353,12 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
                         borderRadius: '12px', 
                         fontSize: '0.7rem', 
                         fontWeight: 700,
-                        background: normalizeStatus(item.status) === 'overdue' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                        color: normalizeStatus(item.status) === 'overdue' ? 'var(--danger)' : 'var(--warn)',
+                        background: normalizeStatus(item.status) === 'overdue' ? 'rgba(239, 68, 68, 0.15)' : 
+                                   normalizeStatus(item.status) === 'inactive' ? 'rgba(217, 119, 6, 0.12)' :
+                                   'rgba(245, 158, 11, 0.15)',
+                        color: normalizeStatus(item.status) === 'overdue' ? 'var(--danger)' : 
+                               normalizeStatus(item.status) === 'inactive' ? 'var(--bronze)' :
+                               'var(--warn)',
                         textTransform: 'uppercase'
                       }}>
                         {normalizeStatus(item.status)}
