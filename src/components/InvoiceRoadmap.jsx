@@ -255,7 +255,7 @@ const EmptyState = styled.div`
   h3 { font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem; }
 `;
 
-export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
+export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pageSize, setPageSize] = useState(12);
@@ -287,7 +287,8 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
       dueDate: null,
       percent: 0,
       status: { label: 'Scheduled', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' },
-      isRecentlyInvoiced: false
+      isRecentlyInvoiced: false,
+      isRecentlyNoUsage: false
     };
 
     const startOfWeek = new Date(today);
@@ -328,10 +329,18 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
       // Check if item was ALREADY invoiced for this period
       if (item.lastInvoicedDate) {
         const lastInv = new Date(item.lastInvoicedDate + 'T00:00:00');
-        // If lastInvoicedDate is within 6 days of the expected invoiceDate, it's considered done for this cycle
         const diffDays = Math.abs(lastInv - details.invoiceDate) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 3 || lastInv >= details.invoiceDate) {
+        if (diffDays <= 4 || lastInv >= details.invoiceDate) {
            details.isRecentlyInvoiced = true;
+        }
+      }
+
+      // Check if item was ALREADY marked as No Usage for this period
+      if (item.lastNoUsageDate) {
+        const lastNoUse = new Date(item.lastNoUsageDate + 'T00:00:00');
+        const diffDays = Math.abs(lastNoUse - details.invoiceDate) / (1000 * 60 * 60 * 24);
+        if (diffDays <= 4 || lastNoUse >= details.invoiceDate) {
+           details.isRecentlyNoUsage = true;
         }
       }
 
@@ -340,16 +349,19 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
 
       if (details.isRecentlyInvoiced) {
         details.percent = 100;
-        details.status = { label: 'INVOICED', color: '#10b981', icon: <CheckCircle2 size={14} />, highlight: false, id: 'done' };
+        details.status = { label: 'INVOICED', color: '#10b981', icon: <CheckCircle2 size={14} />, highlight: false, id: 'invoiced' };
+      } else if (details.isRecentlyNoUsage) {
+        details.percent = 100;
+        details.status = { label: 'NO ACTIVITY', color: '#f87171', icon: <Info size={14} />, highlight: false, id: 'invoiced' };
       } else if (daysToInv === 0) {
         details.percent = 66;
-        details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generate' };
-      } else if (daysToInv < 0 && today < details.dueDate) {
+        details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generation' };
+      } else if (daysToInv < 0 && today < (details.dueDate || today)) {
         details.percent = 85;
         details.status = { label: 'GRACE PERIOD', color: '#818cf8', icon: <Info size={14} />, highlight: true, id: 'grace' };
-      } else if (today.getTime() === details.dueDate?.getTime()) {
+      } else if (details.dueDate && today.getTime() === details.dueDate.getTime()) {
         details.percent = 100;
-        details.status = { label: 'DUE TODAY', color: '#f59e0b', icon: <AlertCircle size={14} />, highlight: true, id: 'due' };
+        details.status = { label: 'DUE TODAY', color: '#f59e0b', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
       } else {
         details.percent = 33;
         details.status = { label: 'SCHEDULED', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' };
@@ -378,7 +390,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
       .filter(item => {
         if (statusFilter === 'all') return true;
         if (statusFilter === 'priority') return item.sla.status.highlight;
-        if (statusFilter === 'done') return item.sla.isRecentlyInvoiced;
         return item.sla.status.id === statusFilter;
       })
       .sort((a, b) => {
@@ -391,21 +402,23 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
   const paginatedData = slaData.slice(0, pageSize);
 
   const usageStats = useMemo(() => {
-    const total = data.filter(item => {
+    const activeClients = data.filter(item => {
       const c = normalizeBillingCycle(item.billingCycle);
       return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
-    }).length;
+    });
 
-    const invoiced = data.filter(item => {
+    const total = activeClients.length;
+
+    const invoicedCount = activeClients.filter(item => {
       if (!item.lastInvoicedDate) return false;
       const last = new Date(item.lastInvoicedDate + 'T00:00:00');
-      const diff = (today - last) / (1000 * 60 * 60 * 24);
-      return diff <= 10; 
+      const diff = Math.abs(today - last) / (1000 * 60 * 60 * 24);
+      return diff <= 7; 
     }).length;
 
     const totalAmount = data.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
-    return { total, invoiced, totalAmount, rate: total > 0 ? Math.round((invoiced / total) * 100) : 0 };
+    return { total, invoiced: invoicedCount, totalAmount, rate: total > 0 ? Math.round((invoicedCount / total) * 100) : 0 };
   }, [data, today]);
 
   if (slaData.length === 0 && !searchTerm && statusFilter === 'all') {
@@ -430,8 +443,8 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
           <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981' }}>{usageStats.rate}% <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>({usageStats.invoiced} of {usageStats.total})</span></div>
         </div>
         <div style={{ flex: 1, minWidth: '200px', background: 'rgba(217, 70, 239, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(217, 70, 239, 0.1)' }}>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Total Billing Exposure</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#d946ef' }}>${usageStats.totalAmount.toLocaleString()} <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>USD</span></div>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Projected Cycle Billing</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#d946ef' }}>${usageStats.totalAmount.toLocaleString()} <span style={{ fontSize: '0.7rem', fontWeight: '400', color: 'var(--text-muted)' }}>USD</span></div>
         </div>
       </div>
 
@@ -448,8 +461,9 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
         <MiniFilter>
           <FilterButton $active={statusFilter === 'all'} onClick={() => setStatusFilter('all')}>All</FilterButton>
           <FilterButton $active={statusFilter === 'priority'} onClick={() => setStatusFilter('priority')}>🔥 Priority</FilterButton>
-          <FilterButton $active={statusFilter === 'due'} onClick={() => setStatusFilter('due')}>Vencimientos</FilterButton>
-          <FilterButton $active={statusFilter === 'done'} onClick={() => setStatusFilter('done')}>Facturado</FilterButton>
+          <FilterButton $active={statusFilter === 'overdue'} onClick={() => setStatusFilter('overdue')}>Overdue</FilterButton>
+          <FilterButton $active={statusFilter === 'generation'} onClick={() => setStatusFilter('generation')}>Generation</FilterButton>
+          <FilterButton $active={statusFilter === 'invoiced'} onClick={() => setStatusFilter('invoiced')}>Processed</FilterButton>
         </MiniFilter>
       </FilterBar>
 
@@ -464,6 +478,11 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
                   {item.lastInvoicedDate && (
                     <div style={{ fontSize: '0.65rem', color: '#10b981', marginTop: '0.2rem', fontWeight: '700' }}>
                       LAST BILL: {formatDate(item.lastInvoicedDate)}
+                    </div>
+                  )}
+                  {item.lastNoUsageDate && !item.lastInvoicedDate && (
+                    <div style={{ fontSize: '0.65rem', color: '#f87171', marginTop: '0.2rem', fontWeight: '700' }}>
+                      LAST NO USAGE: {formatDate(item.lastNoUsageDate)}
                     </div>
                   )}
                 </div>
@@ -510,27 +529,47 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
                   {item.sla.status.label}
                 </StatusBadge>
                 
-                {item.sla.status.id === 'generate' && !item.sla.isRecentlyInvoiced && (
-                   <button 
-                     onClick={() => onMarkInvoiced(item)}
-                     style={{ 
-                       background: 'var(--brand)', 
-                       color: 'white', 
-                       border: 'none', 
-                       borderRadius: '8px', 
-                       padding: '0.3rem 0.6rem', 
-                       fontSize: '0.7rem', 
-                       fontWeight: '800', 
-                       cursor: 'pointer',
-                       boxShadow: '0 4px 10px rgba(56, 189, 248, 0.3)'
-                     }}
-                   >
-                     Confirm Bill
-                   </button>
+                {item.sla.status.id === 'generation' && !item.sla.isRecentlyInvoiced && !item.sla.isRecentlyNoUsage && (
+                   <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button 
+                      onClick={() => onMarkNoUsage(item)}
+                      title="No usage recorded this week"
+                      style={{ 
+                        background: 'rgba(248, 113, 113, 0.1)', 
+                        color: '#f87171', 
+                        border: '1px solid rgba(248, 113, 113, 0.3)', 
+                        borderRadius: '6px', 
+                        padding: '0.3rem 0.5rem', 
+                        fontSize: '0.65rem', 
+                        fontWeight: '800', 
+                        cursor: 'pointer'
+                      }}
+                    >
+                      No Usage
+                    </button>
+                    <button 
+                      onClick={() => onMarkInvoiced(item)}
+                      style={{ 
+                        background: 'var(--brand)', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '6px', 
+                        padding: '0.3rem 0.5rem', 
+                        fontSize: '0.65rem', 
+                        fontWeight: '800', 
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 10px rgba(56, 189, 248, 0.3)'
+                      }}
+                    >
+                      Process Bill
+                    </button>
+                   </div>
                 )}
                 
-                {item.sla.isRecentlyInvoiced && (
-                  <div style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: '800' }}>DONE</div>
+                {(item.sla.isRecentlyInvoiced || item.sla.isRecentlyNoUsage) && (
+                  <div style={{ fontSize: '0.7rem', color: item.sla.isRecentlyInvoiced ? '#10b981' : '#f87171', fontWeight: '800' }}>
+                    {item.sla.isRecentlyInvoiced ? 'BILL SENT' : 'NO USAGE'}
+                  </div>
                 )}
               </ActionFooter>
             </SLACard>
@@ -539,14 +578,14 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced }) {
       ) : (
         <EmptyState>
           <Zap size={32} opacity={0.3} />
-          <h3>No results for these filters</h3>
+          <h3>No matching results</h3>
         </EmptyState>
       )}
 
       {pageSize < slaData.length && (
         <LoadMoreBtn onClick={() => setPageSize(prev => prev + 12)}>
           <ChevronDown size={18} />
-          Load More Companies
+          Show More Accounts
         </LoadMoreBtn>
       )}
     </RoadmapContainer>

@@ -541,6 +541,7 @@ function App() {
           dueDate: edit.due_date,
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
+          lastNoUsageDate: edit.last_no_usage_date,
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -818,6 +819,7 @@ function App() {
       is_new: row.__isNew || false,
       is_deleted: row.__deleted || false,
       last_invoiced_date: row.lastInvoicedDate,
+      last_no_usage_date: row.lastNoUsageDate,
       updated_by: user.id,
       updated_at: new Date().toISOString()
     }));
@@ -1000,6 +1002,33 @@ function App() {
     });
   };
 
+  const handleMarkNoUsage = (debtor) => {
+    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
+    if (!targetCompany) return;
+
+    const todayDate = new Date().toISOString().split('T')[0];
+
+    setData((prev) => {
+      const changed = [];
+      const next = prev.map((item) => {
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+        if (!sameCompany) return item;
+
+        const updated = { ...item, lastNoUsageDate: todayDate };
+        changed.push(updated);
+        return updated;
+      });
+
+      persistEditedRows(changed);
+      return next;
+    });
+
+    toast.success(`${debtor.company} marked as No Usage`, {
+      icon: '🚫',
+      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+    });
+  };
+
 
   const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
   const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
@@ -1079,11 +1108,43 @@ function App() {
   }, [activeCompany, data, selectedAgent, selectedWeek]);
 
   const slaPriorityCount = useMemo(() => {
+    // We only want to alert if there are items needing immediate action:
+    // 1. GENERATE TODAY
+    // 2. OVERDUE (DUE TODAY)
+    // 3. GRACE PERIOD
+    
     return agentData.filter(item => {
       const cycle = normalizeBillingCycle(item.billingCycle);
-      return cycle !== BILLING_CYCLES.CS_BY_AGENT && 
-             cycle !== BILLING_CYCLES.UNSPECIFIED && 
-             cycle !== BILLING_CYCLES.MULTIPLE;
+      if (cycle === BILLING_CYCLES.CS_BY_AGENT || cycle === BILLING_CYCLES.UNSPECIFIED) return false;
+
+      // Simplistic check for priority: If it would be 'highlight' in InvoiceRoadmap
+      // We can't easily import getSLADetails here without refactoring, 
+      // so we'll use a simplified version of the logic
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const currentDay = today.getDay();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
+
+      let invDate = null;
+      if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
+        invDate = new Date(startOfWeek);
+        invDate.setDate(startOfWeek.getDate() + 7);
+      } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+        invDate = new Date(startOfWeek);
+        invDate.setDate(startOfWeek.getDate() + 3);
+        if (currentDay >= 4 || currentDay === 0) invDate.setDate(invDate.getDate() + 7);
+      }
+
+      if (invDate) {
+        // If already invoiced or no usage, skip
+        if (item.lastInvoicedDate === today.toISOString().split('T')[0]) return false;
+        if (item.lastNoUsageDate === today.toISOString().split('T')[0]) return false;
+
+        const daysToInv = Math.round((invDate - today) / (1000 * 60 * 60 * 24));
+        return daysToInv <= 0; // It's highlight if today is inv day or later (but not yet processed)
+      }
+      return false;
     }).length;
   }, [agentData]);
 
@@ -1162,7 +1223,11 @@ function App() {
       )}
 
       {activeView === 'sla' && (
-        <InvoiceRoadmap data={agentData} onMarkInvoiced={handleMarkInvoiced} />
+        <InvoiceRoadmap 
+          data={agentData} 
+          onMarkInvoiced={handleMarkInvoiced} 
+          onMarkNoUsage={handleMarkNoUsage} 
+        />
       )}
     </div>
   );
