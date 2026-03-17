@@ -450,16 +450,22 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
     });
 
-    const total = activeClients.length;
-
-    const invoicedCount = activeClients.filter(item => {
+    const sentAmount = activeClients.reduce((sum, item) => {
       const details = getSLADetails(item);
-      return details.isRecentlyInvoiced || details.isRecentlyNoUsage;
-    }).length;
+      return (details.isRecentlyInvoiced || details.isRecentlyNoUsage) ? sum + (Number(item.amount) || 0) : sum;
+    }, 0);
 
-    const totalAmount = data.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const totalAmount = activeClients.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const pendingAmount = totalAmount - sentAmount;
 
-    return { total, invoiced: invoicedCount, totalAmount, rate: total > 0 ? Math.round((invoicedCount / total) * 100) : 0 };
+    return { 
+      total, 
+      invoiced: invoicedCount, 
+      totalAmount, 
+      sentAmount,
+      pendingAmount,
+      rate: total > 0 ? Math.round((invoicedCount / total) * 100) : 0 
+    };
   }, [data, today]);
 
   if (slaData.length === 0 && !searchTerm && statusFilter === 'all') {
@@ -483,9 +489,22 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Billing Rate (Current Cycle)</div>
           <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981' }}>{usageStats.rate}% <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>({usageStats.invoiced} of {usageStats.total})</span></div>
         </div>
-        <div style={{ flex: 1, minWidth: '200px', background: 'rgba(217, 70, 239, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(217, 70, 239, 0.1)' }}>
+        <div style={{ flex: 1, minWidth: '240px', background: 'rgba(217, 70, 239, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(217, 70, 239, 0.1)' }}>
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Projected Cycle Billing</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#d946ef' }}>${usageStats.totalAmount.toLocaleString()} <span style={{ fontSize: '0.7rem', fontWeight: '400', color: 'var(--text-muted)' }}>USD</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#d946ef' }}>${usageStats.totalAmount.toLocaleString()} <span style={{ fontSize: '0.7rem', fontWeight: '400', color: 'var(--text-muted)' }}>USD</span></div>
+            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#10b981' }}>{usageStats.total > 0 ? Math.round((usageStats.sentAmount / usageStats.totalAmount * 100) || 0) : 0}%</div>
+          </div>
+          
+          <div style={{ height: '4px', background: 'rgba(217, 70, 239, 0.1)', borderRadius: '2px', marginBottom: '0.6rem', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(usageStats.sentAmount / usageStats.totalAmount * 100) || 0}%`, background: '#d946ef', borderRadius: '2px', transition: 'width 0.4s ease' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.8rem', fontSize: '0.65rem' }}>
+            <div style={{ color: '#10b981' }}>Sent: <strong>${usageStats.sentAmount.toLocaleString()}</strong></div>
+            <div style={{ color: 'var(--text-muted)' }}>|</div>
+            <div style={{ color: '#ef4444' }}>Pending: <strong>${usageStats.pendingAmount.toLocaleString()}</strong></div>
+          </div>
         </div>
       </div>
 
