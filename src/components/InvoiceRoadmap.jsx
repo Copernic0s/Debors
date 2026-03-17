@@ -1,261 +1,363 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import styled from 'styled-components';
-import { Calendar, AlertCircle, ArrowRight, CheckCircle2, Clock } from 'lucide-react';
-import { BILLING_CYCLES } from '../constants/billingCycles';
+import { Calendar, AlertCircle, ArrowRight, CheckCircle2, Clock, Zap, Info } from 'lucide-react';
+import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const RoadmapContainer = styled.div`
   display: flex;
   flex-direction: column;
+  gap: 2rem;
+  padding-bottom: 3rem;
+`;
+
+const SectionHeader = styled.div`
+  margin-bottom: 2.5rem;
+  
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    color: var(--text-main);
+  }
+  
+  p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+`;
+
+const CardGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 1.5rem;
 `;
 
-const SLATable = styled.table`
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 0.5rem;
-  
-  th {
-    text-align: left;
-    color: var(--text-muted);
-    font-size: 0.7rem;
-    padding: 0.5rem 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-`;
+const SLACard = styled.div`
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid ${props => props.$highlight ? 'var(--brand)' : 'var(--glass-border)'};
+  border-radius: var(--radius-xl);
+  padding: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 
-const SLARow = styled.tr`
-  background: rgba(255, 255, 255, 0.02);
-  transition: transform 0.2s, background 0.2s;
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: ${props => props.$statusColor};
+  }
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
-    transform: scale(1.002);
+    transform: translateY(-5px);
+    border-color: ${props => props.$statusColor};
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
   }
 `;
 
-const SLACell = styled.td`
-  padding: 0.8rem 1rem;
-  font-size: 0.8rem;
+const CardHead = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+`;
+
+const CompanyName = styled.h4`
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
   color: var(--text-main);
-  border-top: 1px solid var(--glass-border);
-  border-bottom: 1px solid var(--glass-border);
-
-  &:first-child {
-    border-left: 1px solid var(--glass-border);
-    border-top-left-radius: 12px;
-    border-bottom-left-radius: 12px;
-    font-weight: 700;
-  }
-
-  &:last-child {
-    border-right: 1px solid var(--glass-border);
-    border-top-right-radius: 12px;
-    border-bottom-right-radius: 12px;
-  }
+  letter-spacing: -0.02em;
 `;
 
-const DateMilestone = styled.div`
+const CycleTag = styled.div`
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+`;
+
+const TimelineWrapper = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  
-  span.label {
-    font-size: 0.6rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
+  gap: 1rem;
+  margin-top: 1rem;
+`;
+
+const Milestone = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  opacity: ${props => props.$dim ? 0.4 : 1};
+
+  .icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: ${props => props.$active ? props.$color : 'rgba(255,255,255,0.05)'};
+    color: ${props => props.$active ? 'white' : 'var(--text-muted)'};
   }
 
-  span.date {
-    font-family: 'Montserrat', sans-serif;
-    font-weight: 600;
-    color: ${props => props.$active ? 'var(--brand)' : 'inherit'};
+  .content {
+    flex: 1;
+    
+    .label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+    
+    .value {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: ${props => props.$active ? 'var(--text-main)' : 'var(--text-muted)'};
+    }
   }
 `;
 
-const SLAStatus = styled.div`
+const SLAProgress = styled.div`
+  height: 4px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  margin: 1.5rem 0 1rem;
+  position: relative;
+  overflow: hidden;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: ${props => props.$percent}%;
+    background: ${props => props.$color};
+    box-shadow: 0 0 10px ${props => props.$color};
+    transition: width 1s ease-out;
+  }
+`;
+
+const ActionFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1rem;
+`;
+
+const StatusBadge = styled.div`
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 999px;
   font-size: 0.7rem;
-  font-weight: 700;
-  background: ${props => props.$bg};
+  font-weight: 800;
   color: ${props => props.$color};
-  border: 1px solid ${props => props.$border};
-`;
-
-const Timeline = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: ${props => props.$color}15;
+  border: 1px solid ${props => props.$color}40;
 `;
 
 const EmptyState = styled.div`
-  padding: 3rem;
+  padding: 4rem 2rem;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.85rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.8rem;
-  background: rgba(255, 255, 255, 0.01);
+  background: rgba(15, 23, 42, 0.2);
+  border: 1px dashed var(--glass-border);
   border-radius: var(--radius-xl);
-  border: 1px dashed var(--border-color);
+  
+  h3 { font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem; }
 `;
 
 export default function InvoiceRoadmap({ data }) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
   const currentDay = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
     const d = new Date(date);
     if (isNaN(d.getTime())) return date;
-    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getFullYear()).slice(2)}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(2);
+    return `${day}-${month}-${year}`;
   };
 
   const getSLADetails = (item) => {
-    const cycle = item.billingCycle;
+    // Normalización de ciclo para evitar N/A
+    const cycle = normalizeBillingCycle(item.billingCycle);
+    
     const details = {
       period: 'N/A',
       invoiceDate: null,
       dueDate: null,
-      status: { label: 'Unknown', bg: 'rgba(149, 164, 187, 0.1)', color: 'var(--text-muted)', border: 'rgba(149, 164, 187, 0.2)', icon: <Clock size={12} /> }
+      percent: 0,
+      status: { label: 'Scheduled', color: 'var(--text-muted)', icon: <Clock size={14} />, highlight: false }
     };
 
-    // Calculate dates based on current week context
-    // We assume the Roadmap is for the current/upcoming period
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
 
     if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
-      // Period: Mon-Sun. Invoice: Next Mon. Due: Next Tue.
       const invDate = new Date(startOfWeek);
-      invDate.setDate(startOfWeek.getDate() + 7); // Next Monday
+      invDate.setDate(startOfWeek.getDate() + 7);
       const dueDate = new Date(invDate);
-      dueDate.setDate(invDate.getDate() + 1); // Next Tuesday
-      
+      dueDate.setDate(invDate.getDate() + 1);
       details.period = 'Mon - Sun';
       details.invoiceDate = invDate;
       details.dueDate = dueDate;
     } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-      // Period: Thu-Wed. Invoice: Next Thu. Due: Next Fri.
-      // If today is Mon-Wed, we are in the middle of current Thu-Wed period.
-      // If today is Thu-Sun, we are looking at next cycle.
       const invDate = new Date(startOfWeek);
-      invDate.setDate(startOfWeek.getDate() + 3); // Thursday of same week
+      invDate.setDate(startOfWeek.getDate() + 3);
       if (currentDay >= 4 || currentDay === 0) invDate.setDate(invDate.getDate() + 7);
-      
       const dueDate = new Date(invDate);
       dueDate.setDate(invDate.getDate() + 1);
-      
       details.period = 'Thu - Wed';
       details.invoiceDate = invDate;
       details.dueDate = dueDate;
     } else if (cycle === BILLING_CYCLES.TWICE) {
-      // Simplified: Show next upcoming generation point
       const nextMon = new Date(startOfWeek);
       if (currentDay >= 1) nextMon.setDate(nextMon.getDate() + 7);
       const nextThu = new Date(startOfWeek);
       nextThu.setDate(startOfWeek.getDate() + 3);
       if (currentDay >= 4 || currentDay === 0) nextThu.setDate(nextThu.getDate() + 7);
-
       const invDate = nextMon < nextThu ? nextMon : nextThu;
       const dueDate = new Date(invDate);
       dueDate.setDate(invDate.getDate() + 1);
-
-      details.period = 'Dual-Cycle';
+      details.period = 'Dual Cycle';
       details.invoiceDate = invDate;
       details.dueDate = dueDate;
     }
 
     if (details.invoiceDate) {
       const timeToInv = details.invoiceDate.getTime() - today.getTime();
-      const daysToInv = timeToInv / (1000 * 60 * 60 * 24);
+      const daysToInv = Math.round(timeToInv / (1000 * 60 * 60 * 24));
 
       if (daysToInv === 0) {
-        details.status = { label: 'GENERATE TODAY', bg: 'rgba(56, 189, 248, 0.15)', color: 'var(--brand)', border: 'rgba(56, 189, 248, 0.4)', icon: <Calendar size={12} /> };
+        details.percent = 66;
+        details.status = { label: 'GENERATE TODAY', color: 'var(--brand)', icon: <Zap size={14} />, highlight: true };
       } else if (daysToInv < 0 && today < details.dueDate) {
-        details.status = { label: 'INVOICE SENT (GRACE)', bg: 'rgba(129, 140, 248, 0.15)', color: 'var(--accent-secondary)', border: 'rgba(129, 140, 248, 0.4)', icon: <CheckCircle2 size={12} /> };
+        details.percent = 85;
+        details.status = { label: 'GRACE PERIOD', color: '#818cf8', icon: <Info size={14} />, highlight: true };
       } else if (today.getTime() === details.dueDate?.getTime()) {
-        details.status = { label: 'DUE TODAY', bg: 'rgba(245, 158, 11, 0.15)', color: 'var(--warn)', border: 'rgba(245, 158, 11, 0.4)', icon: <AlertCircle size={12} /> };
+        details.percent = 100;
+        details.status = { label: 'DUE TODAY', color: 'var(--warn)', icon: <AlertCircle size={14} />, highlight: true };
       } else {
-        details.status = { label: 'SCHEDULED', bg: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', border: 'var(--glass-border)', icon: <Clock size={12} /> };
+        details.percent = 33;
+        details.status = { label: 'SCHEDULED', color: 'var(--text-muted)', icon: <Clock size={14} />, highlight: false };
       }
     }
 
     return details;
   };
 
-  const slaData = data
-    .filter(item => item.billingCycle && item.billingCycle !== 'CS by agent' && item.billingCycle !== 'Unspecified')
-    .map(item => ({
-      ...item,
-      sla: getSLADetails(item)
-    }))
-    .sort((a, b) => (a.sla.invoiceDate?.getTime() || 0) - (b.sla.invoiceDate?.getTime() || 0));
+  const slaData = useMemo(() => {
+    return data
+      .filter(item => {
+        const c = normalizeBillingCycle(item.billingCycle);
+        return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
+      })
+      .map(item => ({
+        ...item,
+        sla: getSLADetails(item)
+      }))
+      .sort((a, b) => {
+        // Prioritize due today or generate today
+        if (a.sla.status.highlight && !b.sla.status.highlight) return -1;
+        if (!a.sla.status.highlight && b.sla.status.highlight) return 1;
+        return (a.sla.invoiceDate?.getTime() || 0) - (b.sla.invoiceDate?.getTime() || 0);
+      });
+  }, [data, today]);
 
   if (slaData.length === 0) {
     return (
       <EmptyState>
-        <AlertCircle size={24} opacity={0.5} />
-        <p>No companies found with active billing policies. Update remaining "CS by agent" items to activate SLA tracking.</p>
+        <Zap size={48} color="var(--brand)" style={{ marginBottom: '1rem', opacity: 0.5 }} />
+        <h3>No Policies Found</h3>
+        <p>Update "CS by Agent" items in the Overview tab to activate SLA monitoring for your clients.</p>
       </EmptyState>
     );
   }
 
   return (
     <RoadmapContainer>
-      <SLATable>
-        <thead>
-          <tr>
-            <th>Company</th>
-            <th>Cycle Policy</th>
-            <th>Timeline (Period → Inv → Due)</th>
-            <th>SLA Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {slaData.map(item => (
-            <SLARow key={item.id || item.company}>
-              <SLACell>{item.company}</SLACell>
-              <SLACell style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{item.billingCycle}</SLACell>
-              <SLACell>
-                <Timeline>
-                  <DateMilestone>
-                    <span className="label">Work Period</span>
-                    <span className="date">{item.sla.period}</span>
-                  </DateMilestone>
-                  <ArrowRight size={12} color="var(--glass-border)" />
-                  <DateMilestone $active={item.sla.status.label === 'GENERATE TODAY'}>
-                    <span className="label">Invoice Date</span>
-                    <span className="date">{formatDate(item.sla.invoiceDate)}</span>
-                  </DateMilestone>
-                  <ArrowRight size={12} color="var(--glass-border)" />
-                  <DateMilestone $active={item.sla.status.label === 'DUE TODAY'}>
-                    <span className="label">Due Date</span>
-                    <span className="date">{formatDate(item.sla.dueDate)}</span>
-                  </DateMilestone>
-                </Timeline>
-              </SLACell>
-              <SLACell>
-                <SLAStatus 
-                  $bg={item.sla.status.bg} 
-                  $color={item.sla.status.color} 
-                  $border={item.sla.status.border}
-                >
-                  {item.sla.status.icon}
-                  {item.sla.status.label}
-                </SLAStatus>
-              </SLACell>
-            </SLARow>
-          ))}
-        </tbody>
-      </SLATable>
+      <SectionHeader>
+        <h2>Billing SLA Monitor</h2>
+        <p>A proactive view of your billing lifecycle. Cards move through stages automatically based on ALMAFUEL policies.</p>
+      </SectionHeader>
+
+      <CardGrid>
+        {slaData.map(item => (
+          <SLACard key={item.id} $statusColor={item.sla.status.color} $highlight={item.sla.status.highlight}>
+            <CardHead>
+              <div>
+                <CompanyName>{item.company}</CompanyName>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Agent: {item.agentId}</div>
+              </div>
+              <CycleTag>{item.billingCycle}</CycleTag>
+            </CardHead>
+
+            <TimelineWrapper>
+              <Milestone $dim={item.sla.percent > 33}>
+                <div className="icon-box">
+                  <Calendar size={14} />
+                </div>
+                <div className="content">
+                  <div className="label">Work window</div>
+                  <div className="value">{item.sla.period}</div>
+                </div>
+              </Milestone>
+
+              <Milestone $active={item.sla.percent === 66} $color="rgba(56, 189, 248, 0.2)">
+                <div className="icon-box">
+                  <Zap size={14} />
+                </div>
+                <div className="content">
+                  <div className="label">Generation day</div>
+                  <div className="value">{formatDate(item.sla.invoiceDate)}</div>
+                </div>
+              </Milestone>
+
+              <Milestone $active={item.sla.percent === 100} $color="rgba(245, 158, 11, 0.2)">
+                <div className="icon-box">
+                  <AlertCircle size={14} />
+                </div>
+                <div className="content">
+                  <div className="label">Due Deadline</div>
+                  <div className="value">{formatDate(item.sla.dueDate)}</div>
+                </div>
+              </Milestone>
+            </TimelineWrapper>
+
+            <SLAProgress $percent={item.sla.percent} $color={item.sla.status.color} />
+
+            <ActionFooter>
+              <StatusBadge $color={item.sla.status.color}>
+                {item.sla.status.icon}
+                {item.sla.status.label}
+              </StatusBadge>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                {item.sla.status.highlight ? 'Action Required' : 'On Track'}
+              </div>
+            </ActionFooter>
+          </SLACard>
+        ))}
+      </CardGrid>
     </RoadmapContainer>
   );
 }

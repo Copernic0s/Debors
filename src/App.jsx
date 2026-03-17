@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled from 'styled-components';
-import { RefreshCw, Users } from 'lucide-react';
+import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -8,6 +8,7 @@ import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
+import InvoiceRoadmap from './components/InvoiceRoadmap';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
@@ -479,7 +480,7 @@ const aggregateByCompany = (rows) => {
 function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
-  const [activeView, setActiveView] = useState('overview');
+  const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'sla'
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
@@ -1041,6 +1042,7 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+        <ViewButton type="button" $active={activeView === 'sla'} onClick={() => setActiveView('sla')}>SLA Monitor</ViewButton>
       </ViewSwitch>
 
       <div style={{ marginBottom: '1.4rem' }}>
@@ -1078,7 +1080,7 @@ function App() {
         </AgentSnapshot>
       </AgentToolbar>
 
-      {activeView === 'overview' ? (
+      {activeView === 'overview' && (
         <>
           <Dashboard metrics={metrics} />
           <DebtorsList
@@ -1094,7 +1096,9 @@ function App() {
             onDelete={handleDeleteDebtor}
           />
         </>
-      ) : (
+      )}
+
+      {activeView === 'analytics' && (
         <ManagerAnalytics 
           invoiceRows={scopedInvoiceData} 
           aggregatedRows={agentData} 
@@ -1102,6 +1106,10 @@ function App() {
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
         />
+      )}
+
+      {activeView === 'sla' && (
+        <InvoiceRoadmap data={agentData} />
       )}
     </div>
   );
