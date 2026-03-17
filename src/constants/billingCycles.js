@@ -2,7 +2,6 @@ export const BILLING_CYCLES = {
   MONDAY_SUNDAY: 'Monday - Sunday',
   THURSDAY_WEDNESDAY: 'Thursday - Wednesday',
   TWICE: 'Twice',
-  SEMI_MONTHLY: '15th and Last Day',
   CS_BY_AGENT: 'CS by agent',
   MULTIPLE: 'Multiple',
   UNSPECIFIED: 'Unspecified'
@@ -12,7 +11,6 @@ export const BILLING_CYCLE_OPTIONS = [
   BILLING_CYCLES.MONDAY_SUNDAY,
   BILLING_CYCLES.THURSDAY_WEDNESDAY,
   BILLING_CYCLES.TWICE,
-  BILLING_CYCLES.SEMI_MONTHLY,
   BILLING_CYCLES.CS_BY_AGENT,
   BILLING_CYCLES.MULTIPLE,
   BILLING_CYCLES.UNSPECIFIED
@@ -26,8 +24,7 @@ export const normalizeBillingCycle = (value) => {
 
   if (normalized.includes('cs by agent')) return BILLING_CYCLES.CS_BY_AGENT;
   if (normalized.includes('multiple')) return BILLING_CYCLES.MULTIPLE;
-  if (normalized.includes('15') || normalized.includes('last day')) return BILLING_CYCLES.SEMI_MONTHLY;
-  if (normalized.includes('twice') || normalized.includes('dual') || (normalized.includes('mon') && normalized.includes('thu'))) {
+  if (normalized.includes('twice') || normalized.includes('dual') || normalized.includes('15') || normalized.includes('last day') || (normalized.includes('mon') && normalized.includes('thu'))) {
     return BILLING_CYCLES.TWICE;
   }
   if (normalized.includes('thursday') || normalized.includes('thu') || normalized.includes('wed')) {

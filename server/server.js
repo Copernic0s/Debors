@@ -228,10 +228,10 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
   const generateId = () => {
     const inv = normalizeText(r['invoice number'] || r.id);
     if (inv) return inv;
-    const compStr = company.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
-    const weekStr = String(sheetName || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 8);
-    // Include rowIndex and sheetOrder to prevent collisions in the same folder
-    return `GEN-${compStr}-${sheetOrder}-${rowIndex}`;
+    const compStr = company.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 15);
+    const agentStr = String(r['sales rep'] || r.agentid || r.agent || 'NA').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
+    // Use company + agent for stability across sheet shifts
+    return `GEN-${compStr}-${agentStr}`;
   };
 
   return {

@@ -114,15 +114,15 @@ const Particle = styled.div`
   top: ${props => props.$top}%;
   left: ${props => props.$left}%;
   filter: blur(${props => props.$blur}px);
+  will-change: transform;
   animation: float ${props => props.$duration}s ease-in-out infinite;
   animation-delay: ${props => props.$delay}s;
-  opacity: ${props => props.$opacity || 0.15};
-  will-change: transform;
+  opacity: ${props => props.$opacity || 0.12};
+  pointer-events: none;
 
   @keyframes float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(${props => props.$tx}px, ${props => props.$ty}px) scale(1.1); }
-    66% { transform: translate(${props => props.$tx * -0.5}px, ${props => props.$ty * 1.2}px) scale(0.95); }
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50% { transform: translate3d(${props => props.$tx}px, ${props => props.$ty}px, 0); }
   }
 `;
 
@@ -862,8 +862,9 @@ function App() {
         return next;
       });
     } catch (error) {
-      toast.error('Failed to save changes to cloud');
-      console.error(error);
+      const msg = error?.message || 'Unknown network error';
+      toast.error(`Cloud Sync Failed: ${msg}`, { duration: 5000 });
+      console.error('[Persistence] Detailed Error:', error);
     }
   };
 
@@ -1299,12 +1300,11 @@ function App() {
 
   // Atmospheric ALMAFUEL Background - Optimized for low RAM
   const backgroundElements = React.useMemo(() => {
-    // We only use 4 large static blobs instead of 30+ animated items
     return [
-      { id: 'b1', size: 600, top: 10, left: 10, color: 'rgba(56, 189, 248, 0.08)', blur: 100, duration: 40, tx: 50, ty: 30 },
-      { id: 'b2', size: 500, top: 60, left: 70, color: 'rgba(129, 140, 248, 0.06)', blur: 120, duration: 50, tx: -40, ty: -20 },
-      { id: 'b3', size: 400, top: 80, left: 20, color: 'rgba(56, 189, 248, 0.05)', blur: 80, duration: 35, tx: 20, ty: 50 },
-      { id: 'b4', size: 550, top: 20, left: 80, color: 'rgba(129, 140, 248, 0.07)', blur: 110, duration: 45, tx: -30, ty: 40 }
+      { id: 'b1', size: 600, top: 10, left: 10, color: 'rgba(56, 189, 248, 0.06)', blur: 80, duration: 25, tx: 40, ty: 20 },
+      { id: 'b2', size: 500, top: 60, left: 70, color: 'rgba(129, 140, 248, 0.05)', blur: 100, duration: 30, tx: -30, ty: -15 },
+      { id: 'b3', size: 400, top: 80, left: 20, color: 'rgba(56, 189, 248, 0.04)', blur: 70, duration: 20, tx: 20, ty: 40 },
+      { id: 'b4', size: 550, top: 20, left: 80, color: 'rgba(129, 140, 248, 0.05)', blur: 90, duration: 28, tx: -20, ty: 30 }
     ];
   }, []);
 
