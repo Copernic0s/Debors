@@ -807,22 +807,29 @@ function App() {
   const persistEditedRows = async (rows) => {
     if (!rows || rows.length === 0 || !user) return;
 
-    const upserts = rows.map(row => ({
-      id: row.id,
-      amount: row.amount,
-      status: row.status,
-      notes: row.notes,
-      agent_id: row.agentId,
-      billing_cycle: row.billingCycle,
-      due_date: row.dueDate,
-      company: row.company || row.clientName,
-      is_new: row.__isNew || false,
-      is_deleted: row.__deleted || false,
-      last_invoiced_date: row.lastInvoicedDate,
-      last_no_usage_date: row.lastNoUsageDate,
-      updated_by: user.id,
-      updated_at: new Date().toISOString()
-    }));
+    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
+    // This prevents "Fail to save" errors for Sheet-only rows.
+    const upserts = rows
+      .filter(row => row.id && !String(row.id).startsWith('CS-'))
+      .map(row => ({
+        id: row.id,
+        amount: row.amount,
+        status: row.status,
+        notes: row.notes,
+        agent_id: row.agentId,
+        billing_cycle: row.billingCycle,
+        due_date: row.dueDate,
+        company: row.company || row.clientName,
+        is_new: row.__isNew || false,
+        is_deleted: row.__deleted || false,
+        last_invoiced_date: row.lastInvoicedDate,
+        last_no_usage_date: row.lastNoUsageDate,
+        updated_by: user?.id,
+        updated_at: new Date().toISOString(),
+        invoice_number: row.invoiceNumber // Ensure we save the invoice number
+      }));
+
+    if (upserts.length === 0) return;
 
     try {
       const { error } = await supabase
@@ -979,6 +986,9 @@ function App() {
     const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
+    const invNumber = prompt(`Please enter the Invoice Number for ${debtor.company}:`);
+    if (invNumber === null) return; // Cancelled
+
     const todayDate = new Date().toISOString().split('T')[0];
 
     setData((prev) => {
@@ -987,7 +997,13 @@ function App() {
         const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
-        const updated = { ...item, lastInvoicedDate: todayDate };
+        // Sync: If it's the target company, mark lastInvoicedDate AND set status to paid if pending
+        const updated = {
+          ...item,
+          lastInvoicedDate: todayDate,
+          invoiceNumber: invNumber || item.invoiceNumber,
+          status: (item.status === 'pending' || item.status === 'overdue') ? 'paid' : item.status
+        };
         changed.push(updated);
         return updated;
       });
@@ -996,7 +1012,7 @@ function App() {
       return next;
     });
 
-    toast.success(`${debtor.company} marked as invoiced`, {
+    toast.success(`${debtor.company} processed (Inv: ${invNumber || 'N/A'})`, {
       icon: '✅',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
@@ -1251,42 +1267,15 @@ function App() {
     </div>
   );
 
-  // Atmospheric ALMAFUEL Particles (Nebulas + White Stars)
+  // Atmospheric ALMAFUEL Background - Optimized for low RAM
   const backgroundElements = React.useMemo(() => {
-    const items = [];
-    // Large Atmospheric Nebulas (8 items)
-    for (let i = 0; i < 8; i++) {
-      items.push({
-        id: `neb-${i}`,
-        size: Math.random() * 500 + 300,
-        top: Math.random() * 100,
-        left: Math.random() * 100,
-        blur: Math.random() * 80 + 60,
-        duration: Math.random() * 30 + 20,
-        delay: Math.random() * -30,
-        tx: Math.random() * 200 - 100,
-        ty: Math.random() * 200 - 100,
-        opacity: 0.15,
-        color: i % 2 === 0 ? 'rgba(56, 189, 248, 0.12)' : 'rgba(129, 140, 248, 0.1)'
-      });
-    }
-    // Small Bright White Stars (20 items)
-    for (let i = 0; i < 20; i++) {
-      items.push({
-        id: `star-${i}`,
-        size: Math.random() * 4 + 2,
-        top: Math.random() * 100,
-        left: Math.random() * 100,
-        blur: Math.random() * 2 + 1,
-        duration: Math.random() * 10 + 10,
-        delay: Math.random() * -10,
-        tx: Math.random() * 40 - 20,
-        ty: Math.random() * 40 - 20,
-        opacity: Math.random() * 0.5 + 0.3,
-        color: '#ffffff'
-      });
-    }
-    return items;
+    // We only use 4 large static blobs instead of 30+ animated items
+    return [
+      { id: 'b1', size: 600, top: 10, left: 10, color: 'rgba(56, 189, 248, 0.08)', blur: 100, duration: 40, tx: 50, ty: 30 },
+      { id: 'b2', size: 500, top: 60, left: 70, color: 'rgba(129, 140, 248, 0.06)', blur: 120, duration: 50, tx: -40, ty: -20 },
+      { id: 'b3', size: 400, top: 80, left: 20, color: 'rgba(56, 189, 248, 0.05)', blur: 80, duration: 35, tx: 20, ty: 50 },
+      { id: 'b4', size: 550, top: 20, left: 80, color: 'rgba(129, 140, 248, 0.07)', blur: 110, duration: 45, tx: -30, ty: 40 }
+    ];
   }, []);
 
   if (!hasSupabaseConfig) {

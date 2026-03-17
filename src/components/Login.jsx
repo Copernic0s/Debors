@@ -14,36 +14,6 @@ const LoginContainer = styled.div`
   overflow: hidden;
 `;
 
-const BackgroundParticles = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-`;
-
-const Particle = styled.div`
-  position: absolute;
-  width: ${props => props.$size}px;
-  height: ${props => props.$size}px;
-  background: ${props => props.$color || 'rgba(56, 189, 248, 0.2)'};
-  border-radius: 50%;
-  top: ${props => props.$top}%;
-  left: ${props => props.$left}%;
-  filter: blur(${props => props.$blur}px);
-  animation: float ${props => props.$duration}s ease-in-out infinite;
-  animation-delay: ${props => props.$delay}s;
-  opacity: 0.4;
-
-  @keyframes float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(${props => props.$tx}px, ${props => props.$ty}px) scale(1.1); }
-    66% { transform: translate(${props => props.$tx * -0.5}px, ${props => props.$ty * 1.2}px) scale(0.9); }
-  }
-`;
-
 const LoginCard = styled.div`
   width: 100%;
   max-width: 420px;
@@ -185,7 +155,7 @@ function Login({ onLogin }) {
       });
 
       if (error) throw error;
-      
+
       toast.success('Welcome back!');
       if (onLogin) onLogin(data.user);
     } catch (error) {
