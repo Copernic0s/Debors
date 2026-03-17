@@ -736,6 +736,7 @@ function App() {
               status: debtor.status,
               agentId: debtor.agentId,
               billingCycle: debtor.billingCycle,
+              invoiceNumber: debtor.invoiceNumber,
               notes: debtor.notes
             };
             changed.push(updatedRow);

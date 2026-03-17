@@ -158,6 +158,7 @@ const createDefaultFormData = () => ({
   dueDate: new Date().toISOString().split('T')[0],
   status: 'pending',
   agentId: '',
+  invoiceNumber: '',
   notes: ''
 });
 
@@ -212,6 +213,16 @@ export default function DebtorModal({ isOpen, onClose, onSave, debtor }) {
           <button type="button" onClick={onClose}><X size={20} /></button>
         </ModalHeader>
         <ModalBody id="debtor-form" onSubmit={handleSubmit}>
+          <FormGroup>
+            <label>Invoice Number</label>
+            <input
+              type="text"
+              value={formData.invoiceNumber || ''}
+              onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
+              placeholder="Ex. INV-123456"
+            />
+          </FormGroup>
+
           <FormGroup>
             <label>Company</label>
             <input
