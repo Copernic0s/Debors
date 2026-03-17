@@ -97,37 +97,6 @@ const AppContainer = styled.div`
   width: 100%;
 `;
 
-const BackgroundParticles = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-`;
-
-const Particle = styled.div`
-  position: absolute;
-  width: ${props => props.$size}px;
-  height: ${props => props.$size}px;
-  background: ${props => props.$color || 'rgba(56, 189, 248, 0.2)'};
-  border-radius: 50%;
-  top: ${props => props.$top}%;
-  left: ${props => props.$left}%;
-  filter: blur(${props => props.$blur}px);
-  will-change: transform;
-  animation: float ${props => props.$duration}s ease-in-out infinite;
-  animation-delay: ${props => props.$delay}s;
-  opacity: ${props => props.$opacity || 0.12};
-  pointer-events: none;
-
-  @keyframes float {
-    0%, 100% { transform: translate3d(0, 0, 0); }
-    50% { transform: translate3d(${props => props.$tx}px, ${props => props.$ty}px, 0); }
-  }
-`;
-
 const MainContent = styled.main`
   flex: 1;
   display: flex;
@@ -1017,7 +986,7 @@ function App() {
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
         const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-        if (!inAgentScope || !inWeekScope) return;
+        if (!inAgentScope || !inWeekScope) return item;
 
         matchingIndexes.push(index);
       });
@@ -1387,16 +1356,6 @@ function App() {
     </div>
   );
 
-  // Atmospheric ALMAFUEL Background - Optimized for low RAM
-  const backgroundElements = React.useMemo(() => {
-    return [
-      { id: 'b1', size: 600, top: 10, left: 10, color: 'rgba(56, 189, 248, 0.06)', blur: 80, duration: 25, tx: 40, ty: 20 },
-      { id: 'b2', size: 500, top: 60, left: 70, color: 'rgba(129, 140, 248, 0.05)', blur: 100, duration: 30, tx: -30, ty: -15 },
-      { id: 'b3', size: 400, top: 80, left: 20, color: 'rgba(56, 189, 248, 0.04)', blur: 70, duration: 20, tx: 20, ty: 40 },
-      { id: 'b4', size: 550, top: 20, left: 80, color: 'rgba(129, 140, 248, 0.05)', blur: 90, duration: 28, tx: -20, ty: 30 }
-    ];
-  }, []);
-
   if (!hasSupabaseConfig) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#0f172a', color: 'white', fontFamily: 'sans-serif', textAlign: 'center', padding: '2rem' }}>
@@ -1412,22 +1371,6 @@ function App() {
   if (!user) {
     return (
       <AppContainer>
-        <BackgroundParticles>
-          {backgroundElements.map(p => (
-            <Particle
-              key={p.id}
-              $size={p.size}
-              $top={p.top}
-              $left={p.left}
-              $blur={p.blur}
-              $duration={p.duration}
-              $delay={p.delay}
-              $tx={p.tx}
-              $ty={p.ty}
-              $color={p.color}
-            />
-          ))}
-        </BackgroundParticles>
         <Login onLogin={setUser} />
         <Toaster position="bottom-right" />
       </AppContainer>
@@ -1436,23 +1379,6 @@ function App() {
 
   return (
     <AppContainer>
-      <BackgroundParticles>
-        {backgroundElements.map(p => (
-          <Particle
-            key={p.id}
-            $size={p.size}
-            $top={p.top}
-            $left={p.left}
-            $blur={p.blur}
-            $duration={p.duration}
-            $delay={p.delay}
-            $tx={p.tx}
-            $ty={p.ty}
-            $color={p.color}
-            $opacity={p.opacity}
-          />
-        ))}
-      </BackgroundParticles>
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>

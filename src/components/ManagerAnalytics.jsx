@@ -37,18 +37,29 @@ const RechartsVisualFix = createGlobalStyle`
 const Panel = styled.section`
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(24px);
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px);
   padding: 1.5rem;
   min-height: 320px;
-  animation: fadeIn 0.4s ease-out forwards;
+  animation: fadeInFast 0.3s ease-out forwards;
   box-shadow: var(--shadow-lg);
-  transition: all 0.3s ease;
+  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  
+  /* Performance optimizations */
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 320px;
+  will-change: transform;
+  transform: translateZ(0);
 
   &:hover {
     border-color: rgba(56, 189, 248, 0.4);
-    background: rgba(15, 23, 42, 0.4);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(56, 189, 248, 0.05);
+    background: rgba(15, 23, 42, 0.45);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  }
+
+  @keyframes fadeInFast {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 `;
 
