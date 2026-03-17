@@ -9,6 +9,7 @@ import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import InvoiceRoadmap from './components/InvoiceRoadmap';
+import ProcessInvoiceModal from './components/ProcessInvoiceModal';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
@@ -508,6 +509,11 @@ function App() {
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
 
+  // New states for Process Billing Flow
+  const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
+  const [processingDebtor, setProcessingDebtor] = useState(null);
+  const [suggestedInv, setSuggestedInv] = useState('');
+
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
 
@@ -986,9 +992,22 @@ function App() {
     const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
-    const invNumber = prompt(`Please enter the Invoice Number for ${debtor.company}:`);
-    if (invNumber === null) return; // Cancelled
+    // Auto-detection logic: Find any existing invoice number for this company
+    // in the current data set to suggest to the user.
+    const existing = data.find(item =>
+      String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany &&
+      item.invoiceNumber &&
+      String(item.invoiceNumber).trim() !== ''
+    );
 
+    setSuggestedInv(existing ? existing.invoiceNumber : '');
+    setProcessingDebtor(debtor);
+    setIsProcessModalOpen(true);
+  };
+
+  const handleConfirmProcess = (invNumber) => {
+    if (!processingDebtor) return;
+    const targetCompany = String(processingDebtor.company || processingDebtor.clientName || '').trim().toLowerCase();
     const todayDate = new Date().toISOString().split('T')[0];
 
     setData((prev) => {
@@ -1012,10 +1031,13 @@ function App() {
       return next;
     });
 
-    toast.success(`${debtor.company} processed (Inv: ${invNumber || 'N/A'})`, {
+    toast.success(`${processingDebtor.company} processed (Inv: ${invNumber || 'N/A'})`, {
       icon: '✅',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
+
+    setIsProcessModalOpen(false);
+    setProcessingDebtor(null);
   };
 
   const handleMarkNoUsage = (debtor) => {
@@ -1376,6 +1398,14 @@ function App() {
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
+      />
+
+      <ProcessInvoiceModal
+        isOpen={isProcessModalOpen}
+        onClose={() => setIsProcessModalOpen(false)}
+        onConfirm={handleConfirmProcess}
+        companyName={processingDebtor?.company || ''}
+        suggestedInv={suggestedInv}
       />
 
       <Toaster position="bottom-right" />
