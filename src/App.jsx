@@ -542,8 +542,8 @@ function App() {
         editsById[edit.id] = {
           ...edit,
           // Map DB snake_case to App camelCase
-          company: edit.company || edit.client_name,
-          clientName: edit.client_name || edit.company,
+          company: edit.company,
+          clientName: edit.company,
           agentId: edit.agent_id,
           dueDate: edit.due_date,
           billingCycle: edit.billing_cycle,
@@ -828,7 +828,6 @@ function App() {
         billing_cycle: String(row.billingCycle || 'Unspecified'),
         due_date: row.dueDate || null,
         company: String(row.company || row.clientName || 'Unknown'),
-        client_name: String(row.company || row.clientName || 'Unknown'),
         is_new: Boolean(row.__isNew),
         is_deleted: Boolean(row.__deleted),
         last_invoiced_date: row.lastInvoicedDate || null,
