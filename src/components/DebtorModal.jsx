@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { X, RefreshCw } from 'lucide-react';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
+import ConfirmDialog from './ConfirmDialog';
 
 const Overlay = styled.div`
   position: fixed;
@@ -187,6 +188,7 @@ const createFormDataFromDebtor = (debtor) => {
 
 export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }) {
   const [formData, setFormData] = useState(() => createFormDataFromDebtor(debtor));
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   if (!isOpen) return null;
 
@@ -334,12 +336,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
                 alignItems: 'center',
                 gap: '0.4rem'
               }}
-              onClick={() => {
-                const msg = '¿Estás seguro de que quieres descartar los cambios manuales y restaurar los datos del Sheet para este registro?';
-                if (window.confirm(msg)) {
-                  onReset(debtor.id);
-                }
-              }}
+              onClick={() => setShowResetConfirm(true)}
             >
               <RefreshCw size={14} /> Restaurar Datos Zoho
             </button>
@@ -348,6 +345,19 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           <button type="submit" form="debtor-form" className="btn btn-primary">Save Changes</button>
         </ModalFooter>
       </ModalContent>
+
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        onClose={() => setShowResetConfirm(false)}
+        onConfirm={() => {
+          onReset(debtor.id);
+          setShowResetConfirm(false);
+        }}
+        title="¿Restaurar datos de Zoho?"
+        message="¿Estás seguro de que quieres descartar los cambios manuales y restaurar los datos del Sheet para este registro?"
+        confirmText="Restaurar"
+        cancelText="Cancelar"
+      />
     </Overlay>
   );
 }

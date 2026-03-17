@@ -873,7 +873,7 @@ function App() {
     // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
     // We also filter out any null or undefined IDs.
     const upserts = rows
-      .filter(row => row.id && !String(row.id).startsWith('CS-'))
+      .filter(row => row.id)
       .map(row => ({
         id: String(row.id),
         amount: Number(row.amount) || 0,
