@@ -288,83 +288,112 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       percent: 0,
       status: { label: 'Scheduled', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' },
       isRecentlyInvoiced: false,
-      isRecentlyNoUsage: false
+      isRecentlyNoUsage: false,
+      isTaskCompleted: false
     };
 
-    // Helper to get dates for a specific generation day in the current week or previous
-    const getTargetDates = (targetGenDay) => {
-      const inv = new Date(today);
-      const day = today.getDay();
+    const getTargetDates = (type, refDate) => {
+      const inv = new Date(refDate);
+      const day = refDate.getDay();
+      let start = new Date(refDate);
+      let end = new Date(refDate);
+      let due = new Date(refDate);
+      let periodStr = '';
 
-      let diff = day - targetGenDay;
-      if (diff < 0) diff += 7;
-
-      inv.setDate(today.getDate() - diff);
-
-      const start = new Date(inv);
-      const end = new Date(inv);
-      const due = new Date(inv);
-      due.setDate(inv.getDate() + 1);
-
-      return { inv, due, start, end };
+      if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
+        let diff = day - 1;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 7);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1);
+        periodStr = `Mon - Sun Cycle`;
+      } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+        let diff = day - 4;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 7);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1);
+        periodStr = `Thu - Wed Cycle`;
+      } else if (type === 'TWICE_A') {
+        let diff = day - 4;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 3);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1);
+        periodStr = `Mon - Wed Window`;
+      } else if (type === 'TWICE_B') {
+        let diff = day - 1;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 4);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1);
+        periodStr = `Thu - Sun Window`;
+      }
+      return { inv, due, start, end, periodStr };
     };
 
     let target = null;
+    let currentRef = new Date(today);
+    let iterations = 0;
 
-    if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
-      target = getTargetDates(1); // Mon
-      target.start.setDate(target.inv.getDate() - 7);
-      target.end.setDate(target.inv.getDate() - 1);
-      details.period = `Mon-Sun (${formatDate(target.start)} - ${formatDate(target.end)})`;
-    } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-      target = getTargetDates(4); // Thu
-      target.start.setDate(target.inv.getDate() - 7);
-      target.end.setDate(target.inv.getDate() - 1);
-      details.period = `Thu-Wed (${formatDate(target.start)} - ${formatDate(target.end)})`;
-    } else if (cycle === BILLING_CYCLES.TWICE) {
-      // Split windows
-      const targetThu = getTargetDates(4);
-      const targetMon = getTargetDates(1);
+    // FIND THE EARLIEST UNPROCESSED WINDOW
+    while (iterations < 2) {
+      if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
+        target = getTargetDates(BILLING_CYCLES.MONDAY_SUNDAY, currentRef);
+      } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+        target = getTargetDates(BILLING_CYCLES.THURSDAY_WEDNESDAY, currentRef);
+      } else if (cycle === BILLING_CYCLES.TWICE) {
+        const tA = getTargetDates('TWICE_A', currentRef);
+        const tB = getTargetDates('TWICE_B', currentRef);
+        target = tA.inv > tB.inv ? tA : tB;
+      } else break;
 
-      // Determine which one is more relevant based on today
-      if (currentDay >= 1 && currentDay <= 3) {
-        target = targetMon;
-        target.start.setDate(target.inv.getDate() - 4);
-        target.end.setDate(target.inv.getDate() - 1);
-        details.period = `Thu-Sun Window (${formatDate(target.start)}-${formatDate(target.end)})`;
-      } else {
-        target = targetThu;
-        target.start.setDate(target.inv.getDate() - 3);
-        target.end.setDate(target.inv.getDate() - 1);
-        details.period = `Mon-Wed Window (${formatDate(target.start)}-${formatDate(target.end)})`;
+      const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= target.inv) ||
+        (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= target.inv);
+
+      if (!isProcessed) break;
+
+      // If processed, check if it was processed TODAY (to show "DONE" state)
+      const wasProcessedToday = (item.lastInvoicedDate === today.toISOString().split('T')[0]) ||
+        (item.lastNoUsageDate === today.toISOString().split('T')[0]);
+
+      if (wasProcessedToday && iterations === 0) {
+        details.isTaskCompleted = true;
+        if (item.lastInvoicedDate === today.toISOString().split('T')[0]) details.isRecentlyInvoiced = true;
+        else details.isRecentlyNoUsage = true;
+        break;
       }
+
+      // Move iteration forward to find NEXT window
+      currentRef = new Date(target.inv);
+      if (cycle === BILLING_CYCLES.TWICE) {
+        currentRef.setDate(target.inv.getDate() + (target.inv.getDay() === 1 ? 4 : 3)); // Mon->Thu is 3, Thu->Mon is 4. Fixed offset.
+      } else {
+        currentRef.setDate(target.inv.getDate() + 7);
+      }
+      iterations++;
     }
 
     if (target) {
       details.invoiceDate = target.inv;
       details.dueDate = target.due;
-
-      if (item.lastInvoicedDate) {
-        const lastInv = new Date(item.lastInvoicedDate + 'T00:00:00');
-        if (Math.abs(lastInv - target.inv) / (1000 * 60 * 60 * 24) <= 2 || lastInv >= target.inv) {
-          details.isRecentlyInvoiced = true;
-        }
-      }
-      if (item.lastNoUsageDate) {
-        const lastNo = new Date(item.lastNoUsageDate + 'T00:00:00');
-        if (Math.abs(lastNo - target.inv) / (1000 * 60 * 60 * 24) <= 2 || lastNo >= target.inv) {
-          details.isRecentlyNoUsage = true;
-        }
-      }
+      details.period = target.periodStr;
 
       const diff = Math.floor((today - target.inv) / (1000 * 60 * 60 * 24));
 
-      if (details.isRecentlyInvoiced) {
+      if (details.isTaskCompleted) {
         details.percent = 100;
-        details.status = { label: 'INVOICED', color: '#10b981', icon: <CheckCircle2 size={14} />, highlight: false, id: 'invoiced' };
-      } else if (details.isRecentlyNoUsage) {
-        details.percent = 100;
-        details.status = { label: 'NO ACTIVITY', color: '#f87171', icon: <Info size={14} />, highlight: false, id: 'invoiced' };
+        details.status = {
+          label: details.isRecentlyInvoiced ? 'INVOICED' : 'NO ACTIVITY',
+          color: details.isRecentlyInvoiced ? '#10b981' : '#f87171',
+          icon: details.isRecentlyInvoiced ? <CheckCircle2 size={14} /> : <Info size={14} />,
+          highlight: false,
+          id: 'invoiced'
+        };
       } else if (diff === 0) {
         details.percent = 66;
         details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generation' };
@@ -375,8 +404,9 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         details.percent = 100;
         details.status = { label: 'OVERDUE', color: '#ef4444', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
       } else {
+        // Upcoming window
         details.percent = 33;
-        details.status = { label: 'SCHEDULED', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' };
+        details.status = { label: 'UPCOMING', color: '#94a3b8', icon: <Clock size={14} />, highlight: false, id: 'scheduled' };
       }
     }
 

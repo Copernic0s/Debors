@@ -1112,41 +1112,58 @@ function App() {
     today.setHours(0, 0, 0, 0);
     const day = today.getDay();
 
-    const getTargetInvDate = (cycleRaw) => {
-      const c = normalizeBillingCycle(cycleRaw);
-      if (c === BILLING_CYCLES.CS_BY_AGENT || c === BILLING_CYCLES.UNSPECIFIED || c === BILLING_CYCLES.MULTIPLE) return null;
+    const getEarliestUnprocessedInvDate = (item) => {
+      const cycle = normalizeBillingCycle(item.billingCycle);
+      if (cycle === BILLING_CYCLES.CS_BY_AGENT || cycle === BILLING_CYCLES.UNSPECIFIED || cycle === BILLING_CYCLES.MULTIPLE) return null;
 
-      const getDates = (target) => {
-        const inv = new Date(today);
-        let diff = day - target;
+      const getDates = (type, refDate) => {
+        const inv = new Date(refDate);
+        const d = refDate.getDay();
+        let target = (type === 'MON' ? 1 : 4);
+        let diff = d - target;
         if (diff < 0) diff += 7;
-        inv.setDate(today.getDate() - diff);
+        inv.setDate(refDate.getDate() - diff);
         return inv;
       };
 
-      if (c === BILLING_CYCLES.MONDAY_SUNDAY) return getDates(1);
-      if (c === BILLING_CYCLES.THURSDAY_WEDNESDAY) return getDates(4);
-      if (c === BILLING_CYCLES.TWICE) {
-        return (day >= 1 && day <= 3) ? getDates(1) : getDates(4);
+      let currentRef = new Date(today);
+      let iterations = 0;
+      let finalInv = null;
+
+      while (iterations < 2) {
+        let inv = null;
+        if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) inv = getDates('MON', currentRef);
+        else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) inv = getDates('THU', currentRef);
+        else if (cycle === BILLING_CYCLES.TWICE) {
+          const invA = getDates('THU', currentRef);
+          const invB = getDates('MON', currentRef);
+          inv = invA > invB ? invA : invB;
+        }
+
+        if (!inv) break;
+
+        const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= inv) ||
+          (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= inv);
+
+        if (!isProcessed) {
+          finalInv = inv;
+          break;
+        }
+
+        currentRef = new Date(inv);
+        if (cycle === BILLING_CYCLES.TWICE) {
+          currentRef.setDate(inv.getDate() + (inv.getDay() === 1 ? 4 : 3));
+        } else {
+          currentRef.setDate(inv.getDate() + 7);
+        }
+        iterations++;
       }
-      return null;
+      return finalInv;
     };
 
     return agentData.filter(item => {
-      const invDate = getTargetInvDate(item.billingCycle);
-      if (!invDate) return false;
-
-      // Check if processed
-      if (item.lastInvoicedDate) {
-        const last = new Date(item.lastInvoicedDate + 'T00:00:00');
-        if (Math.abs(last - invDate) / (1000 * 60 * 60 * 24) <= 2 || last >= invDate) return false;
-      }
-      if (item.lastNoUsageDate) {
-        const last = new Date(item.lastNoUsageDate + 'T00:00:00');
-        if (Math.abs(last - invDate) / (1000 * 60 * 60 * 24) <= 2 || last >= invDate) return false;
-      }
-
-      return today >= invDate;
+      const invDate = getEarliestUnprocessedInvDate(item);
+      return invDate && today >= invDate;
     }).length;
   }, [agentData]);
 
