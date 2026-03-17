@@ -14,7 +14,7 @@ const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf
 const BILLING_CYCLES = {
   MONDAY_SUNDAY: 'Monday-Sunday',
   THURSDAY_WEDNESDAY: 'Thursday-Wednesday',
-  TWICE: '15th and Last Day of the month',
+  TWICE: 'Twice',
   MULTIPLE: 'Multiple Cycles',
   UNSPECIFIED: 'Unspecified'
 };

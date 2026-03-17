@@ -306,7 +306,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1);
+        due.setDate(inv.getDate() + 2); // 2 days buffer
         periodStr = `Mon - Sun Cycle`;
       } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
         let diff = day - 4;
@@ -314,7 +314,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1);
+        due.setDate(inv.getDate() + 2); // 2 days buffer
         periodStr = `Thu - Wed Cycle`;
       } else if (type === 'TWICE_A') {
         let diff = day - 4;
@@ -322,23 +322,16 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 3);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1);
+        due.setDate(inv.getDate() + 2); // 2 days buffer
         periodStr = `Mon - Wed Window`;
+      } else if (type === 'TWICE_B') {
+        let diff = day - 1;
+        if (diff < 0) diff += 7;
+        inv.setDate(refDate.getDate() - diff);
+        start.setDate(inv.getDate() - 4);
+        end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 2); // 2 days buffer
         periodStr = `Thu - Sun Window`;
-      } else if (type === 'SEMI_MONTHLY_A') {
-        // Window 1: 1st to 14th. Generation on 15th
-        inv = new Date(refDate.getFullYear(), refDate.getMonth(), 15);
-        start = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
-        end = new Date(refDate.getFullYear(), refDate.getMonth(), 14);
-        due = new Date(refDate.getFullYear(), refDate.getMonth(), 16);
-        periodStr = `1st - 14th Window`;
-      } else if (type === 'SEMI_MONTHLY_B') {
-        // Window 2: 15th to Last Day. Generation on 1st of next month
-        inv = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 1);
-        start = new Date(refDate.getFullYear(), refDate.getMonth(), 15);
-        end = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0); // Last day of ref month
-        due = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 2);
-        periodStr = `15th - End Window`;
       }
       return { inv, due, start, end, periodStr };
     };
@@ -533,7 +526,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                     </div>
                   )}
                 </div>
-                <CycleTag>{item.billingCycle}</CycleTag>
+                <CycleTag>{normalizeBillingCycle(item.billingCycle)}</CycleTag>
               </CardHead>
 
               <TimelineWrapper>
