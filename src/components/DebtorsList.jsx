@@ -184,23 +184,26 @@ const BillingCycleSelect = styled.select`
 const StatusSelect = styled(BillingCycleSelect)`
   min-width: 122px;
   font-weight: 700;
+  background: ${(props) => {
+    if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.12)';
+    if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.12)';
+    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.12)';
+    if (props.$tone === 'inactive') return 'rgba(148, 163, 184, 0.12)';
+    return 'rgba(245, 158, 11, 0.12)';
+  }};
   color: ${(props) => {
     if (props.$tone === 'paid') return 'var(--ok)';
     if (props.$tone === 'overdue') return 'var(--danger)';
     if (props.$tone === 'no_invoice') return 'var(--text-muted)';
+    if (props.$tone === 'inactive') return 'var(--text-muted)';
     return 'var(--warn)';
   }};
   border-color: ${(props) => {
     if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.35)';
     if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.35)';
-    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.3)';
+    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.18)';
+    if (props.$tone === 'inactive') return 'rgba(148, 163, 184, 0.18)';
     return 'rgba(245, 158, 11, 0.35)';
-  }};
-  background: ${(props) => {
-    if (props.$tone === 'paid') return 'rgba(16, 185, 129, 0.12)';
-    if (props.$tone === 'overdue') return 'rgba(248, 113, 113, 0.12)';
-    if (props.$tone === 'no_invoice') return 'rgba(149, 164, 187, 0.12)';
-    return 'rgba(245, 158, 11, 0.12)';
   }};
 `;
 
@@ -453,12 +456,13 @@ export default function DebtorsList({
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
                     <option value="no_invoice">No invoice</option>
+                    <option value="inactive">Inactive</option>
                   </StatusSelect>
                 </Td>
                 <Td style={{ fontSize: '0.78rem', color: item.isAutoOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: item.isAutoOverdue ? 700 : 500, whiteSpace: 'nowrap' }}>
                   {item.dueDate ? (() => {
                     const [y, m, d] = item.dueDate.split('-');
-                    return `${d}-${m}-${y.slice(2)}`;
+                    return `${m}-${d}-${y.slice(2)}`;
                   })() : 'N/A'}
                 </Td>
                 <Td>

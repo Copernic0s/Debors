@@ -129,6 +129,7 @@ const normalizeStatus = (status) => {
   if (raw === 'overdue') return 'overdue';
   if (raw === 'paid') return 'paid';
   if (raw === 'no_invoice') return 'no_invoice';
+  if (raw === 'inactive') return 'inactive';
   return 'pending';
 };
 
@@ -168,16 +169,17 @@ const AreaChartVisual = ({ data }) => (
 export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
   const cleanRows = (invoiceRows || []).filter((row) => {
     const status = normalizeStatus(row.status);
-    return status !== 'no_invoice' && (Number(row.amount) > 0 || status === 'paid');
+    return status !== 'no_invoice' && status !== 'inactive' && (Number(row.amount) > 0 || status === 'paid');
   });
 
   const statusMap = {
     pending: 0,
     overdue: 0,
-    paid: 0
+    paid: 0,
+    inactive: 0
   };
 
-  cleanRows.forEach((row) => {
+  (invoiceRows || []).forEach((row) => {
     const status = normalizeStatus(row.status);
     if (status === 'no_invoice') return;
     statusMap[status] += Number(row.amount) || 0;
@@ -186,7 +188,8 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
   const statusDonutData = [
     { name: 'Pending', value: statusMap.pending, color: '#f59e0b' },
     { name: 'Overdue', value: statusMap.overdue, color: '#f87171' },
-    { name: 'Paid', value: statusMap.paid, color: '#10b981' }
+    { name: 'Paid', value: statusMap.paid, color: '#10b981' },
+    { name: 'Inactive', value: statusMap.inactive, color: '#94a3b8' }
   ];
 
   const byAgent = new Map();

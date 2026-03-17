@@ -270,12 +270,12 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
 
   const formatDate = (date) => {
     if (!date) return 'N/A';
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return date;
-    const day = String(d.getDate()).padStart(2, '0');
+    const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
+    if (isNaN(d.getTime())) return 'N/A';
     const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = String(d.getFullYear()).slice(2);
-    return `${day}-${month}-${year}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    const year = String(d.getFullYear()).slice(-2);
+    return `${month}-${day}-${year}`;
   };
 
   const getSLADetails = (item) => {

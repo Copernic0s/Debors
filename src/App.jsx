@@ -478,9 +478,29 @@ const aggregateByCompany = (rows) => {
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
     const cycles = Array.from(item.cycleSet);
+    
+    // NEW INACTIVE LOGIC
+    // Sort all rows for this company by week (simple sort for now)
+    const companyRows = rows.filter(r => 
+      String(r.company || r.clientName || '').trim().toLowerCase() === item.company.toLowerCase()
+    ).sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
+
+    const lastRows = companyRows.slice(-3);
+    const last3NoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
+    
+    const last2Rows = companyRows.slice(-2);
+    const last2NoInvoiceAndNotPaid = last2Rows.length >= 2 && last2Rows.every(r => {
+      const s = String(r.status || '').toLowerCase();
+      return !r.invoiceNumber && s !== 'paid';
+    });
+
+    if (last3NoUsage || last2NoInvoiceAndNotPaid) {
+      item.status = 'inactive';
+    }
+
     return {
       ...item,
-      agentId: agents.length > 1 ? 'Multiple' : agents[0],
+      agentId: agents.join(', '),
       billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
       invoiceCount: Number.isFinite(Number(item.invoiceCountOverride)) ? Number(item.invoiceCountOverride) : item.invoiceCount,
@@ -1032,7 +1052,7 @@ function App() {
           ...item,
           lastInvoicedDate: todayDate,
           invoiceNumber: invNumber || item.invoiceNumber
-          // Removed status update to 'paid' to keep tracking debt
+          // Explicitly keeping the previous status to avoid auto-marking as 'paid'
         };
         changed.push(updated);
         return updated;
