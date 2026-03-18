@@ -316,23 +316,29 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         end.setDate(inv.getDate() - 1);
         due.setDate(inv.getDate() + 1); 
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-      } else if (type === 'TWICE_A') {
-        // Monday invoice (twice a week) - Window usually Thu-Sun (4 days)
-        let diff = day - 1;
-        if (diff < 0) diff += 7;
-        inv.setDate(refDate.getDate() - diff);
-        start.setDate(inv.getDate() - 4);
+      } else {
+        // Handle Twice-a-week variants (Mon/Thu, Tue/Fri, Wed/Sat)
+        let dayA = 1, dayB = 4; // Default Mon/Thu
+        if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
+        else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+        
+        const getInvDate = (targetDay) => {
+          const d = new Date(refDate);
+          let diff = d.getDay() - targetDay;
+          if (diff < 0) diff += 7;
+          d.setDate(d.getDate() - diff);
+          return d;
+        };
+
+        const invA = getInvDate(dayA);
+        const invB = getInvDate(dayB);
+        const activeInv = invA > invB ? invA : invB;
+        inv.setTime(activeInv.getTime());
+
+        const gap = (activeInv.getDay() === dayA) ? (dayA - dayB + 7) % 7 : (dayB - dayA + 7) % 7;
+        start.setDate(inv.getDate() - gap);
         end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1); 
-        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-      } else if (type === 'TWICE_B') {
-        // Thursday invoice (twice a week) - Window usually Mon-Wed (3 days)
-        let diff = day - 4;
-        if (diff < 0) diff += 7;
-        inv.setDate(refDate.getDate() - diff);
-        start.setDate(inv.getDate() - 3);
-        end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1); 
+        due.setDate(inv.getDate() + 1);
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       }
       return { inv, due, start, end, periodStr };
@@ -344,39 +350,27 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
 
     // FIND THE EARLIEST UNPROCESSED WINDOW
     while (iterations < 2) {
-      if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) {
-        target = getTargetDates(BILLING_CYCLES.MONDAY_SUNDAY, currentRef);
-      } else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-        target = getTargetDates(BILLING_CYCLES.THURSDAY_WEDNESDAY, currentRef);
-      } else if (cycle === BILLING_CYCLES.TWICE) {
-        const tA = getTargetDates('TWICE_A', currentRef);
-        const tB = getTargetDates('TWICE_B', currentRef);
-        target = tA.inv > tB.inv ? tA : tB;
-      } else break;
+      target = getTargetDates(cycle, currentRef);
 
       const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= target.inv) ||
         (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= target.inv);
 
       if (!isProcessed) break;
 
-      // If processed, check if it was processed TODAY (to show "DONE" state)
-      const wasProcessedToday = (item.lastInvoicedDate === today.toISOString().split('T')[0]) ||
-        (item.lastNoUsageDate === today.toISOString().split('T')[0]);
+      // Use local date string for comparison to avoid UTC shift
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const wasProcessedToday = (item.lastInvoicedDate === todayStr) || (item.lastNoUsageDate === todayStr);
 
       if (wasProcessedToday && iterations === 0) {
         details.isTaskCompleted = true;
-        if (item.lastInvoicedDate === today.toISOString().split('T')[0]) details.isRecentlyInvoiced = true;
+        if (item.lastInvoicedDate === todayStr) details.isRecentlyInvoiced = true;
         else details.isRecentlyNoUsage = true;
         break;
       }
 
       // Move iteration forward to find NEXT window
       currentRef = new Date(target.inv);
-      if (cycle === BILLING_CYCLES.TWICE) {
-        currentRef.setDate(target.inv.getDate() + (target.inv.getDay() === 1 ? 4 : 3));
-      } else {
-        currentRef.setDate(target.inv.getDate() + 7);
-      }
+      currentRef.setDate(target.inv.getDate() - 1);
       iterations++;
     }
 

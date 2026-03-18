@@ -1084,7 +1084,10 @@ function App() {
   const handleConfirmProcess = (invNumber) => {
     if (!processingDebtor) return;
     const targetCompany = String(processingDebtor.company || processingDebtor.clientName || '').trim().toLowerCase();
-    const todayDate = new Date().toISOString().split('T')[0];
+    
+    // Use local date instead of UTC to avoid timezone shift
+    const now = new Date();
+    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     setData((prev) => {
       const changed = [];
@@ -1244,15 +1247,37 @@ function App() {
 
     const getEarliestUnprocessedInvDate = (item) => {
       const cycle = normalizeBillingCycle(item.billingCycle);
-      if (cycle === BILLING_CYCLES.CS_BY_AGENT || cycle === BILLING_CYCLES.UNSPECIFIED || cycle === BILLING_CYCLES.MULTIPLE) return null;
+      if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED, BILLING_CYCLES.MULTIPLE].includes(cycle)) return null;
 
       const getDates = (type, refDate) => {
         const inv = new Date(refDate);
-        const d = refDate.getDay();
-        let target = (type === 'MON' ? 1 : 4);
-        let diff = d - target;
-        if (diff < 0) diff += 7;
-        inv.setDate(refDate.getDate() - diff);
+        const day = refDate.getDay();
+        
+        if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
+          let diff = day - 1;
+          if (diff < 0) diff += 7;
+          inv.setDate(refDate.getDate() - diff);
+        } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+          let diff = day - 4;
+          if (diff < 0) diff += 7;
+          inv.setDate(refDate.getDate() - diff);
+        } else {
+          // Twice-a-week cases
+          let dayA = 1, dayB = 4;
+          if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
+          else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+          
+          const d1 = new Date(refDate);
+          let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
+          d1.setDate(d1.getDate() - diff1);
+
+          const d2 = new Date(refDate);
+          let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
+          d2.setDate(d2.getDate() - diff2);
+
+          const active = d1 > d2 ? d1 : d2;
+          inv.setTime(active.getTime());
+        }
         return inv;
       };
 
@@ -1261,15 +1286,7 @@ function App() {
       let finalInv = null;
 
       while (iterations < 2) {
-        let inv = null;
-        if (cycle === BILLING_CYCLES.MONDAY_SUNDAY) inv = getDates('MON', currentRef);
-        else if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) inv = getDates('THU', currentRef);
-        else if (cycle === BILLING_CYCLES.TWICE) {
-          const invA = getDates('THU', currentRef);
-          const invB = getDates('MON', currentRef);
-          inv = invA > invB ? invA : invB;
-        }
-
+        const inv = getDates(cycle, currentRef);
         if (!inv) break;
 
         const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= inv) ||
@@ -1281,11 +1298,7 @@ function App() {
         }
 
         currentRef = new Date(inv);
-        if (cycle === BILLING_CYCLES.TWICE) {
-          currentRef.setDate(inv.getDate() + (inv.getDay() === 1 ? 4 : 3));
-        } else {
-          currentRef.setDate(inv.getDate() + 7);
-        }
+        currentRef.setDate(inv.getDate() - 1);
         iterations++;
       }
       return finalInv;
@@ -1293,7 +1306,10 @@ function App() {
 
     return agentData.filter(item => {
       const invDate = getEarliestUnprocessedInvDate(item);
-      return invDate && today >= invDate;
+      // Ensure today is defined as local start of day
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return invDate && todayStart >= invDate;
     }).length;
   }, [agentData]);
 
