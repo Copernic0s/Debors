@@ -770,7 +770,7 @@ function App() {
               manualEditsRef.current = nextEdits;
               return nextEdits;
             });
-            persistEditedRows(changed, changed[0].__editedFields);
+            persistEditedRows(changed);
           }
           return next;
         });
@@ -798,7 +798,7 @@ function App() {
             manualEditsRef.current = nextEdits;
             return nextEdits;
           });
-          persistEditedRows([updatedDebtor], editedFields);
+          persistEditedRows([updatedDebtor]);
           return next;
         });
       }
@@ -919,22 +919,16 @@ function App() {
     setActiveCompany(companyName);
   };
 
-  const persistEditedRows = async (rows, editedFields) => {
+  const persistEditedRows = async (rows) => {
     if (!rows || rows.length === 0 || !user) return;
 
     const upserts = rows
       .filter(row => row.id)
       .map(row => {
-        const rowEditedFields = typeof editedFields === 'object' && editedFields !== null
-          ? editedFields
-          : (row.__editedFields || {});
-        const statusFromPatch = rowEditedFields.status
-          ? row.status
-          : undefined;
         return {
           id: String(row.id),
           amount: Number(row.amount) || 0,
-          status: statusFromPatch ?? row.status ?? 'pending',
+          status: String(row.status || 'pending'),
           notes: String(row.notes || ''),
           agent_id: String(row.agentId || 'Unassigned'),
           billing_cycle: String(row.billingCycle || 'Unspecified'),
@@ -946,8 +940,7 @@ function App() {
           last_no_usage_date: row.lastNoUsageDate || null,
           updated_by: user?.id,
           updated_at: new Date().toISOString(),
-          invoice_number: row.invoiceNumber || null,
-          __editedFields: rowEditedFields
+          invoice_number: row.invoiceNumber || null
         };
       });
 
@@ -968,10 +961,7 @@ function App() {
       setManualEdits(prev => {
         const next = { ...prev };
         rows.forEach(row => {
-          const rowEditedFields = typeof editedFields === 'object' && editedFields !== null
-            ? editedFields
-            : (row.__editedFields || {});
-          next[row.id] = { ...row, __editedFields: rowEditedFields };
+          next[row.id] = { ...row };
         });
         manualEditsRef.current = next;
         return next;
@@ -1007,7 +997,7 @@ function App() {
         changed.push(updatedRow);
         return updatedRow;
       });
-      persistEditedRows(changed, { billingCycle: true });
+      persistEditedRows(changed);
       return next;
     });
 
@@ -1040,7 +1030,7 @@ function App() {
         changed.push(updatedRow);
         return updatedRow;
       });
-      persistEditedRows(changed, { status: true });
+      persistEditedRows(changed);
       return next;
     });
 
@@ -1076,7 +1066,7 @@ function App() {
       if (matchingIndexes.length === 1) {
         const idx = matchingIndexes[0];
         updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount), __editedFields: { ...updated[idx].__editedFields, amount: true } };
-        persistEditedRows([updated[idx]], { amount: true });
+        persistEditedRows([updated[idx]]);
         return updated;
       }
 
@@ -1089,7 +1079,7 @@ function App() {
             __editedFields: { ...updated[idx].__editedFields, amount: true }
           };
         });
-        persistEditedRows(matchingIndexes.map((idx) => updated[idx]), { amount: true });
+persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
         return updated;
       }
 
@@ -1106,7 +1096,7 @@ function App() {
         updated[idx] = { ...updated[idx], amount: nextValue, __editedFields: { ...updated[idx].__editedFields, amount: true } };
       });
 
-      persistEditedRows(matchingIndexes.map((idx) => updated[idx]), { amount: true });
+      persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
       return updated;
     });
 
