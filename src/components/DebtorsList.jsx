@@ -442,6 +442,7 @@ export default function DebtorsList({
                     {BILLING_CYCLE_OPTIONS.map((cycle) => (
                       <option key={cycle} value={cycle}>{cycle}</option>
                     ))}
+                    <option value="custom">Other (custom)</option>
                   </BillingCycleSelect>
                 </Td>
                 <Td>

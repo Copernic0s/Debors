@@ -46,9 +46,7 @@ const Panel = styled.section`
   transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
   
   /* Performance optimizations */
-  content-visibility: auto;
-  contain-intrinsic-size: 1px 320px;
-  will-change: transform;
+  /* will-change: transform; Removed to avoid interference with Recharts animations */
   transform: translateZ(0);
 
   &:hover {
@@ -171,8 +169,8 @@ const AreaChartVisual = React.memo(({ data }) => (
       <YAxis tick={{ fill: '#95a4bb', fontSize: 10 }} axisLine={false} tickLine={false} />
       <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
       <Legend verticalAlign="top" height={36} />
-      <Area type="monotone" dataKey="open" name="Open Balance" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorOpen)" />
-      <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCollected)" />
+      <Area type="monotone" dataKey="open" name="Open Balance" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorOpen)" isAnimationActive animationDuration={1200} />
+      <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCollected)" isAnimationActive animationDuration={1200} />
     </AreaChart>
   </ResponsiveContainer>
 ));
@@ -293,7 +291,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
               <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
               <Legend />
-              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive animationDuration={800}>
+              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive animationDuration={1200}>
                 {agentChartData.map((entry) => (
                   <Cell key={entry.agent} fill={entry.color} />
                 ))}
@@ -306,7 +304,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
           <PanelTitle>Portfolio Status Split</PanelTitle>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive animationDuration={800}>
+              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive animationDuration={1200}>
                 {statusDonutData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}

@@ -202,7 +202,34 @@ const createFormDataFromDebtor = (debtor) => {
 
 export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }) {
   const [formData, setFormData] = useState(() => createFormDataFromDebtor(debtor));
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  useEffect(() => {
+    // Auto-calculate Due Date based on cycle days
+    // Rule: Due Date = Billing Day + 1
+    const DAYS_TO_NUM = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    const NUM_TO_DASH = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    let targetDay = null;
+    if (formData.billingCycle === BILLING_CYCLES.MONDAY_SUNDAY) targetDay = 1; // Mon
+    else if (formData.billingCycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) targetDay = 4; // Thu
+    else if (formData.billingCycle === BILLING_CYCLES.TWICE) {
+      // For Twice, we pick the "nearest" upcoming billing day or just Day 1 as default?
+      // Let's use Day 1 for simplicity or just the one that matches the current selection
+      targetDay = DAYS_TO_NUM[formData.cycleDay1] ?? 1;
+    }
+
+    if (targetDay !== null) {
+      const today = new Date();
+      const resultDate = new Date(today);
+      let diff = targetDay - today.getDay();
+      if (diff < 0) diff += 7;
+      resultDate.setDate(today.getDate() + diff + 1); // +1 because due date is day after
+      
+      const suggestedDue = resultDate.toISOString().split('T')[0];
+      if (formData.dueDate !== suggestedDue) {
+        setFormData(prev => ({ ...prev, dueDate: suggestedDue }));
+      }
+    }
+  }, [formData.billingCycle, formData.cycleDay1, formData.cycleDay2]);
 
   if (!isOpen) return null;
 
@@ -280,9 +307,6 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
                 <option value={BILLING_CYCLES.MONDAY_SUNDAY}>{BILLING_CYCLES.MONDAY_SUNDAY}</option>
                 <option value={BILLING_CYCLES.THURSDAY_WEDNESDAY}>{BILLING_CYCLES.THURSDAY_WEDNESDAY}</option>
                 <option value={BILLING_CYCLES.TWICE}>Twice (custom days)</option>
-                <option value={BILLING_CYCLES.CS_BY_AGENT}>{BILLING_CYCLES.CS_BY_AGENT}</option>
-                <option value={BILLING_CYCLES.MULTIPLE}>{BILLING_CYCLES.MULTIPLE}</option>
-                <option value={BILLING_CYCLES.UNSPECIFIED}>{BILLING_CYCLES.UNSPECIFIED}</option>
                 <option value="custom">Other (custom)</option>
               </select>
             </FormGroup>
