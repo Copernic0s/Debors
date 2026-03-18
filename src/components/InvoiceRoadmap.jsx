@@ -450,27 +450,80 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       return c !== BILLING_CYCLES.CS_BY_AGENT && c !== BILLING_CYCLES.UNSPECIFIED && c !== BILLING_CYCLES.MULTIPLE;
     });
 
-    const total = activeClients.length;
-    const invoicedCount = activeClients.filter(item => {
-      const details = getSLADetails(item);
-      return details.isRecentlyInvoiced || details.isRecentlyNoUsage;
-    }).length;
+    // Determine Monday and Thursday of the current calendar week
+    const getWeekBoundaries = (refDate) => {
+      const d = new Date(refDate);
+      const day = d.getDay();
+      
+      const mon = new Date(d);
+      let monDiff = day - 1;
+      if (monDiff < 0) monDiff += 7;
+      mon.setDate(d.getDate() - monDiff);
 
-    const sentAmount = activeClients.reduce((sum, item) => {
-      const details = getSLADetails(item);
-      return (details.isRecentlyInvoiced || details.isRecentlyNoUsage) ? sum + (Number(item.amount) || 0) : sum;
-    }, 0);
+      const thu = new Date(mon);
+      thu.setDate(mon.getDate() + 3);
 
-    const totalAmount = activeClients.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      return { 
+        mon: mon.toISOString().split('T')[0], 
+        thu: thu.toISOString().split('T')[0] 
+      };
+    };
+
+    const boundaries = getWeekBoundaries(today);
+
+    let totalAmount = 0;
+    let sentAmount = 0;
+    let totalCycles = 0;
+    let completedCycles = 0;
+
+    activeClients.forEach(item => {
+      const cycle = normalizeBillingCycle(item.billingCycle);
+      const rawAmount = Number(item.amount) || 0;
+      const lastDate = item.lastInvoicedDate || item.lastNoUsageDate || '';
+      
+      let cyclesInWeek = 1;
+      let cyclesDone = 0;
+
+      if (cycle === BILLING_CYCLES.TWICE) {
+        cyclesInWeek = 2;
+        if (lastDate >= boundaries.thu) cyclesDone = 2;
+        else if (lastDate >= boundaries.mon) cyclesDone = 1;
+      } else {
+        const startDay = (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY) ? boundaries.thu : boundaries.mon;
+        if (lastDate >= startDay) cyclesDone = 1;
+      }
+
+      totalCycles += cyclesInWeek;
+      completedCycles += cyclesDone;
+      
+      // Projection logic:
+      // If 1/2 cycles done of a TWICE week, and we only have 1 row amount so far, project 2x
+      let projectedForClient = rawAmount;
+      if (cycle === BILLING_CYCLES.TWICE && cyclesDone === 1 && rawAmount > 0) {
+        projectedForClient = rawAmount * 2;
+      } else if (cycle === BILLING_CYCLES.TWICE && cyclesDone === 0 && rawAmount > 0) {
+        // If they have a manual amount but 0 done, we still project 2x the base amount
+        projectedForClient = rawAmount * 2;
+      }
+
+      totalAmount += projectedForClient;
+      
+      // Sent amount is what is actually processed
+      if (cyclesDone > 0) {
+        sentAmount += rawAmount;
+      }
+    });
+
     const pendingAmount = totalAmount - sentAmount;
 
     return { 
-      total, 
-      invoiced: invoicedCount, 
+      clientCount: activeClients.length,
+      total: totalCycles, 
+      invoiced: completedCycles, 
       totalAmount, 
       sentAmount,
       pendingAmount,
-      rate: total > 0 ? Math.round((invoicedCount / total) * 100) : 0 
+      rate: totalCycles > 0 ? Math.round((completedCycles / totalCycles) * 100) : 0 
     };
   }, [data, today]);
 
@@ -489,10 +542,10 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: '200px', background: 'rgba(56, 189, 248, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
           <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Accounts using Almafuel</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--brand)' }}>{usageStats.total} <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>Active</span></div>
+          <div style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--brand)' }}>{usageStats.clientCount} <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>Active Clients</span></div>
         </div>
         <div style={{ flex: 1, minWidth: '200px', background: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Billing Rate (Current Cycle)</div>
+          <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Billing Rate (Weekly Events)</div>
           <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981' }}>{usageStats.rate}% <span style={{ fontSize: '0.8rem', fontWeight: '400', color: 'var(--text-muted)' }}>({usageStats.invoiced} of {usageStats.total})</span></div>
         </div>
         <div style={{ flex: 1, minWidth: '240px', background: 'rgba(217, 70, 239, 0.05)', padding: '1rem', borderRadius: 'var(--radius-lg)', border: '1px solid rgba(217, 70, 239, 0.1)' }}>
