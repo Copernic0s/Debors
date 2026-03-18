@@ -571,7 +571,6 @@ function App() {
 
   // Data Repair: If we have confirm records (lastInvoicedDate) but no dueDate,
   // calculate it and persist it. Runs once on initial load.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (loading || !manualEdits || Object.keys(manualEdits).length === 0) return;
 
