@@ -560,6 +560,35 @@ function App() {
     }
   }, [user, fetchManualEdits]);
 
+  // Data Repair: If we have confirm records (lastInvoicedDate) but no dueDate,
+  // calculate it and persist it. This fixes records from before this patch.
+  useEffect(() => {
+    if (loading || !manualEdits || Object.keys(manualEdits).length === 0) return;
+
+    const toFix = Object.values(manualEdits).filter(edit => 
+      edit.lastInvoicedDate && (!edit.dueDate || String(edit.dueDate).trim() === '')
+    );
+
+    if (toFix.length > 0) {
+      console.log(`[Repair] Found ${toFix.length} records missing dueDate. Patching...`);
+      const fixed = toFix.map(item => {
+        const invDate = new Date(item.lastInvoicedDate + 'T00:00:00');
+        invDate.setDate(invDate.getDate() + 1);
+        const due = invDate.toISOString().split('T')[0];
+        return { ...item, dueDate: due };
+      });
+
+      // Update local state and persist to DB
+      setManualEdits(prev => {
+        const next = { ...prev };
+        fixed.forEach(f => { next[f.id] = f; });
+        manualEditsRef.current = next;
+        return next;
+      });
+      persistEditedRows(fixed);
+    }
+  }, [loading]);
+
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
   useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
@@ -1070,9 +1099,15 @@ function App() {
           newStatus = 'pending';
         }
 
+        // Calculate 1-day due date for the new invoice
+        const dateObj = new Date(todayDate + 'T00:00:00');
+        dateObj.setDate(dateObj.getDate() + 1);
+        const calculatedDue = dateObj.toISOString().split('T')[0];
+
         const updated = {
           ...item,
           lastInvoicedDate: todayDate,
+          dueDate: calculatedDue,
           invoiceNumber: invNumber || item.invoiceNumber,
           status: newStatus
         };
