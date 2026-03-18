@@ -15,7 +15,6 @@ const BILLING_CYCLES = {
   MONDAY_SUNDAY: 'Monday - Sunday',
   THURSDAY_WEDNESDAY: 'Thursday - Wednesday',
   TWICE: 'Twice',
-  MULTIPLE: 'Multiple',
   UNSPECIFIED: 'Unspecified'
 };
 
@@ -33,7 +32,6 @@ const normalizeBillingCycle = (value) => {
   if (raw.includes('thursday') || raw.includes('thurs') || raw.includes('wednesday')) return BILLING_CYCLES.THURSDAY_WEDNESDAY;
   if (raw.includes('monday') || raw.includes('sunday')) return BILLING_CYCLES.MONDAY_SUNDAY;
   if (raw.includes('twice')) return BILLING_CYCLES.TWICE;
-  if (raw.includes('multiple')) return BILLING_CYCLES.MULTIPLE;
   return BILLING_CYCLES.UNSPECIFIED;
 };
 

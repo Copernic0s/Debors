@@ -1267,7 +1267,7 @@ function App() {
           
           if (String(type).toLowerCase().includes('twice') && String(type).includes('(')) {
             const match = String(type).match(/\((.*?)\s*[\/\-]\s*(.*?)\)/);
-            if (match) {
+            if (match && match[1] && match[2]) {
               dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
               dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
             }
