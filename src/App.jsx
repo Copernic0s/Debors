@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import styled from 'styled-components';
 import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
@@ -6,13 +6,14 @@ import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
-import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import InvoiceRoadmap from './components/InvoiceRoadmap';
 import ProcessInvoiceModal from './components/ProcessInvoiceModal';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
+
+const ManagerAnalytics = lazy(() => import('./components/ManagerAnalytics'));
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import { isOverdue } from './utils/dateUtils';
 import './index.css';
@@ -93,6 +94,69 @@ const normalizeCompanyKey = (name) => {
   if (!name) return '';
   return String(name).trim().toLowerCase().replace(/['''`]/g, "'").replace(/[""]/g, '"').replace(/–/g, '-').replace(/\s+/g, ' ');
 };
+
+const AnalyticsSkeletonGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 1rem;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const AnalyticsSkeletonPanel = styled.section`
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(12px);
+  padding: 1.5rem;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 320px;
+`;
+
+const SkeletonBar = styled.div`
+  height: ${props => props.$h || '280px'};
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 0%,
+    rgba(255,255,255,0.07) 50%,
+    rgba(255,255,255,0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+`;
+
+const AnalyticsSkeleton = () => (
+  <AnalyticsSkeletonGrid>
+    <AnalyticsSkeletonPanel>
+      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
+      <SkeletonBar $h="280px" />
+    </AnalyticsSkeletonPanel>
+    <AnalyticsSkeletonPanel>
+      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
+      <SkeletonBar $h="280px" />
+    </AnalyticsSkeletonPanel>
+    <AnalyticsSkeletonPanel>
+      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
+      <SkeletonBar $h="280px" />
+    </AnalyticsSkeletonPanel>
+    <AnalyticsSkeletonPanel>
+      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
+      <SkeletonBar $h="280px" />
+    </AnalyticsSkeletonPanel>
+  </AnalyticsSkeletonGrid>
+);
 
 const AppContainer = styled.div`
   min-height: 100vh;
@@ -1442,13 +1506,15 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
       )}
 
       {activeView === 'analytics' && (
-        <ManagerAnalytics
-          invoiceRows={scopedInvoiceData}
-          aggregatedRows={agentData}
-          selectedAgent={selectedAgent}
-          onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
-          onOpenCompanyProfile={openCompanyProfile}
-        />
+        <Suspense fallback={<AnalyticsSkeleton />}>
+          <ManagerAnalytics
+            invoiceRows={scopedInvoiceData}
+            aggregatedRows={agentData}
+            selectedAgent={selectedAgent}
+            onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+            onOpenCompanyProfile={openCompanyProfile}
+          />
+        </Suspense>
       )}
 
       {activeView === 'sla' && (
