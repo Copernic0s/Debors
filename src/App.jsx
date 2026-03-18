@@ -539,9 +539,12 @@ function App() {
 
       const editsById = {};
       edits.forEach(edit => {
+        let __editedFields = {};
+        if (edit.__edited_fields) {
+          try { __editedFields = JSON.parse(edit.__edited_fields); } catch {}
+        }
         editsById[edit.id] = {
           ...edit,
-          // Map DB snake_case to App camelCase
           company: edit.company,
           clientName: edit.company,
           agentId: edit.agent_id,
@@ -552,7 +555,8 @@ function App() {
           invoiceNumber: edit.invoice_number,
           notes: edit.notes || '',
           __isNew: edit.is_new,
-          __deleted: edit.is_deleted
+          __deleted: edit.is_deleted,
+          __editedFields
         };
       });
 
@@ -925,6 +929,7 @@ function App() {
     const upserts = rows
       .filter(row => row.id)
       .map(row => {
+        const editedFields = row.__editedFields ? JSON.stringify(row.__editedFields) : null;
         return {
           id: String(row.id),
           amount: Number(row.amount) || 0,
@@ -940,7 +945,8 @@ function App() {
           last_no_usage_date: row.lastNoUsageDate || null,
           updated_by: user?.id,
           updated_at: new Date().toISOString(),
-          invoice_number: row.invoiceNumber || null
+          invoice_number: row.invoiceNumber || null,
+          __edited_fields: editedFields
         };
       });
 
@@ -1283,38 +1289,50 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
     today.setHours(0, 0, 0, 0);
 
     const getEarliestUnprocessedInvDate = (item) => {
-      const cycle = normalizeBillingCycle(item.billingCycle);
+      const rawCycle = item.billingCycle || '';
+      const cycle = normalizeBillingCycle(rawCycle);
+
       if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED, BILLING_CYCLES.MULTIPLE].includes(cycle)) return null;
 
       const getDates = (type, refDate) => {
         const inv = new Date(refDate);
         const day = refDate.getDay();
-        
+
         if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
           let diff = day - 1;
           if (diff < 0) diff += 7;
           inv.setDate(refDate.getDate() - diff);
-        } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+          return inv;
+        }
+        if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
           let diff = day - 4;
           if (diff < 0) diff += 7;
           inv.setDate(refDate.getDate() - diff);
-        } else {
-          // Twice-a-week cases
-          let dayA = 1, dayB = 4;
-          if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
-          else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
-          
-          const d1 = new Date(refDate);
-          let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
-          d1.setDate(d1.getDate() - diff1);
-
-          const d2 = new Date(refDate);
-          let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
-          d2.setDate(d2.getDate() - diff2);
-
-          const active = d1 > d2 ? d1 : d2;
-          inv.setTime(active.getTime());
+          return inv;
         }
+
+        let dayA = 1, dayB = 4;
+        if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
+        else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+        else if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
+          const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
+          if (match) {
+            const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
+            dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
+            dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
+          }
+        }
+
+        const d1 = new Date(refDate);
+        let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
+        d1.setDate(d1.getDate() - diff1);
+
+        const d2 = new Date(refDate);
+        let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
+        d2.setDate(d2.getDate() - diff2);
+
+        const active = d1 > d2 ? d1 : d2;
+        inv.setTime(active.getTime());
         return inv;
       };
 
@@ -1343,7 +1361,6 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
 
     return agentData.filter(item => {
       const invDate = getEarliestUnprocessedInvDate(item);
-      // Ensure today is defined as local start of day
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       return invDate && todayStart >= invDate;
