@@ -159,6 +159,8 @@ const createDefaultFormData = () => ({
   company: '',
   amount: '',
   billingCycle: BILLING_CYCLES.UNSPECIFIED,
+  cycleDay1: 'Mon',
+  cycleDay2: 'Thu',
   customBillingCycle: '',
   dueDate: new Date().toISOString().split('T')[0],
   status: 'pending',
@@ -172,6 +174,16 @@ const createFormDataFromDebtor = (debtor) => {
 
   const incomingCycleRaw = String(debtor.billingCycle || '').trim();
   const incomingCycle = normalizeBillingCycle(incomingCycleRaw);
+
+  let day1 = 'Mon', day2 = 'Thu';
+  if (incomingCycleRaw.toLowerCase().includes('twice') && incomingCycleRaw.includes('/')) {
+    const match = incomingCycleRaw.match(/\((.*?)\s*\/\s*(.*?)\)/);
+    if (match) {
+      day1 = match[1].trim();
+      day2 = match[2].trim();
+    }
+  }
+
   const knownCycles = new Set([...BILLING_CYCLE_OPTIONS, BILLING_CYCLES.MULTIPLE]);
   const useCustomCycle = incomingCycleRaw && !knownCycles.has(incomingCycle);
 
@@ -182,6 +194,8 @@ const createFormDataFromDebtor = (debtor) => {
     clientName: debtor.company || debtor.clientName || '',
     amount: debtor.amount ?? '',
     billingCycle: useCustomCycle ? 'custom' : incomingCycle,
+    cycleDay1: day1,
+    cycleDay2: day2,
     customBillingCycle: useCustomCycle ? incomingCycleRaw : ''
   };
 };
@@ -195,9 +209,13 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const finalBillingCycle = formData.billingCycle === 'custom'
+    let finalBillingCycle = formData.billingCycle === 'custom'
       ? formData.customBillingCycle.trim()
       : formData.billingCycle;
+
+    if (formData.billingCycle === BILLING_CYCLES.TWICE) {
+      finalBillingCycle = `Twice (${formData.cycleDay1} / ${formData.cycleDay2})`;
+    }
 
     const finalCompany = formData.clientName.trim();
 
@@ -259,13 +277,49 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
                 value={formData.billingCycle}
                 onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}
               >
-                {BILLING_CYCLE_OPTIONS.map((cycle) => (
-                  <option key={cycle} value={cycle}>{cycle}</option>
-                ))}
+                <option value={BILLING_CYCLES.MONDAY_SUNDAY}>{BILLING_CYCLES.MONDAY_SUNDAY}</option>
+                <option value={BILLING_CYCLES.THURSDAY_WEDNESDAY}>{BILLING_CYCLES.THURSDAY_WEDNESDAY}</option>
+                <option value={BILLING_CYCLES.TWICE}>Twice (custom days)</option>
+                <option value={BILLING_CYCLES.CS_BY_AGENT}>{BILLING_CYCLES.CS_BY_AGENT}</option>
+                <option value={BILLING_CYCLES.MULTIPLE}>{BILLING_CYCLES.MULTIPLE}</option>
+                <option value={BILLING_CYCLES.UNSPECIFIED}>{BILLING_CYCLES.UNSPECIFIED}</option>
                 <option value="custom">Other (custom)</option>
               </select>
             </FormGroup>
           </FormRow>
+
+          {formData.billingCycle === BILLING_CYCLES.TWICE && (
+            <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--brand)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>Twice Weekly Schedule</div>
+              <FormRow>
+                <FormGroup>
+                  <label>First Invoice Day</label>
+                  <select
+                    value={formData.cycleDay1}
+                    onChange={e => setFormData({ ...formData, cycleDay1: e.target.value })}
+                  >
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                </FormGroup>
+                <FormGroup>
+                  <label>Second Invoice Day</label>
+                  <select
+                    value={formData.cycleDay2}
+                    onChange={e => setFormData({ ...formData, cycleDay2: e.target.value })}
+                  >
+                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                </FormGroup>
+              </FormRow>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                * Due Date = Invoice day + 1. Example: invoice Mon → due Tue.
+              </div>
+            </div>
+          )}
 
           {formData.billingCycle === 'custom' && (
             <FormGroup>

@@ -293,7 +293,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
               <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
               <Legend />
-              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive={false}>
+              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive animationDuration={800}>
                 {agentChartData.map((entry) => (
                   <Cell key={entry.agent} fill={entry.color} />
                 ))}
@@ -306,7 +306,7 @@ export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selected
           <PanelTitle>Portfolio Status Split</PanelTitle>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive={false}>
+              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive animationDuration={800}>
                 {statusDonutData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
