@@ -605,6 +605,20 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                     {item.sla.status.label}
                   </StatusBadge>
                   <CycleTag>{normalizeBillingCycle(item.billingCycle)}</CycleTag>
+                  {(Number(item.noUsageCount) || 0) > 0 && (
+                    <div style={{ 
+                      fontSize: '0.6rem', 
+                      color: (Number(item.noUsageCount) || 0) >= 3 ? '#f87171' : '#fb923c', 
+                      fontWeight: '800', 
+                      marginTop: '0.2rem',
+                      textTransform: 'uppercase',
+                      background: 'rgba(0,0,0,0.2)',
+                      padding: '2px 6px',
+                      borderRadius: '4px'
+                    }}>
+                      No Usage: {item.noUsageCount}/3
+                    </div>
+                  )}
                 </div>
               </CardHead>
 

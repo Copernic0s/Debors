@@ -342,14 +342,22 @@ const ViewButton = styled.button`
 
   .priority-badge {
     position: absolute;
-    top: -4px;
-    right: -4px;
-    width: 8px;
-    height: 8px;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
     background: #ef4444;
-    border-radius: 50%;
-    box-shadow: 0 0 10px #ef4444;
-    border: 1px solid rgba(255,255,255,0.2);
+    color: white;
+    border-radius: 9px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+    border: 1.5px solid #0f172a;
+    z-index: 5;
   }
 `;
 
@@ -457,7 +465,10 @@ const aggregateByCompany = (rows) => {
     const lastRows = companyRows.slice(-3);
     const consecutiveNoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
     
-    if (consecutiveNoUsage) {
+    // Also check persistent counter from manual edits
+    const persistentNoUsageCount = Number(item.noUsageCount) || 0;
+
+    if (consecutiveNoUsage || persistentNoUsageCount >= 3) {
       item.status = 'inactive';
     }
 
@@ -534,6 +545,7 @@ function App() {
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
+          noUsageCount: Number(edit.no_usage_count) || 0,
           invoiceNumber: edit.invoice_number,
           notes: edit.notes || '',
           __isNew: edit.is_new,
@@ -894,6 +906,7 @@ function App() {
         is_deleted: Boolean(row.__deleted),
         last_invoiced_date: row.lastInvoicedDate || null,
         last_no_usage_date: row.lastNoUsageDate || null,
+        no_usage_count: Number(row.noUsageCount) || 0,
         updated_by: user?.id,
         updated_at: new Date().toISOString(),
         invoice_number: row.invoiceNumber || null
@@ -1106,7 +1119,8 @@ function App() {
           lastInvoicedDate: todayDate,
           dueDate: calculatedDue,
           invoiceNumber: invNumber || item.invoiceNumber,
-          status: newStatus
+          status: newStatus,
+          noUsageCount: 0 // Reset streak on invoice
         };
         changed.push(updated);
         return updated;
@@ -1147,7 +1161,13 @@ function App() {
         const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
-        const updated = { ...item, lastNoUsageDate: todayDate };
+        const nextCount = (Number(item.noUsageCount) || 0) + 1;
+        const updated = { 
+          ...item, 
+          lastNoUsageDate: todayDate,
+          noUsageCount: nextCount,
+          status: nextCount >= 3 ? 'inactive' : item.status
+        };
         changed.push(updated);
         return updated;
       });
@@ -1156,7 +1176,7 @@ function App() {
       return next;
     });
 
-    toast.success(`${debtor.company} marked as No Usage`, {
+    toast.success(`${debtor.company} marked as No Usage (Streak: ${(Number(debtor.noUsageCount) || 0) + 1})`, {
       icon: '🚫',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
@@ -1296,11 +1316,21 @@ function App() {
     };
 
     return agentData.filter(item => {
+      const cycle = normalizeBillingCycle(item.billingCycle);
+      if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED].includes(cycle)) return false;
+
+      // Logic from InvoiceRoadmap to determine if it's Closing, Today, or Overdue
       const invDate = getEarliestUnprocessedInvDate(item);
-      // Ensure today is defined as local start of day
+      if (!invDate) return false;
+
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      return invDate && todayStart >= invDate;
+      
+      // Calculate diff in days
+      const diff = Math.floor((todayStart - invDate) / (1000 * 60 * 60 * 24));
+      
+      // Count if it's Closing Period (diff -1), Today (0), or Overdue (>0)
+      return diff >= -1;
     }).length;
   }, [agentData]);
 
@@ -1321,7 +1351,7 @@ function App() {
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         <ViewButton type="button" $statusColor="#38bdf8" $active={activeView === 'sla'} onClick={() => setActiveView('sla')} style={{ position: 'relative' }}>
           SLA Monitor
-          {slaPriorityCount > 0 && <div className="priority-badge" />}
+          {slaPriorityCount > 0 && <div className="priority-badge">{slaPriorityCount}</div>}
         </ViewButton>
       </ViewSwitch>
 
