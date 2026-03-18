@@ -316,35 +316,31 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         end.setDate(inv.getDate() - 1);
         due.setDate(inv.getDate() + 1); 
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-      } else {
-        let dayA = 1, dayB = 4;
-        if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
-          const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
-          if (match) {
-            const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
-            dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
-            dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
-          }
-        } else if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
-        else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+      } else if (type === BILLING_CYCLES.TWICE) {
+        const invMon = new Date(refDate);
+        let diffMon = invMon.getDay() - 1;
+        if (diffMon < 0) diffMon += 7;
+        invMon.setDate(invMon.getDate() - diffMon);
 
-        const getInvDate = (targetDay) => {
-          const d = new Date(refDate);
-          let diff = d.getDay() - targetDay;
-          if (diff < 0) diff += 7;
-          d.setDate(d.getDate() - diff);
-          return d;
-        };
+        const invThu = new Date(refDate);
+        let diffThu = invThu.getDay() - 4;
+        if (diffThu < 0) diffThu += 7;
+        invThu.setDate(invThu.getDate() - diffThu);
 
-        const invA = getInvDate(dayA);
-        const invB = getInvDate(dayB);
-        const activeInv = invA > invB ? invA : invB;
+        const activeInv = invMon > invThu ? invMon : invThu;
         inv.setTime(activeInv.getTime());
 
-        const gap = (activeInv.getDay() === dayA) ? (dayA - dayB + 7) % 7 : (dayB - dayA + 7) % 7;
-        start.setDate(inv.getDate() - gap);
-        end.setDate(inv.getDate() - 1);
-        due.setDate(inv.getDate() + 1);
+        if (activeInv.getDay() === 1) { // Monday Invoice
+          // Covers Thu - Sun
+          start.setDate(inv.getDate() - 4); // Thu
+          end.setDate(inv.getDate() - 1); // Sun
+          due.setDate(inv.getDate() + 1); // Tue
+        } else { // Thursday Invoice
+          // Covers Mon - Wed
+          start.setDate(inv.getDate() - 3); // Mon
+          end.setDate(inv.getDate() - 1); // Wed
+          due.setDate(inv.getDate() + 1); // Fri
+        }
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       }
       return { inv, due, start, end, periodStr };

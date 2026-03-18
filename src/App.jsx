@@ -1261,24 +1261,15 @@ function App() {
           let diff = day - 4;
           if (diff < 0) diff += 7;
           inv.setDate(refDate.getDate() - diff);
-        } else {
-          const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
-          let dayA = 1, dayB = 4; // Defaults
-          
-          if (String(type).toLowerCase().includes('twice') && String(type).includes('(')) {
-            const match = String(type).match(/\((.*?)\s*[\/\-]\s*(.*?)\)/);
-            if (match && match[1] && match[2]) {
-              dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
-              dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
-            }
-          }
-          
+        } else if (type === BILLING_CYCLES.TWICE) {
           const d1 = new Date(refDate);
-          let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
+          let diff1 = d1.getDay() - 1; // Monday
+          if (diff1 < 0) diff1 += 7;
           d1.setDate(d1.getDate() - diff1);
 
           const d2 = new Date(refDate);
-          let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
+          let diff2 = d2.getDay() - 4; // Thursday
+          if (diff2 < 0) diff2 += 7;
           d2.setDate(d2.getDate() - diff2);
 
           const active = d1 > d2 ? d1 : d2;
