@@ -401,6 +401,10 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       } else if (diff > 1) {
         details.percent = 100;
         details.status = { label: 'OVERDUE', color: '#ef4444', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
+      } else if (diff === -1) {
+        // One day before invoice
+        details.percent = 45;
+        details.status = { label: 'CLOSING PERIOD', color: '#fb923c', icon: <Clock size={14} />, highlight: true, id: 'closing' };
       } else {
         // Upcoming window
         details.percent = 33;
@@ -589,16 +593,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                 <div>
                   <CompanyName>{item.company}</CompanyName>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Sales: {item.agentId}</div>
-                  {item.lastInvoicedDate && (
-                    <div style={{ fontSize: '0.65rem', color: '#10b981', marginTop: '0.2rem', fontWeight: '700' }}>
-                      LAST BILL: {formatDate(item.lastInvoicedDate)}
-                    </div>
-                  )}
-                  {item.lastNoUsageDate && !item.lastInvoicedDate && (
-                    <div style={{ fontSize: '0.65rem', color: '#f87171', marginTop: '0.2rem', fontWeight: '700' }}>
-                      LAST NO USAGE: {formatDate(item.lastNoUsageDate)}
-                    </div>
-                  )}
                 </div>
                 <CycleTag>{normalizeBillingCycle(item.billingCycle)}</CycleTag>
               </CardHead>

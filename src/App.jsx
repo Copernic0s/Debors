@@ -455,15 +455,9 @@ const aggregateByCompany = (rows) => {
     ).sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
 
     const lastRows = companyRows.slice(-3);
-    const last3NoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
+    const consecutiveNoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
     
-    const last2Rows = companyRows.slice(-2);
-    const last2NoInvoiceAndNotPaid = last2Rows.length >= 2 && last2Rows.every(r => {
-      const s = String(r.status || '').toLowerCase();
-      return !r.invoiceNumber && s !== 'paid';
-    });
-
-    if (last3NoUsage || last2NoInvoiceAndNotPaid) {
+    if (consecutiveNoUsage) {
       item.status = 'inactive';
     }
 
