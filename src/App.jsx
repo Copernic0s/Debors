@@ -1308,6 +1308,21 @@ function App() {
           break;
         }
 
+        // If processed, check if we should look FORWARD (only on first iteration)
+        if (iterations === 0) {
+          const lookAheadRef = new Date(inv);
+          lookAheadRef.setDate(lookAheadRef.getDate() + 7);
+          const nextInv = getDates(cycle, lookAheadRef);
+          
+          const isNextProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= nextInv) ||
+            (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= nextInv);
+          
+          if (!isNextProcessed) {
+            finalInv = nextInv;
+            break; 
+          }
+        }
+
         currentRef = new Date(inv);
         currentRef.setDate(inv.getDate() - 1);
         iterations++;
