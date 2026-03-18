@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
   ResponsiveContainer,
@@ -41,12 +41,15 @@ const Panel = styled.section`
   backdrop-filter: blur(12px);
   padding: 1.5rem;
   min-height: 320px;
-  animation: fadeInUp 0.4s ease-out both;
-  animation-delay: ${props => props.$delay || 0}ms;
+  animation: fadeInFast 0.3s ease-out forwards;
   box-shadow: var(--shadow-lg);
   transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+  
+  /* Performance optimizations */
   content-visibility: auto;
   contain-intrinsic-size: 1px 320px;
+  will-change: transform;
+  transform: translateZ(0);
 
   &:hover {
     border-color: rgba(56, 189, 248, 0.4);
@@ -54,15 +57,9 @@ const Panel = styled.section`
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
   }
 
-  @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(16px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  @keyframes fadeInFast {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 `;
 
@@ -156,9 +153,9 @@ const tooltipStyle = {
   color: '#d9e3f0'
 };
 
-const AreaChartVisual = React.memo(({ data, animationDuration = 1000 }) => (
+const AreaChartVisual = React.memo(({ data }) => (
   <ResponsiveContainer width="100%" height={280}>
-    <AreaChart data={data} isAnimationActive animationDuration={animationDuration}>
+    <AreaChart data={data}>
       <defs>
         <linearGradient id="colorOpen" x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
@@ -180,9 +177,7 @@ const AreaChartVisual = React.memo(({ data, animationDuration = 1000 }) => (
   </ResponsiveContainer>
 ));
 
-export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
-  const [mountTime] = useState(() => Date.now());
-
+export default function ManagerAnalytics({ invoiceRows, aggregatedRows, selectedAgent, onSelectAgent, onOpenCompanyProfile }) {
   // 1. Process Status Data
   const statusDonutData = useMemo(() => {
     const statusMap = {
@@ -272,7 +267,7 @@ export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRow
     <>
       <RechartsVisualFix />
       <Grid>
-        <Panel $delay={0}>
+        <Panel>
           <PanelTitle>Debt Distribution by Agent</PanelTitle>
           <PanelHint>Click a bar to focus the dashboard on that agent.</PanelHint>
           <div style={{ marginBottom: '0.75rem' }}>
@@ -298,7 +293,7 @@ export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRow
               <YAxis tick={{ fill: '#95a4bb', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} cursor={{ fill: 'transparent' }} />
               <Legend />
-              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive animationDuration={800}>
+              <Bar dataKey="open" name="Open Balance" radius={[6, 6, 0, 0]} cursor="pointer" isAnimationActive={false}>
                 {agentChartData.map((entry) => (
                   <Cell key={entry.agent} fill={entry.color} />
                 ))}
@@ -307,11 +302,11 @@ export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRow
           </ResponsiveContainer>
         </Panel>
 
-        <Panel $delay={100}>
+        <Panel>
           <PanelTitle>Portfolio Status Split</PanelTitle>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive animationDuration={800}>
+              <Pie data={statusDonutData} dataKey="value" nameKey="name" innerRadius={70} outerRadius={105} paddingAngle={3} stroke="none" isAnimationActive={false}>
                 {statusDonutData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
@@ -322,13 +317,13 @@ export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRow
           </ResponsiveContainer>
         </Panel>
 
-        <Panel $delay={200}>
+        <Panel>
           <PanelTitle>Weekly Open vs Collected</PanelTitle>
           <PanelHint>Open = Pending + Overdue totals. Collected = Paid amounts.</PanelHint>
-          <AreaChartVisual data={weekTrendData} animationDuration={1000} />
+          <AreaChartVisual data={weekTrendData} />
         </Panel>
 
-        <Panel $delay={300}>
+        <Panel>
           <PanelTitle>Top 10 Accounts to Prioritize</PanelTitle>
           <PanelHint>Click on a company name to view historical data.</PanelHint>
           <TableWrapper>
@@ -391,4 +386,4 @@ export default React.memo(function ManagerAnalytics({ invoiceRows, aggregatedRow
       </Grid>
     </>
   );
-});
+}

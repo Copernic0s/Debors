@@ -153,23 +153,12 @@ const ModalFooter = styled.div`
   }
 `;
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAY_ABBR_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
-const NUM_TO_DAY = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' };
-
-const getSecondBillingDay = (day1Name) => {
-  const day1 = DAY_ABBR_TO_NUM[day1Name] ?? 1;
-  const day2 = (day1 + 3) % 7;
-  return NUM_TO_DAY[day2];
-};
-
 const createDefaultFormData = () => ({
   id: `DB-${Math.floor(Math.random() * 10000)}`,
   clientName: '',
   company: '',
   amount: '',
   billingCycle: BILLING_CYCLES.UNSPECIFIED,
-  cycleDay1: 'Mon',
   customBillingCycle: '',
   dueDate: new Date().toISOString().split('T')[0],
   status: 'pending',
@@ -183,21 +172,8 @@ const createFormDataFromDebtor = (debtor) => {
 
   const incomingCycleRaw = String(debtor.billingCycle || '').trim();
   const incomingCycle = normalizeBillingCycle(incomingCycleRaw);
-
-  let day1 = 'Mon';
-  let isTwicePattern = false;
-
-  if (incomingCycleRaw.toLowerCase().includes('twice') && incomingCycleRaw.includes('/')) {
-    const match = incomingCycleRaw.match(/\((.*?)\s*\/\s*(.*?)\)/);
-    if (match) {
-      day1 = match[1].trim();
-      isTwicePattern = true;
-    }
-  }
-
   const knownCycles = new Set([...BILLING_CYCLE_OPTIONS, BILLING_CYCLES.MULTIPLE]);
-  const isGenericTwice = incomingCycle === BILLING_CYCLES.TWICE;
-  const useCustomCycle = incomingCycleRaw && !knownCycles.has(incomingCycle) && !isTwicePattern && !isGenericTwice;
+  const useCustomCycle = incomingCycleRaw && !knownCycles.has(incomingCycle);
 
   return {
     ...createDefaultFormData(),
@@ -205,8 +181,7 @@ const createFormDataFromDebtor = (debtor) => {
     company: debtor.company || debtor.clientName || '',
     clientName: debtor.company || debtor.clientName || '',
     amount: debtor.amount ?? '',
-    billingCycle: useCustomCycle ? 'custom' : (isTwicePattern ? BILLING_CYCLES.TWICE : incomingCycle),
-    cycleDay1: day1,
+    billingCycle: useCustomCycle ? 'custom' : incomingCycle,
     customBillingCycle: useCustomCycle ? incomingCycleRaw : ''
   };
 };
@@ -220,14 +195,9 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    let finalBillingCycle = formData.billingCycle === 'custom'
+    const finalBillingCycle = formData.billingCycle === 'custom'
       ? formData.customBillingCycle.trim()
       : formData.billingCycle;
-
-    if (formData.billingCycle === BILLING_CYCLES.TWICE) {
-      const day2 = getSecondBillingDay(formData.cycleDay1);
-      finalBillingCycle = `Twice (${formData.cycleDay1} / ${day2})`;
-    }
 
     const finalCompany = formData.clientName.trim();
 
@@ -289,43 +259,13 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
                 value={formData.billingCycle}
                 onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}
               >
-                <option value={BILLING_CYCLES.MONDAY_SUNDAY}>{BILLING_CYCLES.MONDAY_SUNDAY}</option>
-                <option value={BILLING_CYCLES.THURSDAY_WEDNESDAY}>{BILLING_CYCLES.THURSDAY_WEDNESDAY}</option>
-                <option value={BILLING_CYCLES.TWICE}>Twice (custom days)</option>
-                <option value={BILLING_CYCLES.CS_BY_AGENT}>{BILLING_CYCLES.CS_BY_AGENT}</option>
-                <option value={BILLING_CYCLES.MULTIPLE}>{BILLING_CYCLES.MULTIPLE}</option>
-                <option value={BILLING_CYCLES.UNSPECIFIED}>{BILLING_CYCLES.UNSPECIFIED}</option>
+                {BILLING_CYCLE_OPTIONS.map((cycle) => (
+                  <option key={cycle} value={cycle}>{cycle}</option>
+                ))}
+                <option value="custom">Other (custom)</option>
               </select>
             </FormGroup>
           </FormRow>
-
-          {formData.billingCycle === BILLING_CYCLES.TWICE && (
-            <div style={{ background: 'rgba(56, 189, 248, 0.05)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--brand)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>Twice Weekly Schedule</div>
-              <FormRow>
-                <FormGroup>
-                  <label>First Invoice Day</label>
-                  <select
-                    value={formData.cycleDay1}
-                    onChange={e => setFormData({ ...formData, cycleDay1: e.target.value })}
-                  >
-                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                      <option key={day} value={day}>{day}</option>
-                    ))}
-                  </select>
-                </FormGroup>
-                <FormGroup>
-                  <label>Second Invoice Day</label>
-                  <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', color: 'var(--text-main)', fontSize: '0.875rem' }}>
-                    {getSecondBillingDay(formData.cycleDay1)}
-                  </div>
-                </FormGroup>
-              </FormRow>
-              <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                * Due Date = Invoice day + 1. Example: invoice Mon → due Tue.
-              </div>
-            </div>
-          )}
 
           {formData.billingCycle === 'custom' && (
             <FormGroup>

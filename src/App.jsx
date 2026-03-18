@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
 import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
@@ -6,16 +6,14 @@ import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
 import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
+import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import InvoiceRoadmap from './components/InvoiceRoadmap';
 import ProcessInvoiceModal from './components/ProcessInvoiceModal';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
-
-const ManagerAnalytics = lazy(() => import('./components/ManagerAnalytics'));
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { isOverdue } from './utils/dateUtils';
 import './index.css';
 
 // Table used for cloud persistence
@@ -27,13 +25,10 @@ const mergeManualEdits = (rows, editsById) => {
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
-      const { __editedFields: patchEditedFields, ...patchData } = patch;
-      const existingEditedFields = row.__editedFields || {};
-      const mergedEditedFields = { ...existingEditedFields, ...patchEditedFields };
+      // Merge all edits, prioritizing manual overrides
       return {
         ...row,
-        ...patchData,
-        __editedFields: mergedEditedFields
+        ...patch
       };
     });
 
@@ -89,74 +84,6 @@ const roundMoney = (value) => {
   const parsed = parseMoneyValue(value);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : Number.NaN;
 };
-
-const normalizeCompanyKey = (name) => {
-  if (!name) return '';
-  return String(name).trim().toLowerCase().replace(/['''`]/g, "'").replace(/[""]/g, '"').replace(/–/g, '-').replace(/\s+/g, ' ');
-};
-
-const AnalyticsSkeletonGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 1rem;
-
-  @media (max-width: 1100px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const AnalyticsSkeletonPanel = styled.section`
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(12px);
-  padding: 1.5rem;
-  min-height: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  content-visibility: auto;
-  contain-intrinsic-size: 1px 320px;
-`;
-
-const SkeletonBar = styled.div`
-  height: ${props => props.$h || '280px'};
-  border-radius: var(--radius-md);
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0.03) 0%,
-    rgba(255,255,255,0.07) 50%,
-    rgba(255,255,255,0.03) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-
-  @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-  }
-`;
-
-const AnalyticsSkeleton = () => (
-  <AnalyticsSkeletonGrid>
-    <AnalyticsSkeletonPanel>
-      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
-      <SkeletonBar $h="280px" />
-    </AnalyticsSkeletonPanel>
-    <AnalyticsSkeletonPanel>
-      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
-      <SkeletonBar $h="280px" />
-    </AnalyticsSkeletonPanel>
-    <AnalyticsSkeletonPanel>
-      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
-      <SkeletonBar $h="280px" />
-    </AnalyticsSkeletonPanel>
-    <AnalyticsSkeletonPanel>
-      <SkeletonBar $h="20px" style={{ maxWidth: '60%' }} />
-      <SkeletonBar $h="280px" />
-    </AnalyticsSkeletonPanel>
-  </AnalyticsSkeletonGrid>
-);
 
 const AppContainer = styled.div`
   min-height: 100vh;
@@ -429,7 +356,7 @@ const ViewButton = styled.button`
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = [...debtRows];
   const existingPairs = new Set(
-    debtRows.map((row) => `${String(row.agentId || '').trim().toLowerCase()}|${normalizeCompanyKey(row.company || row.clientName)}`)
+    debtRows.map((row) => `${String(row.agentId || '').trim().toLowerCase()}|${String(row.company || row.clientName || '').trim().toLowerCase()}`)
   );
 
   csRows.forEach((row) => {
@@ -524,7 +451,7 @@ const aggregateByCompany = (rows) => {
     // NEW INACTIVE LOGIC
     // Sort all rows for this company by week (simple sort for now)
     const companyRows = rows.filter(r => 
-      normalizeCompanyKey(r.company || r.clientName) === normalizeCompanyKey(item.company)
+      String(r.company || r.clientName || '').trim().toLowerCase() === item.company.toLowerCase()
     ).sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
 
     const lastRows = companyRows.slice(-3);
@@ -603,12 +530,9 @@ function App() {
 
       const editsById = {};
       edits.forEach(edit => {
-        let __editedFields = {};
-        if (edit.__edited_fields) {
-          try { __editedFields = JSON.parse(edit.__edited_fields); } catch {}
-        }
         editsById[edit.id] = {
           ...edit,
+          // Map DB snake_case to App camelCase
           company: edit.company,
           clientName: edit.company,
           agentId: edit.agent_id,
@@ -619,8 +543,7 @@ function App() {
           invoiceNumber: edit.invoice_number,
           notes: edit.notes || '',
           __isNew: edit.is_new,
-          __deleted: edit.is_deleted,
-          __editedFields
+          __deleted: edit.is_deleted
         };
       });
 
@@ -638,7 +561,7 @@ function App() {
   }, [user, fetchManualEdits]);
 
   // Data Repair: If we have confirm records (lastInvoicedDate) but no dueDate,
-  // calculate it and persist it. Runs once on initial load.
+  // calculate it and persist it. This fixes records from before this patch.
   useEffect(() => {
     if (loading || !manualEdits || Object.keys(manualEdits).length === 0) return;
 
@@ -670,27 +593,27 @@ function App() {
   useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
 
+    // Always merge from the LATEST reference of manualEdits
     const hydrated = mergeManualEdits(rawZohoData, manualEdits);
 
+    // Apply Smart Billing Logic: Auto-Overdue
+    const today = new Date();
+    const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
     const withSmartStatus = hydrated.map(row => {
-      const status = row.status || 'pending';
-      const isManuallyEdited = row.__editedFields?.status === true;
+      let status = row.status || 'pending';
       let isAutoOverdue = false;
 
-      if (isManuallyEdited) {
-        return { ...row, isAutoOverdue: false };
-      }
-
+      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
       if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        if (isOverdue(row.dueDate)) {
+        const parsedDue = new Date(`${row.dueDate}T00:00:00`);
+        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < dayStart) {
+          status = 'overdue';
           isAutoOverdue = true;
-          return { ...row, status: 'overdue', isAutoOverdue };
-        } else if (status === 'overdue') {
-          return { ...row, status: 'pending', isAutoOverdue: false };
         }
       }
 
-      return { ...row, isAutoOverdue };
+      return { ...row, status, isAutoOverdue };
     });
 
     setData(withSmartStatus);
@@ -795,40 +718,29 @@ function App() {
         setData((prev) => {
           const changed = [];
           const next = prev.map((item) => {
-            const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+            const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
             if (!sameCompany) return item;
 
             const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
             const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
             if (!inAgentScope || !inWeekScope) return item;
 
-            const newAmount = Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0;
-            const editedFields = {};
-            if (item.amount !== newAmount) editedFields.amount = true;
-            if (item.status !== debtor.status) editedFields.status = true;
-            if (item.dueDate !== debtor.dueDate) editedFields.dueDate = true;
-            if (item.billingCycle !== debtor.billingCycle) editedFields.billingCycle = true;
-            if (item.agentId !== debtor.agentId) editedFields.agentId = true;
-            if (item.notes !== debtor.notes) editedFields.notes = true;
-            if (item.invoiceNumber !== debtor.invoiceNumber) editedFields.invoiceNumber = true;
-
             const updatedRow = {
               ...item,
               company: debtor.company || debtor.clientName,
               clientName: debtor.company || debtor.clientName,
-              amount: newAmount,
+              amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
               dueDate: debtor.dueDate,
               status: debtor.status,
               agentId: debtor.agentId,
               billingCycle: debtor.billingCycle,
               invoiceNumber: debtor.invoiceNumber,
-              notes: debtor.notes,
-              __editedFields: { ...item.__editedFields, ...editedFields }
+              notes: debtor.notes
             };
             changed.push(updatedRow);
             return updatedRow;
           });
-
+          
           if (changed.length > 0) {
             setManualEdits(prevEdits => {
               const nextEdits = { ...prevEdits };
@@ -844,29 +756,13 @@ function App() {
         });
       } else {
         setData((prev) => {
-          const existing = prev.find(d => d.id === debtor.id);
-          const editedFields = {};
-          if (existing) {
-            if (existing.amount !== debtor.amount) editedFields.amount = true;
-            if (existing.status !== debtor.status) editedFields.status = true;
-            if (existing.dueDate !== debtor.dueDate) editedFields.dueDate = true;
-            if (existing.billingCycle !== debtor.billingCycle) editedFields.billingCycle = true;
-            if (existing.agentId !== debtor.agentId) editedFields.agentId = true;
-            if (existing.notes !== debtor.notes) editedFields.notes = true;
-            if (existing.invoiceNumber !== debtor.invoiceNumber) editedFields.invoiceNumber = true;
-          }
-
-          const updatedDebtor = {
-            ...debtor,
-            __editedFields: { ...(existing?.__editedFields || {}), ...editedFields }
-          };
-          const next = prev.map((d) => (d.id === debtor.id ? updatedDebtor : d));
+          const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
           setManualEdits(prevEdits => {
-            const nextEdits = { ...prevEdits, [debtor.id]: updatedDebtor };
+            const nextEdits = { ...prevEdits, [debtor.id]: debtor };
             manualEditsRef.current = nextEdits;
             return nextEdits;
           });
-          persistEditedRows([updatedDebtor]);
+          persistEditedRows([debtor]);
           return next;
         });
       }
@@ -879,10 +775,7 @@ function App() {
       const newDebtor = {
         ...debtor,
         id: newId,
-        amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
-        __isNew: true,
-        __deleted: false,
-        __editedFields: { amount: true, status: true, dueDate: true, billingCycle: true, agentId: true, notes: true, invoiceNumber: true, company: true }
+        amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
       };
       setData([newDebtor, ...data]);
       setManualEdits((prev) => {
@@ -942,11 +835,11 @@ function App() {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
 
       const rowsToDelete = data.filter((d) =>
-        normalizeCompanyKey(d.company || d.clientName) === targetCompany
+        String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
       );
 
       setData((prev) => prev.filter((d) =>
-        normalizeCompanyKey(d.company || d.clientName) !== targetCompany
+        String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
       ));
 
       setManualEdits((prev) => {
@@ -990,33 +883,31 @@ function App() {
   const persistEditedRows = async (rows) => {
     if (!rows || rows.length === 0 || !user) return;
 
+    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
+    // We also filter out any null or undefined IDs.
     const upserts = rows
       .filter(row => row.id)
-      .map(row => {
-        const editedFields = row.__editedFields ? JSON.stringify(row.__editedFields) : null;
-        return {
-          id: String(row.id),
-          amount: Number(row.amount) || 0,
-          status: String(row.status || 'pending'),
-          notes: String(row.notes || ''),
-          agent_id: String(row.agentId || 'Unassigned'),
-          billing_cycle: String(row.billingCycle || 'Unspecified'),
-          due_date: row.dueDate || null,
-          company: String(row.company || row.clientName || 'Unknown'),
-          is_new: Boolean(row.__isNew),
-          is_deleted: Boolean(row.__deleted),
-          last_invoiced_date: row.lastInvoicedDate || null,
-          last_no_usage_date: row.lastNoUsageDate || null,
-          updated_by: user?.id,
-          updated_at: new Date().toISOString(),
-          invoice_number: row.invoiceNumber || null,
-          __edited_fields: editedFields
-        };
-      });
+      .map(row => ({
+        id: String(row.id),
+        amount: Number(row.amount) || 0,
+        status: String(row.status || 'pending'),
+        notes: String(row.notes || ''),
+        agent_id: String(row.agentId || 'Unassigned'),
+        billing_cycle: String(row.billingCycle || 'Unspecified'),
+        due_date: row.dueDate || null,
+        company: String(row.company || row.clientName || 'Unknown'),
+        is_new: Boolean(row.__isNew),
+        is_deleted: Boolean(row.__deleted),
+        last_invoiced_date: row.lastInvoicedDate || null,
+        last_no_usage_date: row.lastNoUsageDate || null,
+        updated_by: user?.id,
+        updated_at: new Date().toISOString(),
+        invoice_number: row.invoiceNumber || null
+      }));
 
     if (upserts.length === 0) return;
 
-    console.log('[Persistence] Upserting rows:', upserts.length);
+    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
 
     try {
       const { error } = await supabase
@@ -1028,6 +919,7 @@ function App() {
         throw error;
       }
 
+      // Update local ref after successful DB update
       setManualEdits(prev => {
         const next = { ...prev };
         rows.forEach(row => {
@@ -1044,7 +936,7 @@ function App() {
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
-    const targetCompany = normalizeCompanyKey(row.company || row.clientName);
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
     const normalizedNextCycle = normalizeBillingCycle(nextCycle);
@@ -1052,7 +944,7 @@ function App() {
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1061,8 +953,7 @@ function App() {
 
         const updatedRow = {
           ...item,
-          billingCycle: normalizedNextCycle,
-          __editedFields: { ...item.__editedFields, billingCycle: true }
+          billingCycle: normalizedNextCycle
         };
         changed.push(updatedRow);
         return updatedRow;
@@ -1077,7 +968,7 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    const targetCompany = normalizeCompanyKey(row.company || row.clientName);
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
     const normalizedStatus = String(nextStatus || '').toLowerCase();
@@ -1085,7 +976,7 @@ function App() {
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1094,8 +985,7 @@ function App() {
 
         const updatedRow = {
           ...item,
-          status: normalizedStatus,
-          __editedFields: { ...item.__editedFields, status: true }
+          status: normalizedStatus
         };
         changed.push(updatedRow);
         return updatedRow;
@@ -1110,7 +1000,7 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
-    const targetCompany = normalizeCompanyKey(row.company || row.clientName);
+    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
     const parsedAmount = roundMoney(nextAmount);
@@ -1120,7 +1010,7 @@ function App() {
       const matchingIndexes = [];
 
       prev.forEach((item, index) => {
-        const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return;
 
         const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1135,7 +1025,7 @@ function App() {
       const updated = [...prev];
       if (matchingIndexes.length === 1) {
         const idx = matchingIndexes[0];
-        updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount), __editedFields: { ...updated[idx].__editedFields, amount: true } };
+        updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount) };
         persistEditedRows([updated[idx]]);
         return updated;
       }
@@ -1145,25 +1035,24 @@ function App() {
         matchingIndexes.forEach((idx, index) => {
           updated[idx] = {
             ...updated[idx],
-            amount: index === 0 ? roundMoney(parsedAmount) : 0,
-            __editedFields: { ...updated[idx].__editedFields, amount: true }
+            amount: index === 0 ? roundMoney(parsedAmount) : 0
           };
         });
-persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
+        persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
         return updated;
       }
 
       let runningSum = 0;
       matchingIndexes.forEach((idx, index) => {
         if (index === matchingIndexes.length - 1) {
-          updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount - runningSum), __editedFields: { ...updated[idx].__editedFields, amount: true } };
+          updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount - runningSum) };
           return;
         }
 
         const ratio = (Number(updated[idx].amount) || 0) / currentTotal;
         const nextValue = roundMoney(parsedAmount * ratio);
         runningSum = roundMoney(runningSum + nextValue);
-        updated[idx] = { ...updated[idx], amount: nextValue, __editedFields: { ...updated[idx].__editedFields, amount: true } };
+        updated[idx] = { ...updated[idx], amount: nextValue };
       });
 
       persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
@@ -1176,11 +1065,13 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
   };
 
   const handleMarkInvoiced = (debtor) => {
-    const targetCompany = normalizeCompanyKey(debtor.company || debtor.clientName);
+    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
+    // Auto-detection logic: Find any existing invoice number for this company
+    // in the current data set to suggest to the user.
     const existing = data.find(item =>
-      normalizeCompanyKey(item.company || item.clientName) === targetCompany &&
+      String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany &&
       item.invoiceNumber &&
       String(item.invoiceNumber).trim() !== ''
     );
@@ -1192,7 +1083,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
 
   const handleConfirmProcess = (invNumber) => {
     if (!processingDebtor) return;
-    const targetCompany = normalizeCompanyKey(processingDebtor.company || processingDebtor.clientName);
+    const targetCompany = String(processingDebtor.company || processingDebtor.clientName || '').trim().toLowerCase();
     
     // Use local date instead of UTC to avoid timezone shift
     const now = new Date();
@@ -1201,7 +1092,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
         // Sync: If it's the target company, mark lastInvoicedDate
@@ -1251,7 +1142,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
   };
 
   const handleMarkNoUsage = (debtor) => {
-    const targetCompany = normalizeCompanyKey(debtor.company || debtor.clientName);
+    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
     if (!targetCompany) return;
 
     const todayDate = new Date().toISOString().split('T')[0];
@@ -1259,7 +1150,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = normalizeCompanyKey(item.company || item.clientName) === targetCompany;
+        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
         if (!sameCompany) return item;
 
         const updated = { ...item, lastNoUsageDate: todayDate };
@@ -1297,7 +1188,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
     agentData.forEach((item) => {
-      const key = normalizeCompanyKey(item.company || item.clientName);
+      const key = String(item.company || item.clientName || '').trim().toLowerCase();
       if (!key) return;
       const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
       const previous = map.get(key) || false;
@@ -1320,7 +1211,8 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
     if (!activeCompany) return null;
 
     const scopedRows = data.filter((item) => {
-      const byCompany = normalizeCompanyKey(item.company || item.clientName) === normalizeCompanyKey(activeCompany);
+      const company = String(item.company || item.clientName || '').trim().toLowerCase();
+      const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
       const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
@@ -1351,52 +1243,47 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
   const slaPriorityCount = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const day = today.getDay();
 
     const getEarliestUnprocessedInvDate = (item) => {
-      const rawCycle = item.billingCycle || '';
-      const cycle = normalizeBillingCycle(rawCycle);
-
+      const cycle = normalizeBillingCycle(item.billingCycle);
       if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED, BILLING_CYCLES.MULTIPLE].includes(cycle)) return null;
 
       const getDates = (type, refDate) => {
         const inv = new Date(refDate);
         const day = refDate.getDay();
-
+        
         if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
           let diff = day - 1;
           if (diff < 0) diff += 7;
           inv.setDate(refDate.getDate() - diff);
-          return inv;
-        }
-        if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+        } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
           let diff = day - 4;
           if (diff < 0) diff += 7;
           inv.setDate(refDate.getDate() - diff);
-          return inv;
+        } else {
+          let dayA = 1, dayB = 4;
+          if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
+            const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
+            if (match) {
+              const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
+              dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
+              dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
+            }
+          } else if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
+          else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+          
+          const d1 = new Date(refDate);
+          let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
+          d1.setDate(d1.getDate() - diff1);
+
+          const d2 = new Date(refDate);
+          let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
+          d2.setDate(d2.getDate() - diff2);
+
+          const active = d1 > d2 ? d1 : d2;
+          inv.setTime(active.getTime());
         }
-
-        let dayA = 1, dayB = 4;
-        if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
-        else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
-        else if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
-          const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
-          if (match) {
-            const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
-            dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
-            dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
-          }
-        }
-
-        const d1 = new Date(refDate);
-        let diff1 = d1.getDay() - dayA; if (diff1 < 0) diff1 += 7;
-        d1.setDate(d1.getDate() - diff1);
-
-        const d2 = new Date(refDate);
-        let diff2 = d2.getDay() - dayB; if (diff2 < 0) diff2 += 7;
-        d2.setDate(d2.getDate() - diff2);
-
-        const active = d1 > d2 ? d1 : d2;
-        inv.setTime(active.getTime());
         return inv;
       };
 
@@ -1425,6 +1312,7 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
 
     return agentData.filter(item => {
       const invDate = getEarliestUnprocessedInvDate(item);
+      // Ensure today is defined as local start of day
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       return invDate && todayStart >= invDate;
@@ -1506,15 +1394,13 @@ persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
       )}
 
       {activeView === 'analytics' && (
-        <Suspense fallback={<AnalyticsSkeleton />}>
-          <ManagerAnalytics
-            invoiceRows={scopedInvoiceData}
-            aggregatedRows={agentData}
-            selectedAgent={selectedAgent}
-            onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
-            onOpenCompanyProfile={openCompanyProfile}
-          />
-        </Suspense>
+        <ManagerAnalytics
+          invoiceRows={scopedInvoiceData}
+          aggregatedRows={agentData}
+          selectedAgent={selectedAgent}
+          onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+          onOpenCompanyProfile={openCompanyProfile}
+        />
       )}
 
       {activeView === 'sla' && (

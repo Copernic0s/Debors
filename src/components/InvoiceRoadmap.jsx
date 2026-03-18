@@ -266,6 +266,8 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
     return d;
   }, []);
 
+  const currentDay = today.getDay();
+
   const formatDate = (date) => {
     if (!date) return 'N/A';
     const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
@@ -312,36 +314,38 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         inv.setDate(refDate.getDate() - diff);
         start.setDate(inv.getDate() - 7);
         end.setDate(inv.getDate() - 1);
+        due.setDate(inv.getDate() + 1); 
+        periodStr = `${formatDate(start)} - ${formatDate(end)}`;
+      } else {
+        let dayA = 1, dayB = 4;
+        if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
+          const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
+          if (match) {
+            const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
+            dayA = DAYS_TO_NUM[match[1].trim()] ?? 1;
+            dayB = DAYS_TO_NUM[match[2].trim()] ?? 4;
+          }
+        } else if (type === BILLING_CYCLES.TWICE_TUE_FRI) { dayA = 2; dayB = 5; }
+        else if (type === BILLING_CYCLES.TWICE_WED_SAT) { dayA = 3; dayB = 6; }
+
+        const getInvDate = (targetDay) => {
+          const d = new Date(refDate);
+          let diff = d.getDay() - targetDay;
+          if (diff < 0) diff += 7;
+          d.setDate(d.getDate() - diff);
+          return d;
+        };
+
+        const invA = getInvDate(dayA);
+        const invB = getInvDate(dayB);
+        const activeInv = invA > invB ? invA : invB;
+        inv.setTime(activeInv.getTime());
+
+        const gap = (activeInv.getDay() === dayA) ? (dayA - dayB + 7) % 7 : (dayB - dayA + 7) % 7;
+        start.setDate(inv.getDate() - gap);
+        end.setDate(inv.getDate() - 1);
         due.setDate(inv.getDate() + 1);
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-      } else if (String(type).toLowerCase().includes('twice') && String(type).includes('/')) {
-        const match = String(type).match(/\((.*?)\s*\/\s*(.*?)\)/);
-        if (match) {
-          const day1Name = match[1].trim();
-          const day2Name = match[2].trim();
-          const DAYS_TO_NUM = { 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0 };
-          const dayA = DAYS_TO_NUM[day1Name] ?? 1;
-          const dayB = DAYS_TO_NUM[day2Name] ?? 4;
-
-          const getInvDate = (targetDay) => {
-            const d = new Date(refDate);
-            let diff = d.getDay() - targetDay;
-            if (diff > 0) diff -= 7;
-            d.setDate(d.getDate() - diff);
-            return d;
-          };
-
-          const invA = getInvDate(dayA);
-          const invB = getInvDate(dayB);
-          const activeInv = invA > invB ? invA : invB;
-          inv.setTime(activeInv.getTime());
-
-          const gap = (activeInv.getDay() === dayA) ? (dayA - dayB + 7) % 7 : (dayB - dayA + 7) % 7;
-          start.setDate(inv.getDate() - gap);
-          end.setDate(inv.getDate() - 1);
-          due.setDate(inv.getDate() + 1);
-          periodStr = `${formatDate(start)} - ${formatDate(end)}`;
-        }
       }
       return { inv, due, start, end, periodStr };
     };
