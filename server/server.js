@@ -12,10 +12,10 @@ const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf
 
 // Constants and Normalization Fns from Frontend
 const BILLING_CYCLES = {
-  MONDAY_SUNDAY: 'Monday-Sunday',
-  THURSDAY_WEDNESDAY: 'Thursday-Wednesday',
+  MONDAY_SUNDAY: 'Monday - Sunday',
+  THURSDAY_WEDNESDAY: 'Thursday - Wednesday',
   TWICE: 'Twice',
-  MULTIPLE: 'Multiple Cycles',
+  MULTIPLE: 'Multiple',
   UNSPECIFIED: 'Unspecified'
 };
 
@@ -28,10 +28,12 @@ const normalizeText = (value, fallback = '') => {
 
 const normalizeBillingCycle = (value) => {
   const raw = normalizeText(value).toLowerCase();
-  if (!raw || raw.includes('unspecified') || raw.includes('cs by agent')) return BILLING_CYCLES.UNSPECIFIED;
+  if (!raw || raw.includes('unspecified')) return BILLING_CYCLES.UNSPECIFIED;
+  if (raw.includes('cs by agent')) return BILLING_CYCLES.UNSPECIFIED;
   if (raw.includes('thursday') || raw.includes('thurs') || raw.includes('wednesday')) return BILLING_CYCLES.THURSDAY_WEDNESDAY;
   if (raw.includes('monday') || raw.includes('sunday')) return BILLING_CYCLES.MONDAY_SUNDAY;
-  if (raw.includes('15') || raw.includes('last day') || raw.includes('twice')) return BILLING_CYCLES.TWICE;
+  if (raw.includes('twice')) return BILLING_CYCLES.TWICE;
+  if (raw.includes('multiple')) return BILLING_CYCLES.MULTIPLE;
   return BILLING_CYCLES.UNSPECIFIED;
 };
 

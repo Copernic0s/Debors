@@ -1,4 +1,5 @@
 import { format, subDays, addDays } from 'date-fns';
+import { getDueDateStatus } from '../utils/dateUtils';
 
 const today = new Date();
 
@@ -96,47 +97,6 @@ const normalizeAmount = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const getCentralTimeNow = () => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Chicago',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  }).formatToParts(new Date());
-
-  const value = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-
-  return {
-    dateKey: `${value.year}-${value.month}-${value.day}`,
-    hour: Number.parseInt(value.hour || '0', 10),
-    minute: Number.parseInt(value.minute || '0', 10)
-  };
-};
-
-const isPastCutoffInCentral = (dueDate) => {
-  if (!dueDate) return false;
-  const nowCt = getCentralTimeNow();
-
-  if (nowCt.dateKey > dueDate) return true;
-  if (nowCt.dateKey < dueDate) return false;
-
-  if (nowCt.hour > 17) return true;
-  if (nowCt.hour < 17) return false;
-  return nowCt.minute >= 0;
-};
-
-const normalizeStatus = (status, dueDate) => {
-  const raw = String(status ?? '').trim().toLowerCase();
-  if (raw === 'no_invoice') return 'paid';
-  if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) return 'paid';
-  if (raw.includes('overdue') || raw.includes('mora') || raw.includes('vencido')) return 'overdue';
-  if (isPastCutoffInCentral(dueDate)) return 'overdue';
-  return 'pending';
-};
-
 export const calculateMetrics = (data) => {
   let totalDebt = 0;
   let totalOverdue = 0;
@@ -149,7 +109,7 @@ export const calculateMetrics = (data) => {
 
   data.forEach((item) => {
     const amount = normalizeAmount(item.amount);
-    const status = normalizeStatus(item.status, item.dueDate);
+    const status = getDueDateStatus(item.status, item.dueDate);
 
     if (item.company || item.clientName) {
       activeClients.add(String(item.company || item.clientName).trim().toLowerCase());
