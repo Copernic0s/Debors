@@ -327,19 +327,18 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
         if (diffThu < 0) diffThu += 7;
         invThu.setDate(invThu.getDate() - diffThu);
 
+        // We want the most recent one on or before refDate
         const activeInv = invMon > invThu ? invMon : invThu;
         inv.setTime(activeInv.getTime());
 
         if (activeInv.getDay() === 1) { // Monday Invoice
-          // Covers Thu - Sun
-          start.setDate(inv.getDate() - 4); // Thu
-          end.setDate(inv.getDate() - 1); // Sun
-          due.setDate(inv.getDate() + 1); // Tue
+          start.setDate(inv.getDate() - 4); // Thursday prior
+          end.setDate(inv.getDate() - 1); // Sunday prior
+          due.setDate(inv.getDate() + 1); // Tuesday
         } else { // Thursday Invoice
-          // Covers Mon - Wed
-          start.setDate(inv.getDate() - 3); // Mon
-          end.setDate(inv.getDate() - 1); // Wed
-          due.setDate(inv.getDate() + 1); // Fri
+          start.setDate(inv.getDate() - 3); // Monday prior
+          end.setDate(inv.getDate() - 1); // Wednesday prior
+          due.setDate(inv.getDate() + 1); // Friday
         }
         periodStr = `${formatDate(start)} - ${formatDate(end)}`;
       }
@@ -351,6 +350,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
     let iterations = 0;
 
     // FIND THE EARLIEST UNPROCESSED WINDOW
+    // FIND THE EARLIEST UNPROCESSED WINDOW OR THE NEXT UPCOMING ONE
     while (iterations < 2) {
       target = getTargetDates(cycle, currentRef);
 
@@ -359,18 +359,23 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
 
       if (!isProcessed) break;
 
-      // Use local date string for comparison to avoid UTC shift
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const wasProcessedToday = (item.lastInvoicedDate === todayStr) || (item.lastNoUsageDate === todayStr);
-
-      if (wasProcessedToday && iterations === 0) {
-        details.isTaskCompleted = true;
-        if (item.lastInvoicedDate === todayStr) details.isRecentlyInvoiced = true;
-        else details.isRecentlyNoUsage = true;
-        break;
+      // If already processed, we look FORWARD to show the next upcoming window
+      // but only if we are currently looking at the "current" window (iterations === 0)
+      if (iterations === 0) {
+        const lookAheadRef = new Date(target.inv);
+        lookAheadRef.setDate(lookAheadRef.getDate() + 7);
+        const nextTarget = getTargetDates(cycle, lookAheadRef);
+        
+        const isNextProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= nextTarget.inv) ||
+          (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= nextTarget.inv);
+        
+        if (!isNextProcessed) {
+          target = nextTarget;
+          break;
+        }
       }
 
-      // Move iteration forward to find NEXT window
+      // Fallback: look backwards for older missing invoices
       currentRef = new Date(target.inv);
       currentRef.setDate(target.inv.getDate() - 1);
       iterations++;
@@ -594,7 +599,13 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                   <CompanyName>{item.company}</CompanyName>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>Sales: {item.agentId}</div>
                 </div>
-                <CycleTag>{normalizeBillingCycle(item.billingCycle)}</CycleTag>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
+                  <StatusBadge $color={item.sla.status.color}>
+                    {item.sla.status.icon}
+                    {item.sla.status.label}
+                  </StatusBadge>
+                  <CycleTag>{normalizeBillingCycle(item.billingCycle)}</CycleTag>
+                </div>
               </CardHead>
 
               <TimelineWrapper>
@@ -632,10 +643,9 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
               <SLAProgress $percent={item.sla.percent} $color={item.sla.status.color} />
 
               <ActionFooter>
-                <StatusBadge $color={item.sla.status.color}>
-                  {item.sla.status.icon}
-                  {item.sla.status.label}
-                </StatusBadge>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                  Action required:
+                </div>
 
                 {(item.sla.status.id === 'generation' || item.sla.status.id === 'overdue') && !item.sla.isRecentlyInvoiced && !item.sla.isRecentlyNoUsage && (
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
