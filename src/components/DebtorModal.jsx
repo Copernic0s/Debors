@@ -202,6 +202,7 @@ const createFormDataFromDebtor = (debtor) => {
 
 export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }) {
   const [formData, setFormData] = useState(() => createFormDataFromDebtor(debtor));
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   useEffect(() => {
     // Auto-calculate Due Date based on cycle days
     // Rule: Due Date = Billing Day + 1
@@ -259,8 +260,8 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
   return (
     <Overlay onClick={onClose}>
       <ModalContent onClick={e => e.stopPropagation()}>
-        <ModalHeader>
-          <h3>{debtor ? 'Edit Debt' : 'New Debtor'}</h3>
+        <ModalHeader style={{ background: 'red' }}>
+          <h3>{debtor ? 'Edit Debt (TESTING V2)' : 'New Debtor (TESTING V2)'}</h3>
           <button type="button" onClick={onClose}><X size={20} /></button>
         </ModalHeader>
         <ModalBody id="debtor-form" onSubmit={handleSubmit}>

@@ -2,6 +2,10 @@ export const BILLING_CYCLES = {
   MONDAY_SUNDAY: 'Monday - Sunday',
   THURSDAY_WEDNESDAY: 'Thursday - Wednesday',
   TWICE: 'Twice',
+  TWICE_TUE_FRI: 'Twice (Tue / Fri)',
+  TWICE_WED_SAT: 'Twice (Wed / Sat)',
+  CS_BY_AGENT: 'CS by agent',
+  MULTIPLE: 'Multiple',
   UNSPECIFIED: 'Unspecified'
 };
 
