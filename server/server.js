@@ -196,16 +196,26 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
     }
   }
 
-  // Rule Twice: Monday & Thursday. Default to Tuesday of full week completion.
+  // Rule Twice: Monday & Thursday. 
   if (profile === BILLING_PROFILE.COMPANY_DUAL) {
+    const today = new Date();
+    const nextFriday = getWeekdayInSheet(weekStart, 5);
     const nextTuesday = getWeekdayInSheet(weekStart, 2);
+
+    if (nextFriday) {
+      const dayDiff = Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24));
+      if (dayDiff < 7) nextFriday.setDate(nextFriday.getDate() + 7);
+    }
     if (nextTuesday) {
       const dayDiff = Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24));
-      if (dayDiff < 7) {
-        nextTuesday.setDate(nextTuesday.getDate() + 7);
-      }
+      if (dayDiff < 7) nextTuesday.setDate(nextTuesday.getDate() + 7);
+    }
+
+    // If today is past the Friday due date (or same day late), we likely look at the Tuesday one
+    if (nextFriday && today > nextFriday) {
       return toDateKey(nextTuesday);
     }
+    return toDateKey(nextFriday || nextTuesday);
   }
 
   return '';

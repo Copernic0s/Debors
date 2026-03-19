@@ -386,7 +386,12 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       details.dueDate = target.due;
       details.period = target.periodStr;
 
-      const diff = Math.floor((today - target.inv) / (1000 * 60 * 60 * 24));
+      const now = new Date();
+      const diff = Math.floor((now - target.inv) / (1000 * 60 * 60 * 24));
+      
+      // Calculate specific 5pm cutoff for today
+      const cutoffToday = new Date(target.due);
+      cutoffToday.setHours(17, 0, 0, 0);
 
       if (details.isTaskCompleted) {
         details.percent = 100;
@@ -400,12 +405,12 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       } else if (diff === 0) {
         details.percent = 66;
         details.status = { label: 'GENERATE TODAY', color: '#38bdf8', icon: <Zap size={14} />, highlight: true, id: 'generation' };
+      } else if (now > cutoffToday) {
+        details.percent = 100;
+        details.status = { label: 'OVERDUE', color: '#ef4444', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
       } else if (diff === 1) {
         details.percent = 85;
         details.status = { label: 'DUE TODAY', color: '#f59e0b', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
-      } else if (diff > 1) {
-        details.percent = 100;
-        details.status = { label: 'OVERDUE', color: '#ef4444', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
       } else if (diff === -1) {
         // One day before invoice
         details.percent = 45;

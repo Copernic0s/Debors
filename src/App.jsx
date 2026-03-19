@@ -1171,8 +1171,9 @@ function App() {
 
       // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
       if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        // Robust date parsing: Check if it's already YYYY-MM-DD
-        const dateStr = row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T23:59:59`;
+        // According to user instructions: Due Date 5 p.m. Eastern time
+        // We use T17:00:00 to match the 5pm cutoff (relative to local time)
+        const dateStr = row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T17:00:00`;
         const parsedDue = new Date(dateStr);
         if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
           status = 'overdue';
