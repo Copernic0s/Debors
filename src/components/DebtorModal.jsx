@@ -215,7 +215,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
       
       const suggestedDue = resultDate.toISOString().split('T')[0];
       if (formData.dueDate !== suggestedDue) {
-        setFormData(prev => ({ ...prev, dueDate: suggestedDue }));
+        setFormData(prev => ({ ...prev, dueDate: suggestedDue })); // eslint-disable-line react-hooks/set-state-in-effect
       }
     }
   }, [formData.billingCycle]);

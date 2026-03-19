@@ -254,38 +254,92 @@ const EmptyState = styled.div`
   
   h3 { font-size: 1.2rem; color: var(--text-main); margin-bottom: 0.5rem; }
 `;
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
+  if (isNaN(d.getTime())) return 'N/A';
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+};
 
-export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) {
+const getTargetDates = (type, refDate) => {
+  const inv = new Date(refDate);
+  const day = refDate.getDay();
+  let periodStr = '';
+
+  if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
+    let diff = day - 1;
+    if (diff < 0) diff += 7;
+    inv.setDate(refDate.getDate() - diff);
+    const start = new Date(inv);
+    start.setDate(inv.getDate() - 7);
+    const end = new Date(inv);
+    end.setDate(inv.getDate() - 1);
+    periodStr = `${formatDate(start)} to ${formatDate(end)}`;
+  } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
+    let diff = day - 4;
+    if (diff < 0) diff += 7;
+    inv.setDate(refDate.getDate() - diff);
+    const start = new Date(inv);
+    start.setDate(inv.getDate() - 7);
+    const end = new Date(inv);
+    end.setDate(inv.getDate() - 1);
+    periodStr = `${formatDate(start)} to ${formatDate(end)}`;
+  } else if (type === BILLING_CYCLES.TWICE) {
+    const mon = new Date(refDate);
+    let diffM = day - 1;
+    if (diffM < 0) diffM += 7;
+    mon.setDate(refDate.getDate() - diffM);
+
+    const thu = new Date(refDate);
+    let diffT = day - 4;
+    if (diffT < 0) diffT += 7;
+    thu.setDate(refDate.getDate() - diffT);
+
+    if (thu > mon) {
+      inv.setTime(thu.getTime());
+      const start = new Date(inv);
+      start.setDate(inv.getDate() - 3);
+      const end = new Date(inv);
+      end.setDate(inv.getDate() - 1);
+      periodStr = `${formatDate(start)} to ${formatDate(end)}`;
+    } else {
+      inv.setTime(mon.getTime());
+      const start = new Date(inv);
+      start.setDate(inv.getDate() - 4);
+      const end = new Date(inv);
+      end.setDate(inv.getDate() - 1);
+      periodStr = `${formatDate(start)} to ${formatDate(end)}`;
+    }
+  }
+
+  const due = new Date(inv);
+  due.setDate(inv.getDate() + 1);
+  return { inv, due, periodStr };
+};
+
+export default function InvoiceRoadmap({ data, onConfirm, onMarkNoUsage, today: externalToday }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [pageSize, setPageSize] = useState(12);
 
-  const today = useMemo(() => {
+  const internalToday = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
 
-  const currentDay = today.getDay();
+  const today = externalToday || internalToday;
 
-  const formatDate = (date) => {
-    if (!date) return 'N/A';
-    const d = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
-    if (isNaN(d.getTime())) return 'N/A';
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const year = String(d.getFullYear()).slice(-2);
-    return `${month}-${day}-${year}`;
-  };
-
-    const getAllSLATasks = (item) => {
+  const slaData = useMemo(() => {
+    const getSLADetails = (item) => {
       const cycle = normalizeBillingCycle(item.billingCycle);
       const results = [];
       let currentRef = new Date(today);
       let iterations = 0;
 
-      // Limit lookback: Check current window and at most one previous window
-      // For Twice cycles, this usually covers the 2 windows of the current week.
       while (iterations < 2) {
         const target = getTargetDates(cycle, currentRef);
         
@@ -314,7 +368,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
             percent = 45;
             status = { label: 'CLOSING PERIOD', color: '#fb923c', icon: <Clock size={14} />, highlight: true, id: 'closing' };
           } else if (diff > 1) {
-            // Older overdue
             percent = 100;
             status = { label: 'PAST DUE', color: '#f43f5e', icon: <AlertCircle size={14} />, highlight: true, id: 'overdue' };
           }
@@ -331,8 +384,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
           });
         }
 
-        // If we found a task but it's already "Upcoming", maybe we don't need to look back?
-        // Actually the user wants to see "Max 2 per week".
         currentRef = new Date(target.inv);
         currentRef.setDate(target.inv.getDate() - 1);
         iterations++;
@@ -340,10 +391,6 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       return results;
     };
 
-    return getAllSLATasks(item);
-  };
-
-  const slaData = useMemo(() => {
     const filtered = data.filter(item => {
       const c = normalizeBillingCycle(item.billingCycle);
       if (c === BILLING_CYCLES.CS_BY_AGENT || c === BILLING_CYCLES.UNSPECIFIED || c === BILLING_CYCLES.MULTIPLE) return false;
@@ -368,7 +415,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
       .sort((a, b) => {
         if (a.status.highlight && !b.status.highlight) return -1;
         if (!a.status.highlight && b.status.highlight) return 1;
-        return b.invoiceDate - a.invoiceDate;
+        return (b.invoiceDate?.getTime() || 0) - (a.invoiceDate?.getTime() || 0);
       });
   }, [data, searchTerm, statusFilter, today]);
 
@@ -605,7 +652,7 @@ export default function InvoiceRoadmap({ data, onMarkInvoiced, onMarkNoUsage }) 
                       No Usage
                     </button>
                     <button
-                      onClick={() => onMarkInvoiced(item)}
+                      onClick={() => onConfirm(item)}
                       style={{
                         background: 'var(--brand)',
                         color: 'white',

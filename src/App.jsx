@@ -9,7 +9,6 @@ import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import InvoiceRoadmap from './components/InvoiceRoadmap';
-import ProcessInvoiceModal from './components/ProcessInvoiceModal';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
@@ -530,10 +529,6 @@ function App() {
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
 
-  // New states for Process Billing Flow
-  const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
-  const [processingDebtor, setProcessingDebtor] = useState(null);
-  const [suggestedInv, setSuggestedInv] = useState('');
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
@@ -1031,29 +1026,12 @@ function App() {
     });
   };
 
-  const handleMarkInvoiced = (debtor) => {
-    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
-
-    // Auto-detection logic: Find any existing invoice number for this company
-    // in the current data set to suggest to the user.
-    const existing = data.find(item =>
-      String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany &&
-      item.invoiceNumber &&
-      String(item.invoiceNumber).trim() !== ''
-    );
-
-    setSuggestedInv(existing ? existing.invoiceNumber : '');
-    setProcessingDebtor(debtor);
-    setIsProcessModalOpen(true);
-  };
-
-  const handleConfirmProcess = (invNumber) => {
-    if (!processingDebtor) return;
-    const idToUpdate = processingDebtor.latestId || processingDebtor.id;
+  const handleConfirmProcess = (debtor) => {
+    if (!debtor) return;
+    const idToUpdate = debtor.latestId || debtor.id;
     if (!idToUpdate) return;
     
-    // Use local date instead of UTC to avoid timezone shift
+    const invNumber = debtor.invoiceNumber || '';
     const now = new Date();
     const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -1062,20 +1040,14 @@ function App() {
       const next = prev.map((item) => {
         if (item.id !== idToUpdate) return item;
 
-        // Sync: If it's the target company, mark lastInvoicedDate
-        // If status was 'no_invoice' and we have an invoice, move to 'pending'
         let newStatus = item.status;
         if ((!item.status || item.status === 'no_invoice') && invNumber) {
           newStatus = 'pending';
         }
 
-        // Calculate 1-day due date for the new invoice from today
         const dateObj = new Date(todayDate + 'T00:00:00');
         dateObj.setDate(dateObj.getDate() + 1);
-        const calcYear = dateObj.getFullYear();
-        const calcMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const calcDay = String(dateObj.getDate()).padStart(2, '0');
-        const calculatedDue = `${calcYear}-${calcMonth}-${calcDay}`;
+        const calculatedDue = dateObj.toISOString().split('T')[0];
 
         const updated = {
           ...item,
@@ -1095,13 +1067,10 @@ function App() {
       return next;
     });
 
-    toast.success(`${processingDebtor.company} confirmed (Inv: ${invNumber || 'N/A'})`, {
+    toast.success(`${debtor.company} confirmed`, {
       icon: '✅',
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
     });
-
-    setIsProcessModalOpen(false);
-    setProcessingDebtor(null);
   };
 
   const handleMarkNoUsage = (debtor) => {
@@ -1232,7 +1201,6 @@ function App() {
   const slaPriorityCount = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const day = today.getDay();
 
     const getEarliestUnprocessedInvDate = (item) => {
       const cycle = normalizeBillingCycle(item.billingCycle);
@@ -1411,8 +1379,6 @@ function App() {
       {activeView === 'sla' && (
         <InvoiceRoadmap 
           data={agentData}
-          searchTerm={searchTerm}
-          statusFilter={statusFilter}
           onConfirm={handleConfirmProcess}
           onMarkNoUsage={handleMarkNoUsage}
           today={lastTick}
@@ -1491,13 +1457,6 @@ function App() {
         }}
       />
 
-      <ProcessInvoiceModal
-        isOpen={isProcessModalOpen}
-        onClose={() => setIsProcessModalOpen(false)}
-        onConfirm={handleConfirmProcess}
-        companyName={processingDebtor?.company || ''}
-        suggestedInv={suggestedInv}
-      />
 
       <Toaster position="bottom-right" />
 
