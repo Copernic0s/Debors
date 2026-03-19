@@ -441,8 +441,8 @@ const aggregateByCompany = (rows) => {
         agentId: agent,
         agentSet: new Set([agent]),
         amount: amountToAdd,
-        billingCycle: row.billingCycle || BILLING_CYCLES.UNSPECIFIED,
-        cycleSet: new Set([row.billingCycle || BILLING_CYCLES.UNSPECIFIED]),
+        billingCycle: normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED,
+        cycleSet: new Set([normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED]),
         status: row.status || 'pending',
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
@@ -459,7 +459,10 @@ const aggregateByCompany = (rows) => {
     // Accumulate SUM (non-paid only), AGENTS, and CYCLES
     current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
     current.agentSet.add(agent);
-    if (row.billingCycle) current.cycleSet.add(row.billingCycle);
+    const normalizedRowCycle = normalizeBillingCycle(row.billingCycle);
+    if (normalizedRowCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
+      current.cycleSet.add(normalizedRowCycle);
+    }
     if (row.invoiceNumber) current.invoiceCount += 1;
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
 
@@ -526,7 +529,10 @@ const aggregateByCompany = (rows) => {
       status,
       isAutoOverdue,
       agentId: agents.join(', '),
-      billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
+      // If we found a specific cycle in the latest row, use it. Otherwise find any non-unspecified from the set.
+      billingCycle: (item.billingCycle && item.billingCycle !== BILLING_CYCLES.UNSPECIFIED) 
+        ? item.billingCycle 
+        : (Array.from(item.cycleSet).find(c => c !== BILLING_CYCLES.UNSPECIFIED) || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
       invoiceCount: Number.isFinite(Number(item.invoiceCountOverride)) ? Number(item.invoiceCountOverride) : item.invoiceCount,
       sourceType: item.hasInvoice ? 'invoice' : 'cs',
