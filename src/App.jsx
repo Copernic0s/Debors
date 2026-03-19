@@ -362,35 +362,50 @@ const ViewButton = styled.button`
 `;
 
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
-  const merged = [...debtRows];
-  const existingPairs = new Set(
-    debtRows.map((row) => `${String(row.agentId || '').trim().toLowerCase()}|${String(row.company || row.clientName || '').trim().toLowerCase()}`)
-  );
+  const merged = new Map();
+  const windowsWithInvoice = new Set();
 
-  csRows.forEach((row) => {
-    const agent = String(row.agentId || '').trim();
-    const company = String(row.company || '').trim();
-    if (!company) return;
-
-    const key = `${agent.toLowerCase()}|${company.toLowerCase()}`;
-    if (existingPairs.has(key)) return;
-
-    merged.push({
-      id: `CS-${agent || 'UNASSIGNED'}-${company}`,
-      invoiceNumber: '',
-      company,
-      clientName: company,
-      contactPerson: '',
-      agentId: agent || 'Unassigned',
-      billingCycle: 'CS by agent',
-      amount: 0,
-      dueDate: '',
-      status: row.hasDebt ? 'no_invoice' : 'paid',
-      notes: row.debtStatus || ''
-    });
+  // 1. Process Debt Rows (Invoices)
+  debtRows.forEach((row) => {
+    merged.set(row.id, { ...row, source: 'debt' });
+    
+    // Recognize windows that already have actual invoices
+    const normalizedCompany = String(row.company || row.clientName || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedWeek = String(row.weekLabel || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (normalizedCompany && normalizedWeek) {
+      windowsWithInvoice.add(`${normalizedWeek}|${normalizedCompany}`);
+    }
   });
 
-  return merged;
+  // 2. Process Client Sheet Rows (Potential Invoices / CS by Agent)
+  (csRows || []).forEach((row) => {
+    const company = String(row.company || '').trim();
+    const week = String(row.weekLabel || '').trim();
+    if (!company) return;
+
+    const normalizedCompany = company.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedWeek = week.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const windowKey = `${normalizedWeek}|${normalizedCompany}`;
+    const stableId = `CS-${normalizedWeek}-${normalizedCompany}`;
+
+    // Prefer actual invoices over client sheet rows for the same window
+    if (!windowsWithInvoice.has(windowKey) && !merged.has(stableId)) {
+      merged.set(stableId, {
+        id: stableId,
+        company,
+        clientName: company,
+        agentId: String(row.agentId || 'Unassigned').trim(),
+        amount: Number(row.amount) || 0,
+        billingCycle: normalizeBillingCycle(row.billingCycle),
+        status: String(row.status || 'pending').toLowerCase() === 'paid' ? 'paid' : 'no_invoice',
+        dueDate: row.dueDate || '',
+        weekLabel: week,
+        source: 'cs'
+      });
+    }
+  });
+
+  return Array.from(merged.values());
 };
 
 const aggregateByCompany = (rows) => {
@@ -403,6 +418,8 @@ const aggregateByCompany = (rows) => {
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const key = company.toLowerCase();
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
+    const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
+    const amountToAdd = isPaid ? 0 : amount;
 
     const current = grouped.get(key);
     if (!current) {
@@ -412,7 +429,7 @@ const aggregateByCompany = (rows) => {
         clientName: company,
         agentId: agent,
         agentSet: new Set([agent]),
-        amount,
+        amount: amountToAdd,
         billingCycle: row.billingCycle || BILLING_CYCLES.UNSPECIFIED,
         cycleSet: new Set([row.billingCycle || BILLING_CYCLES.UNSPECIFIED]),
         status: row.status || 'pending',
@@ -422,32 +439,42 @@ const aggregateByCompany = (rows) => {
         hasInvoice: Boolean(String(row.invoiceNumber || '').trim()),
         invoiceCountOverride: Number.isFinite(Number(row.invoiceCountOverride)) ? Number(row.invoiceCountOverride) : null,
         dueDate: row.dueDate || '',
+        latestId: row.id,
         id: `CMP-${key}`
       });
       return;
     }
 
-    current.amount = Number.isFinite(roundMoney(current.amount + amount)) ? roundMoney(current.amount + amount) : 0;
+    // Accumulate SUM (non-paid only), AGENTS, and CYCLES
+    current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
     current.agentSet.add(agent);
     if (row.billingCycle) current.cycleSet.add(row.billingCycle);
     if (row.invoiceNumber) current.invoiceCount += 1;
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
-    if (Number.isFinite(Number(row.invoiceCountOverride))) {
-      current.invoiceCountOverride = Number(row.invoiceCountOverride);
-    }
 
+    // Metadata Priority: Follow the LATEST due date for the displayed fields
     if (row.dueDate) {
-      if (!current.dueDate || row.dueDate < current.dueDate) {
+      if (!current.dueDate || row.dueDate > current.dueDate) {
         current.dueDate = row.dueDate;
+        current.latestId = row.id;
+        
+        current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
+        current.status = row.status || current.status;
+        current.notes = row.notes || current.notes;
+        current.billingCycle = row.billingCycle || current.billingCycle;
+        current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
+        current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
+        current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
       }
     }
 
+    // Status aggregation: Prioritize most critical (Overdue > Pending > Paid)
     const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
     if (statuses.some((s) => s === 'overdue')) {
       current.status = 'overdue';
     } else if (statuses.some((s) => s === 'pending')) {
       current.status = 'pending';
-    } else {
+    } else if (statuses.every((s) => s === 'paid' || s === 'inactive')) {
       current.status = 'paid';
     }
   });
@@ -457,15 +484,12 @@ const aggregateByCompany = (rows) => {
     const cycles = Array.from(item.cycleSet);
     
     // NEW INACTIVE LOGIC
-    // Sort all rows for this company by week (simple sort for now)
     const companyRows = rows.filter(r => 
       String(r.company || r.clientName || '').trim().toLowerCase() === item.company.toLowerCase()
     ).sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
 
     const lastRows = companyRows.slice(-3);
     const consecutiveNoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
-    
-    // Also check persistent counter from manual edits
     const persistentNoUsageCount = Number(item.noUsageCount) || 0;
 
     if (consecutiveNoUsage || persistentNoUsageCount >= 3) {
@@ -882,10 +906,16 @@ function App() {
       .filter(row => row.id)
       .map(row => ({
         id: String(row.id),
+        company: row.company || row.clientName || null,
+        agent_id: row.agentId || null,
         amount: Number(row.amount) || 0,
         status: String(row.status || 'pending'),
-        updated_at: new Date().toISOString(),
+        due_date: row.dueDate || null,
+        last_invoiced_date: row.lastInvoicedDate || null,
+        last_no_usage_date: row.lastNoUsageDate || null,
+        billing_cycle: row.billingCycle || null,
         invoice_number: row.invoiceNumber || null,
+        updated_at: new Date().toISOString(),
         notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
       }));
 
@@ -920,20 +950,15 @@ function App() {
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
-    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
+    const idToUpdate = row.latestId || row.id;
+    if (!idToUpdate) return;
 
     const normalizedNextCycle = normalizeBillingCycle(nextCycle);
 
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return item;
-
-        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-        if (!inAgentScope || !inWeekScope) return item;
+        if (item.id !== idToUpdate) return item;
 
         const updatedRow = {
           ...item,
@@ -952,20 +977,15 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
+    const idToUpdate = row.latestId || row.id;
+    if (!idToUpdate) return;
 
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return item;
-
-        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-        if (!inAgentScope || !inWeekScope) return item;
+        if (item.id !== idToUpdate) return item;
 
         const updatedRow = {
           ...item,
@@ -984,63 +1004,26 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
-    const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
+    const idToUpdate = row.latestId || row.id;
+    if (!idToUpdate) return;
 
     const parsedAmount = roundMoney(nextAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
 
     setData((prev) => {
-      const matchingIndexes = [];
+      const changed = [];
+      const next = prev.map((item) => {
+        if (item.id !== idToUpdate) return item;
 
-      prev.forEach((item, index) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return;
-
-        const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-        const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-        if (!inAgentScope || !inWeekScope) return item;
-
-        matchingIndexes.push(index);
+        const updatedRow = {
+          ...item,
+          amount: parsedAmount
+        };
+        changed.push(updatedRow);
+        return updatedRow;
       });
-
-      if (matchingIndexes.length === 0) return prev;
-
-      const updated = [...prev];
-      if (matchingIndexes.length === 1) {
-        const idx = matchingIndexes[0];
-        updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount) };
-        persistEditedRows([updated[idx]]);
-        return updated;
-      }
-
-      const currentTotal = matchingIndexes.reduce((sum, idx) => sum + (Number(updated[idx].amount) || 0), 0);
-      if (currentTotal <= 0) {
-        matchingIndexes.forEach((idx, index) => {
-          updated[idx] = {
-            ...updated[idx],
-            amount: index === 0 ? roundMoney(parsedAmount) : 0
-          };
-        });
-        persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
-        return updated;
-      }
-
-      let runningSum = 0;
-      matchingIndexes.forEach((idx, index) => {
-        if (index === matchingIndexes.length - 1) {
-          updated[idx] = { ...updated[idx], amount: roundMoney(parsedAmount - runningSum) };
-          return;
-        }
-
-        const ratio = (Number(updated[idx].amount) || 0) / currentTotal;
-        const nextValue = roundMoney(parsedAmount * ratio);
-        runningSum = roundMoney(runningSum + nextValue);
-        updated[idx] = { ...updated[idx], amount: nextValue };
-      });
-
-      persistEditedRows(matchingIndexes.map((idx) => updated[idx]));
-      return updated;
+      persistEditedRows(changed);
+      return next;
     });
 
     toast.success('Total due updated', {
@@ -1067,7 +1050,8 @@ function App() {
 
   const handleConfirmProcess = (invNumber) => {
     if (!processingDebtor) return;
-    const targetCompany = String(processingDebtor.company || processingDebtor.clientName || '').trim().toLowerCase();
+    const idToUpdate = processingDebtor.latestId || processingDebtor.id;
+    if (!idToUpdate) return;
     
     // Use local date instead of UTC to avoid timezone shift
     const now = new Date();
@@ -1076,8 +1060,7 @@ function App() {
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return item;
+        if (item.id !== idToUpdate) return item;
 
         // Sync: If it's the target company, mark lastInvoicedDate
         // If status was 'no_invoice' and we have an invoice, move to 'pending'
@@ -1086,10 +1069,13 @@ function App() {
           newStatus = 'pending';
         }
 
-        // Calculate 1-day due date for the new invoice
+        // Calculate 1-day due date for the new invoice from today
         const dateObj = new Date(todayDate + 'T00:00:00');
         dateObj.setDate(dateObj.getDate() + 1);
-        const calculatedDue = dateObj.toISOString().split('T')[0];
+        const calcYear = dateObj.getFullYear();
+        const calcMonth = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const calcDay = String(dateObj.getDate()).padStart(2, '0');
+        const calculatedDue = `${calcYear}-${calcMonth}-${calcDay}`;
 
         const updated = {
           ...item,
@@ -1097,21 +1083,13 @@ function App() {
           dueDate: calculatedDue,
           invoiceNumber: invNumber || item.invoiceNumber,
           status: newStatus,
-          noUsageCount: 0 // Reset streak on invoice
+          noUsageCount: 0 
         };
         changed.push(updated);
         return updated;
       });
 
       if (changed.length > 0) {
-        setManualEdits(prevEdits => {
-          const nextEdits = { ...prevEdits };
-          changed.forEach(row => {
-            nextEdits[row.id] = row;
-          });
-          manualEditsRef.current = nextEdits;
-          return nextEdits;
-        });
         persistEditedRows(changed);
       }
       return next;
@@ -1127,16 +1105,15 @@ function App() {
   };
 
   const handleMarkNoUsage = (debtor) => {
-    const targetCompany = String(debtor.company || debtor.clientName || '').trim().toLowerCase();
-    if (!targetCompany) return;
+    const idToUpdate = debtor.latestId || debtor.id;
+    if (!idToUpdate) return;
 
     const todayDate = new Date().toISOString().split('T')[0];
 
     setData((prev) => {
       const changed = [];
       const next = prev.map((item) => {
-        const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-        if (!sameCompany) return item;
+        if (item.id !== idToUpdate) return item;
 
         const nextCount = (Number(item.noUsageCount) || 0) + 1;
         const updated = { 
@@ -1432,10 +1409,13 @@ function App() {
       )}
 
       {activeView === 'sla' && (
-        <InvoiceRoadmap
+        <InvoiceRoadmap 
           data={agentData}
-          onMarkInvoiced={handleMarkInvoiced}
+          searchTerm={searchTerm}
+          statusFilter={statusFilter}
+          onConfirm={handleConfirmProcess}
           onMarkNoUsage={handleMarkNoUsage}
+          today={lastTick}
         />
       )}
     </div>
