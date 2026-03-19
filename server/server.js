@@ -306,11 +306,21 @@ const mapCsByAgentRow = (row) => {
 // API Endpoint
 app.get('/api/debtors', async (req, res) => {
   try {
-    const response = await axios.get(SHEET_XLSX_URL, {
-      responseType: 'arraybuffer'
+    const sourceUrl = `${SHEET_XLSX_URL}&t=${Date.now()}`;
+    console.log('[Zoho Sync] Fetching from:', sourceUrl);
+
+    const response = await axios.get(sourceUrl, {
+      responseType: 'arraybuffer',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
     });
 
     const workbook = XLSX.read(response.data, { type: 'buffer' });
+    console.log('[Zoho Sync] Sheets found:', workbook.SheetNames.join(', '));
+
     const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
 
     const debtors = workbook.SheetNames
@@ -318,6 +328,7 @@ app.get('/api/debtors', async (req, res) => {
       .flatMap((sheetName, index) => {
         const sheet = workbook.Sheets[sheetName];
         const rowsRaw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
+        console.log(`[Zoho Sync] Sheet "${sheetName}" has ${rowsRaw.length} rows`);
         const rowsDisplay = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
         return rowsRaw.map((row, rowIndex) => mapDebtorRow(row, rowsDisplay[rowIndex], sheetName, index));
       })

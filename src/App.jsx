@@ -494,6 +494,7 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [lastTick, setLastTick] = useState(Date.now());
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
   const [statusScope, setStatusScope] = useState('all');
@@ -601,28 +602,7 @@ function App() {
 
     // Always merge from the LATEST reference of manualEdits
     const hydrated = mergeManualEdits(rawZohoData, manualEdits);
-
-    // Apply Smart Billing Logic: Auto-Overdue
-    const today = new Date();
-    const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    const withSmartStatus = hydrated.map(row => {
-      let status = row.status || 'pending';
-      let isAutoOverdue = false;
-
-      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
-      if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        const parsedDue = new Date(`${row.dueDate}T23:59:59`); // Check end of day
-        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
-          status = 'overdue';
-          isAutoOverdue = true;
-        }
-      }
-
-      return { ...row, status, isAutoOverdue };
-    });
-
-    setData(withSmartStatus);
+    setData(hydrated);
   }, [rawZohoData, manualEdits]);
 
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
@@ -684,7 +664,14 @@ function App() {
       loadData({ silent: true, notifyUser: false });
     }, 5 * 60 * 1000);
 
-    return () => window.clearInterval(interval);
+    const tickInterval = window.setInterval(() => {
+      setLastTick(Date.now());
+    }, 60000); // Update time-sensitive memos every minute
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearInterval(tickInterval);
+    };
   }, [loadData]);
 
   useEffect(() => {
@@ -897,16 +884,6 @@ function App() {
         id: String(row.id),
         amount: Number(row.amount) || 0,
         status: String(row.status || 'pending'),
-        notes: String(row.notes || ''),
-        agent_id: String(row.agentId || 'Unassigned'),
-        billing_cycle: String(row.billingCycle || 'Unspecified'),
-        due_date: row.dueDate || null,
-        company: String(row.company || row.clientName || 'Unknown'),
-        is_new: Boolean(row.__isNew),
-        is_deleted: Boolean(row.__deleted),
-        last_invoiced_date: row.lastInvoicedDate || null,
-        last_no_usage_date: row.lastNoUsageDate || null,
-        updated_by: user?.id,
         updated_at: new Date().toISOString(),
         invoice_number: row.invoiceNumber || null,
         notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
@@ -1186,14 +1163,34 @@ function App() {
   const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
   const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
 
-  const scopedInvoiceData = React.useMemo(() => data.filter((item) => {
+  const hydratedWithSmartStatus = React.useMemo(() => {
+    const today = new Date();
+    return data.map(row => {
+      let status = row.status || 'pending';
+      let isAutoOverdue = false;
+
+      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
+      if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
+        // Robust date parsing: Check if it's already YYYY-MM-DD
+        const dateStr = row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T23:59:59`;
+        const parsedDue = new Date(dateStr);
+        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
+          status = 'overdue';
+          isAutoOverdue = true;
+        }
+      }
+      return { ...row, status, isAutoOverdue };
+    });
+  }, [data, lastTick]);
+
+  const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  }), [data, selectedAgent, selectedWeek, statusScope]);
+  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope]);
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
