@@ -360,6 +360,18 @@ const ViewButton = styled.button`
   }
 `;
 
+const normalizeWeekLabel = (label) => {
+  const raw = String(label || '').trim().toLowerCase();
+  if (!raw) return 'unspecified';
+  // Attempt to extract digits to form a semi-stable key even if names vary (March vs Mar)
+  const numbers = raw.match(/\d+/g);
+  if (numbers && numbers.length >= 2) {
+    // Take the first two sets of numbers (likely start/end day)
+    return `W-${numbers[0]}-${numbers[1]}`;
+  }
+  return raw.replace(/[^a-z0-9]/g, '');
+};
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = new Map();
   const windowsWithInvoice = new Set();
@@ -370,7 +382,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     
     // Recognize windows that already have actual invoices
     const normalizedCompany = String(row.company || row.clientName || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const normalizedWeek = String(row.weekLabel || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     if (normalizedCompany && normalizedWeek) {
       windowsWithInvoice.add(`${normalizedWeek}|${normalizedCompany}`);
     }
@@ -383,7 +395,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     if (!company) return;
 
     const normalizedCompany = company.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const normalizedWeek = week.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     const windowKey = `${normalizedWeek}|${normalizedCompany}`;
     const stableId = `CS-${normalizedWeek}-${normalizedCompany}`;
 
@@ -478,10 +490,24 @@ const aggregateByCompany = (rows) => {
     }
   });
 
+  const today = new Date();
+
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
     const cycles = Array.from(item.cycleSet);
     
+    // Re-calculate auto-overdue based on the FINAL aggregated due date
+    let status = item.status;
+    let isAutoOverdue = false;
+    
+    if (status !== 'paid' && status !== 'inactive' && status !== 'no_invoice' && item.dueDate) {
+      const dateStr = item.dueDate.includes('T') ? item.dueDate : `${item.dueDate}T17:00:00`;
+      const parsedDue = new Date(dateStr);
+      if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
+        status = 'overdue';
+        isAutoOverdue = true;
+      }
+    }
     // NEW INACTIVE LOGIC
     const companyRows = rows.filter(r => 
       String(r.company || r.clientName || '').trim().toLowerCase() === item.company.toLowerCase()
@@ -497,6 +523,8 @@ const aggregateByCompany = (rows) => {
 
     return {
       ...item,
+      status,
+      isAutoOverdue,
       agentId: agents.join(', '),
       billingCycle: cycles.length > 1 ? BILLING_CYCLES.MULTIPLE : (cycles[0] || BILLING_CYCLES.UNSPECIFIED),
       dueDate: item.dueDate || '',
@@ -1177,11 +1205,30 @@ function App() {
       return byAgent && byWeek;
     });
 
-    const invoiceRows = scopedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
-    const totalDebt = scopedRows
+    // Deduplicate by week to avoid double-counting placeholders
+    const deduplicatedRows = [];
+    const seenWindows = new Set();
+    
+    // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
+    const sortedScoped = [...scopedRows].sort((a, b) => {
+      if (a.source === 'debt' && b.source !== 'debt') return -1;
+      if (a.source !== 'debt' && b.source === 'debt') return 1;
+      return 0;
+    });
+
+    sortedScoped.forEach(row => {
+      const windowKey = normalizeWeekLabel(row.weekLabel);
+      if (!seenWindows.has(windowKey)) {
+        deduplicatedRows.push(row);
+        seenWindows.add(windowKey);
+      }
+    });
+
+    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
+    const totalDebt = deduplicatedRows
       .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalOverdue = scopedRows
+    const totalOverdue = deduplicatedRows
       .filter((item) => String(item.status || '').toLowerCase() === 'overdue')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
@@ -1190,8 +1237,8 @@ function App() {
       totalDebt,
       totalOverdue,
       invoiceCount: invoiceRows.length,
-      agents: Array.from(new Set(scopedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
-      contacts: Array.from(new Set(scopedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
+      agents: Array.from(new Set(deduplicatedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
+      contacts: Array.from(new Set(deduplicatedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
       invoices: invoiceRows.sort((a, b) => 
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
