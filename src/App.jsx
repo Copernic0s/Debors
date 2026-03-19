@@ -545,9 +545,9 @@ function App() {
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
-          noUsageCount: Number(edit.no_usage_count) || 0,
+          noUsageCount: (edit.notes || '').match(/\[streak:(\d+)\]/)?.[1] ? Number((edit.notes || '').match(/\[streak:(\d+)\]/)[1]) : (Number(edit.no_usage_count) || 0),
           invoiceNumber: edit.invoice_number,
-          notes: edit.notes || '',
+          notes: (edit.notes || '').replace(/\[streak:\d+\]/, '').trim(),
           __isNew: edit.is_new,
           __deleted: edit.is_deleted
         };
@@ -612,8 +612,8 @@ function App() {
 
       // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
       if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        const parsedDue = new Date(`${row.dueDate}T00:00:00`);
-        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < dayStart) {
+        const parsedDue = new Date(`${row.dueDate}T23:59:59`); // Check end of day
+        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
           status = 'overdue';
           isAutoOverdue = true;
         }
@@ -906,10 +906,10 @@ function App() {
         is_deleted: Boolean(row.__deleted),
         last_invoiced_date: row.lastInvoicedDate || null,
         last_no_usage_date: row.lastNoUsageDate || null,
-        no_usage_count: Number(row.noUsageCount) || 0,
         updated_by: user?.id,
         updated_at: new Date().toISOString(),
-        invoice_number: row.invoiceNumber || null
+        invoice_number: row.invoiceNumber || null,
+        notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
       }));
 
     if (upserts.length === 0) return;
