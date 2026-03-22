@@ -15,10 +15,15 @@ const StatCard = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid var(--glass-border);
   position: relative;
   overflow: hidden;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
 
   &::before {
     content: '';
@@ -27,17 +32,14 @@ const StatCard = styled.div`
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
   }
 
   &:hover {
-    transform: translateY(-8px) scale(1.02);
-    border-color: rgba(56, 189, 248, 0.5);
-    box-shadow: 
-      0 20px 40px rgba(0, 0, 0, 0.4),
-      0 0 25px rgba(56, 189, 248, 0.2),
-      inset 0 0 15px rgba(56, 189, 248, 0.05);
-    background: rgba(30, 41, 59, 0.65);
+    transform: translateY(-8px);
+    border-color: var(--brand);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(249, 115, 22, 0.15);
+    background: rgba(30, 41, 59, 0.5);
   }
 `;
 
@@ -85,42 +87,42 @@ const formatCurrency = (value) => {
 export default function Dashboard({ metrics }) {
     return (
         <DashboardGrid>
-            <StatCard className="glass-panel">
+            <StatCard className="glass-card">
                 <StatInfo>
                     <StatLabel>Total Pending</StatLabel>
                     <StatValue>{formatCurrency(metrics.currentBalance)}</StatValue>
                 </StatInfo>
-                <IconWrapper $bgColor="rgba(59, 130, 246, 0.2)" $color="var(--accent-color)">
+                <IconWrapper $bgColor="rgba(56, 189, 248, 0.15)" $color="var(--brand-blue)">
                     <Clock3 size={24} />
                 </IconWrapper>
             </StatCard>
-
-            <StatCard className="glass-panel">
+ 
+            <StatCard className="glass-card">
                 <StatInfo>
                     <StatLabel>Total Overdue</StatLabel>
-                    <StatValue style={{ color: 'var(--danger)' }}>{formatCurrency(metrics.totalOverdue)}</StatValue>
+                    <StatValue style={{ color: 'var(--brand)' }}>{formatCurrency(metrics.totalOverdue)}</StatValue>
                 </StatInfo>
-                <IconWrapper $bgColor="rgba(239, 68, 68, 0.2)" $color="var(--danger)">
+                <IconWrapper $bgColor="rgba(249, 115, 22, 0.2)" $color="var(--brand)">
                     <AlertCircle size={24} />
                 </IconWrapper>
             </StatCard>
-
-            <StatCard className="glass-panel">
+ 
+            <StatCard className="glass-card">
                 <StatInfo>
                     <StatLabel>Active Clients</StatLabel>
                     <StatValue>{metrics.activeClients}</StatValue>
                 </StatInfo>
-                <IconWrapper $bgColor="rgba(245, 158, 11, 0.2)" $color="var(--warn)">
+                <IconWrapper $bgColor="rgba(99, 102, 241, 0.15)" $color="var(--brand-indigo)">
                     <Users size={24} />
                 </IconWrapper>
             </StatCard>
-
-            <StatCard className="glass-panel">
+ 
+            <StatCard className="glass-card">
                 <StatInfo>
                     <StatLabel>Overdue Accounts</StatLabel>
                     <StatValue style={{ color: 'var(--danger)' }}>{metrics.overdueAccounts}</StatValue>
                 </StatInfo>
-                <IconWrapper $bgColor="rgba(248, 113, 113, 0.15)" $color="var(--danger)">
+                <IconWrapper $bgColor="rgba(239, 68, 68, 0.15)" $color="var(--danger)">
                     <ClipboardList size={24} />
                 </IconWrapper>
             </StatCard>

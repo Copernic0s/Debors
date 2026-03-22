@@ -59,19 +59,22 @@ const MiniFilter = styled.div`
 `;
 
 const FilterButton = styled.button`
-  background: ${props => props.$active ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)'};
+  background: ${props => props.$active ? 'rgba(249, 115, 22, 0.15)' : 'rgba(255, 255, 255, 0.05)'};
   border: 1px solid ${props => props.$active ? 'var(--brand)' : 'var(--glass-border)'};
   border-radius: 999px;
-  padding: 0.4rem 0.9rem;
+  padding: 0.5rem 1.1rem;
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 800;
   color: ${props => props.$active ? 'var(--brand)' : 'var(--text-muted)'};
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: ${props => props.$active ? 'rgba(249, 115, 22, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
     color: var(--text-main);
+    transform: translateY(-1px);
   }
 `;
 
@@ -82,17 +85,16 @@ const CardGrid = styled.div`
 `;
 
 const SLACard = styled.div`
-  background: ${props => props.$highlight
-    ? `linear-gradient(135deg, rgba(15, 23, 42, 0.6) 0%, ${props.$statusColor}10 100%)`
-    : 'rgba(15, 23, 42, 0.4)'};
-  backdrop-filter: blur(20px);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid ${props => props.$highlight ? props.$statusColor : 'var(--glass-border)'};
   border-radius: var(--radius-xl);
-  padding: 1.5rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 1.75rem;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
-  box-shadow: ${props => props.$highlight ? `0 10px 30px ${props.$statusColor}15` : 'none'};
+  box-shadow: ${props => props.$highlight ? `0 10px 30px ${props.$statusColor}15` : 'var(--shadow-lg)'};
 
   &::before {
     content: '';
@@ -102,12 +104,14 @@ const SLACard = styled.div`
     width: 4px;
     height: 100%;
     background: ${props => props.$statusColor};
+    box-shadow: 0 0 15px ${props => props.$statusColor};
   }
 
   &:hover {
-    transform: translateY(-5px);
+    transform: translateY(-8px);
     border-color: ${props => props.$statusColor};
-    box-shadow: 0 15px 40px rgba(0,0,0,0.4), 0 0 20px ${props => props.$statusColor}20;
+    background: rgba(15, 23, 42, 0.4);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 25px ${props => props.$statusColor}25;
   }
 `;
 
@@ -657,12 +661,25 @@ export default function InvoiceRoadmap({ data, onConfirm, onMarkNoUsage, today: 
                         background: 'var(--brand)',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '6px',
-                        padding: '0.3rem 0.5rem',
-                        fontSize: '0.65rem',
-                        fontWeight: '800',
+                        borderLeft: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '8px',
+                        padding: '0.45rem 1rem',
+                        fontSize: '0.7rem',
+                        fontFamily: 'Montserrat, sans-serif',
+                        fontWeight: '900',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
                         cursor: 'pointer',
-                        boxShadow: '0 4px 10px rgba(56, 189, 248, 0.3)'
+                        boxShadow: '0 4px 15px rgba(249, 115, 22, 0.3)',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(249, 115, 22, 0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(249, 115, 22, 0.3)';
                       }}
                     >
                       Confirm Generat.

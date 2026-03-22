@@ -37,27 +37,25 @@ const RechartsVisualFix = createGlobalStyle`
 const Panel = styled.section`
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  background: rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(12px);
-  padding: 1.5rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 1.75rem;
   min-height: 320px;
-  animation: fadeInFast 0.3s ease-out forwards;
+  animation: fadeInFast 0.4s ease-out forwards;
   box-shadow: var(--shadow-lg);
-  transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
-  
-  /* Performance optimizations */
-  /* will-change: transform; Removed to avoid interference with Recharts animations */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   transform: translateZ(0);
 
   &:hover {
-    border-color: rgba(56, 189, 248, 0.4);
+    border-color: var(--brand);
     background: rgba(15, 23, 42, 0.45);
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.5), 0 0 20px rgba(249, 115, 22, 0.1);
   }
 
   @keyframes fadeInFast {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 `;
 
@@ -76,18 +74,22 @@ const PanelHint = styled.p`
 `;
 
 const FilterChip = styled.button`
-  border: 1px solid ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.35)' : 'var(--border-color)')};
-  background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.12)' : 'var(--surface-2)')};
+  border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.4)' : 'var(--glass-border)')};
+  background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.15)' : 'rgba(255, 255, 255, 0.05)')};
   color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
   border-radius: 999px;
-  padding: 0.2rem 0.55rem;
+  padding: 0.3rem 0.8rem;
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
-    background: ${(props) => (props.$active ? 'rgba(56, 189, 248, 0.18)' : 'rgba(255,255,255,0.05)')};
+    background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.2)' : 'rgba(255,255,255,0.1)')};
+    color: var(--text-main);
+    transform: translateY(-1px);
   }
 `;
 
@@ -142,7 +144,7 @@ const normalizeStatus = (status) => {
   return 'pending';
 };
 
-const AGENT_COLORS = ['#22d3ee', '#a78bfa', '#f59e0b', '#f87171', '#34d399', '#60a5fa', '#f472b6', '#facc15'];
+const AGENT_COLORS = ['#f97316', '#6366f1', '#06b6d4', '#f43f5e', '#10b981', '#fbbf24', '#a855f7', '#ec4899'];
 
 const tooltipStyle = {
   background: 'rgba(15, 25, 45, 0.96)',
@@ -156,12 +158,12 @@ const AreaChartVisual = React.memo(({ data }) => (
     <AreaChart data={data}>
       <defs>
         <linearGradient id="colorOpen" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+          <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="var(--brand)" stopOpacity={0}/>
         </linearGradient>
         <linearGradient id="colorCollected" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+          <stop offset="5%" stopColor="var(--success)" stopOpacity={0.3}/>
+          <stop offset="95%" stopColor="var(--success)" stopOpacity={0}/>
         </linearGradient>
       </defs>
       <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" vertical={false} />

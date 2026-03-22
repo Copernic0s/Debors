@@ -5,31 +5,50 @@ import { X, Building2, Users, FileText, AlertTriangle, Edit2 } from 'lucide-reac
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(4px);
+  background: rgba(2, 6, 23, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
-  padding: 1rem;
+  padding: 1.5rem;
+  animation: fadeIn 0.3s ease-out;
 `;
 
 const Panel = styled.div`
-  width: min(920px, 100%);
+  width: min(1000px, 100%);
   max-height: 90vh;
   overflow: auto;
   border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  background: var(--bg-2);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 40px rgba(249, 115, 22, 0.05);
+  animation: modalScaleUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  @keyframes modalScaleUp {
+    from { opacity: 0; transform: scale(0.95) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
 `;
 
 const Header = styled.div`
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-color);
+  padding: 1.5rem 1.75rem;
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: rgba(255, 255, 255, 0.02);
 `;
 
 const Title = styled.h3`
@@ -56,20 +75,32 @@ const Grid = styled.div`
 `;
 
 const StatCard = styled.div`
-  background: var(--surface-2);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--brand);
+    transform: translateY(-2px);
+  }
 
   span {
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
   strong {
     display: block;
-    margin-top: 0.25rem;
-    font-size: 1rem;
+    margin-top: 0.4rem;
+    font-size: 1.15rem;
+    font-weight: 800;
+    font-family: 'Montserrat', sans-serif;
   }
 `;
 
@@ -81,12 +112,19 @@ const ChipsRow = styled.div`
 `;
 
 const Chip = styled.span`
-  border: 1px solid var(--border-color);
-  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-main);
   border-radius: 999px;
-  padding: 0.2rem 0.6rem;
+  padding: 0.3rem 0.8rem;
   font-size: 0.74rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
 `;
 
 const Table = styled.table`

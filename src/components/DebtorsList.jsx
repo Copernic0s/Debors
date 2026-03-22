@@ -9,12 +9,14 @@ const Container = styled.div`
   margin-top: 1.5rem;
   animation: fadeIn 0.6s ease-out;
   border: 1px solid var(--glass-border);
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(24px);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
 
   @media (max-width: 768px) {
-    padding: 1rem;
+    padding: 1.25rem;
     margin-top: 1rem;
   }
 `;
@@ -50,27 +52,28 @@ const SearchInput = styled.div`
   align-items: center;
   
   input {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    padding: 0.7rem 1rem 0.7rem 2.8rem;
+    padding: 0.75rem 1rem 0.75rem 2.8rem;
     color: var(--text-main);
     font-family: inherit;
     font-size: 0.9rem;
     width: min(320px, 80vw);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(5px);
 
     &::placeholder {
       color: var(--text-muted);
-      opacity: 0.6;
+      opacity: 0.5;
     }
 
     &:focus {
       outline: none;
       border-color: var(--brand);
-      background: rgba(0, 0, 0, 0.4);
-      box-shadow: 0 0 20px rgba(56, 189, 248, 0.15);
-      width: min(360px, 85vw);
+      background: rgba(0, 0, 0, 0.5);
+      box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+      width: min(380px, 85vw);
     }
   }
 
@@ -208,13 +211,15 @@ const StatusSelect = styled(BillingCycleSelect)`
 `;
 
 const SourceBadge = styled.span`
-  border: 1px solid ${(props) => (props.$type === 'invoice' ? 'rgba(56, 189, 248, 0.35)' : 'rgba(149, 164, 187, 0.3)')};
-  background: ${(props) => (props.$type === 'invoice' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(149, 164, 187, 0.12)')};
+  border: 1px solid ${(props) => (props.$type === 'invoice' ? 'rgba(249, 115, 22, 0.35)' : 'rgba(149, 164, 187, 0.25)')};
+  background: ${(props) => (props.$type === 'invoice' ? 'rgba(249, 115, 22, 0.1)' : 'rgba(255, 255, 255, 0.05)')};
   color: ${(props) => (props.$type === 'invoice' ? 'var(--brand)' : 'var(--text-muted)')};
   border-radius: 999px;
-  padding: 0.18rem 0.56rem;
+  padding: 0.2rem 0.65rem;
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 `;
 
 // Removed InvoiceStepper and StepButton as they are no longer needed
@@ -236,21 +241,23 @@ const DueInput = styled.input`
 `;
 
 const IconActionButton = styled.button`
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  border: 1px solid ${(props) => props.$danger ? 'rgba(248, 113, 113, 0.36)' : 'rgba(56, 189, 248, 0.35)'};
-  background: ${(props) => props.$danger ? 'rgba(248, 113, 113, 0.12)' : 'rgba(56, 189, 248, 0.14)'};
-  color: ${(props) => props.$danger ? 'var(--danger)' : 'var(--brand)'};
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid ${(props) => props.$danger ? 'rgba(239, 68, 68, 0.3)' : 'var(--glass-border)'};
+  background: ${(props) => props.$danger ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255, 255, 255, 0.05)'};
+  color: ${(props) => props.$danger ? 'var(--danger)' : 'var(--text-muted)'};
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.15s, filter 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
+    transform: translateY(-2px);
+    background: ${(props) => props.$danger ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
+    color: ${(props) => props.$danger ? 'var(--danger)' : 'var(--text-main)'};
+    border-color: ${(props) => props.$danger ? 'var(--danger)' : 'rgba(255, 255, 255, 0.3)'};
   }
 `;
 
