@@ -309,7 +309,8 @@ const mapCsByAgentRow = (row) => {
     company: normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company'),
     debtStatus: normalizeText(r['debt status'] || r.status),
     hasDebt: normalizeDebtFlag(r['debt status'] || r.status),
-    checked: parseBoolean(r.checked)
+    checked: parseBoolean(r.checked),
+    billingCycle: normalizeBillingCycle(r['billing cycle'] || r.billingcycle)
   };
 };
 

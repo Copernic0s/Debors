@@ -433,6 +433,9 @@ const aggregateByCompany = (rows) => {
     const amountToAdd = isPaid ? 0 : amount;
 
     const current = grouped.get(key);
+    const normalizedCycle = normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED;
+    const isCsSource = row.id?.startsWith('CS-') || row.source === 'cs';
+
     if (!current) {
       grouped.set(key, {
         ...row,
@@ -441,8 +444,9 @@ const aggregateByCompany = (rows) => {
         agentId: agent,
         agentSet: new Set([agent]),
         amount: amountToAdd,
-        billingCycle: normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED,
-        cycleSet: new Set([normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED]),
+        billingCycle: normalizedCycle,
+        cycleSet: new Set([normalizedCycle]),
+        isSheetCycle: isCsSource && normalizedCycle !== BILLING_CYCLES.UNSPECIFIED,
         status: row.status || 'pending',
         notes: row.notes || '',
         invoiceNumber: row.invoiceNumber || '',
@@ -459,10 +463,23 @@ const aggregateByCompany = (rows) => {
     // Accumulate SUM (non-paid only), AGENTS, and CYCLES
     current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
     current.agentSet.add(agent);
+    
+    // Priority 1: If the row comes from the CS sheet and has a cycle, it's the MASTER.
+    // Priority 2: If we don't have a master cycle yet, take the first non-unspecified one found.
     const normalizedRowCycle = normalizeBillingCycle(row.billingCycle);
     if (normalizedRowCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
       current.cycleSet.add(normalizedRowCycle);
+      
+      if (!current.isSheetCycle) {
+        if (isCsSource) {
+          current.billingCycle = normalizedRowCycle;
+          current.isSheetCycle = true;
+        } else if (current.billingCycle === BILLING_CYCLES.UNSPECIFIED) {
+          current.billingCycle = normalizedRowCycle;
+        }
+      }
     }
+
     if (row.invoiceNumber) current.invoiceCount += 1;
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
 
@@ -475,7 +492,9 @@ const aggregateByCompany = (rows) => {
         current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
         current.status = row.status || current.status;
         current.notes = row.notes || current.notes;
-        current.billingCycle = row.billingCycle || current.billingCycle;
+        if (!current.isSheetCycle) {
+          current.billingCycle = row.billingCycle || current.billingCycle;
+        }
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
         current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
