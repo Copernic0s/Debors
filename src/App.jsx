@@ -125,9 +125,9 @@ const Topbar = styled.header`
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand), transparent);
-    background-size: 200% 100%;
-    animation: borderGlow 6s ease-in-out infinite;
+    background: linear-gradient(90deg, transparent, var(--brand-blue), var(--brand), transparent);
+    background-size: 300% 100%;
+    animation: borderGlow 8s ease-in-out infinite;
     opacity: 0.8;
   }
 
@@ -233,15 +233,22 @@ const BrandTitle = styled.h1`
   font-size: 1.8rem;
   font-weight: 900;
   margin: 0;
-  background: linear-gradient(135deg, #fff 0%, var(--brand) 50%, #ea580c 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   font-family: 'Montserrat', sans-serif;
   display: flex;
   align-items: center;
   gap: 0.75rem;
+
+  span.brand-blue {
+    color: var(--brand-blue);
+    text-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+  }
+
+  span.brand-white {
+    color: #ffffff;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+  }
 
   @media (max-width: 900px) {
     font-size: 1.4rem;
@@ -1460,7 +1467,10 @@ function App() {
         <Topbar>
           <TopbarLeft>
             <AlmaFuelLogo size={42} />
-            <BrandTitle>DEBORS ALMAFUEL</BrandTitle>
+            <BrandTitle>
+              <span className="brand-blue">DEBORS</span>
+              <span className="brand-white">ALMAFUEL</span>
+            </BrandTitle>
           </TopbarLeft>
 
           <TopbarRight>
