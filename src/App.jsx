@@ -1241,11 +1241,15 @@ function App() {
       return 0;
     });
 
+    const seenIds = new Set();
+    const seenInvoices = new Set();
+    
     sortedScoped.forEach(row => {
-      const windowKey = normalizeWeekLabel(row.weekLabel);
-      if (!seenWindows.has(windowKey)) {
+      const invKey = String(row.invoiceNumber || row.id).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!seenIds.has(row.id) && !seenInvoices.has(invKey)) {
         deduplicatedRows.push(row);
-        seenWindows.add(windowKey);
+        seenIds.add(row.id);
+        if (row.invoiceNumber) seenInvoices.add(invKey);
       }
     });
 

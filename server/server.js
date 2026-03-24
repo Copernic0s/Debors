@@ -25,12 +25,19 @@ const normalizeText = (value, fallback = '') => {
   return normalized || fallback;
 };
 
+// New Helper for robust matching
+const normalizeMatchKey = (value) => {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+};
+
 const normalizeBillingCycle = (value) => {
-  const raw = normalizeText(value).toLowerCase();
-  if (!raw || raw.includes('unspecified')) return BILLING_CYCLES.UNSPECIFIED;
-  if (raw.includes('cs by agent')) return BILLING_CYCLES.UNSPECIFIED;
-  if (raw.includes('thursday') || raw.includes('thurs') || raw.includes('wednesday')) return BILLING_CYCLES.THURSDAY_WEDNESDAY;
-  if (raw.includes('monday') || raw.includes('sunday')) return BILLING_CYCLES.MONDAY_SUNDAY;
+  const raw = normalizeMatchKey(value);
+  if (!raw || raw.includes('unspecified') || raw.includes('csbyagent')) return BILLING_CYCLES.UNSPECIFIED;
+  if (raw.includes('thursday') || raw.includes('thu') || raw.includes('wednesday') || raw.includes('wed')) return BILLING_CYCLES.THURSDAY_WEDNESDAY;
+  if (raw.includes('monday') || raw.includes('mon') || raw.includes('sunday') || raw.includes('sun')) return BILLING_CYCLES.MONDAY_SUNDAY;
   if (raw.includes('twice')) return BILLING_CYCLES.TWICE;
   return BILLING_CYCLES.UNSPECIFIED;
 };
@@ -250,7 +257,10 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
     company,
     clientName: company,
     contactPerson: normalizeText(r['contact person'] || r.contact || r.contactperson),
-    agentId: normalizeText(r['sales rep'] || r.agentid || r.agent, 'Unassigned'),
+    agentId: normalizeText(
+      r['sales rep'] || r.agentid || r.agent || r.sales_rep || r.vendedor || r.representative || r['assigned to'], 
+      'Unassigned'
+    ),
     billingCycle,
     amount: amountNormalized,
     dueDate,
@@ -264,11 +274,13 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
 const consolidateDebtorRows = (rows) => {
   const grouped = new Map();
   rows.forEach((row) => {
-    const invoice = String(row.invoiceNumber || '').trim();
-    const company = String(row.company || row.clientName || '').trim().toLowerCase();
-    // If there's an invoice, group by company+invoice. 
-    // If not, use the unique generated ID (which now includes rowIndex).
-    const key = invoice ? `${company}|${invoice.toLowerCase()}` : `${company}|row:${row.id}`;
+    const rawInv = String(row.invoiceNumber || '').trim();
+    const invoiceNorm = normalizeMatchKey(rawInv);
+    const companyNorm = normalizeMatchKey(row.company || row.clientName);
+    
+    // If there's an invoice, group by normalized company + normalized invoice.
+    // If not, use the generated unique ID.
+    const key = invoiceNorm ? `${companyNorm}|${invoiceNorm}` : `${companyNorm}|row:${row.id}`;
 
     if (!grouped.has(key)) {
       grouped.set(key, { ...row });
@@ -277,21 +289,20 @@ const consolidateDebtorRows = (rows) => {
 
     const current = grouped.get(key);
     
-    // If it's the same record across different sheets/weeks, we take the one from the "latest" sheet 
-    // or the one with the highest amount (since debt usually grows or is corrected up).
-    if ((Number(row.amount) || 0) > (Number(current.amount) || 0)) {
-      current.amount = Number(row.amount) || 0;
-    }
+    // LATEST-WINS CONSISTENCY: 
+    // If this row comes from a more recent sheet (higher index), it is the SOURCE OF TRUTH.
+    // This ensures that if an invoice was $1000 last week but is $200 this week (partial payment),
+    // we correctly show $200, not $1000.
+    const isMoreRecent = (Number(row.sourceSheetOrder) || 0) >= (Number(current.sourceSheetOrder) || 0);
 
-    if ((Number(row.sourceSheetOrder) || 0) >= (Number(current.sourceSheetOrder) || 0)) {
-      if (row.billingCycle && row.billingCycle !== BILLING_CYCLES.UNSPECIFIED) {
+    if (isMoreRecent) {
+      // Overwrite everything with latest version
+      Object.assign(current, row);
+    } else {
+      // If it's an older row, we only take information if the current one is missing it (unlikely)
+      if (!current.billingCycle || current.billingCycle === BILLING_CYCLES.UNSPECIFIED) {
         current.billingCycle = row.billingCycle;
       }
-      if (row.dueDate) current.dueDate = row.dueDate;
-      if (row.agentId && row.agentId !== 'Unassigned') current.agentId = row.agentId;
-      if (row.weekLabel) current.weekLabel = row.weekLabel;
-      current.status = row.status;
-      current.sourceSheetOrder = row.sourceSheetOrder;
     }
   });
 
