@@ -437,6 +437,7 @@ const aggregateByCompany = (rows) => {
     const isCsSource = row.id?.startsWith('CS-') || row.source === 'cs';
 
     if (!current) {
+      const invKey = String(row.invoiceNumber || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       grouped.set(key, {
         ...row,
         company,
@@ -455,13 +456,20 @@ const aggregateByCompany = (rows) => {
         invoiceCountOverride: Number.isFinite(Number(row.invoiceCountOverride)) ? Number(row.invoiceCountOverride) : null,
         dueDate: row.dueDate || '',
         latestId: row.id,
-        id: `CMP-${key}`
+        id: `CMP-${key}`,
+        seenInvoices: new Set([invKey])
       });
       return;
     }
 
-    // Accumulate SUM (non-paid only), AGENTS, and CYCLES
-    current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
+    // Accumulate SUM (non-paid only), AGENTS, and CYCLES with deduplication
+    const invKey = String(row.invoiceNumber || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!current.seenInvoices.has(invKey)) {
+      current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
+      current.seenInvoices.add(invKey);
+      if (row.invoiceNumber) current.invoiceCount += 1;
+    }
+    
     current.agentSet.add(agent);
     
     // Priority 1: If the row comes from the CS sheet and has a cycle, it's the MASTER.
@@ -595,6 +603,17 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setCurrentDebtor(null);
+        setActiveCompany(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const fetchManualEdits = useCallback(async () => {
