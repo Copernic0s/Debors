@@ -326,6 +326,18 @@ const mapCsByAgentRow = (row) => {
   };
 };
 
+const mapTrackerRow = (row) => {
+  const r = createLookup(row);
+  return {
+    id: `TRK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    date: normalizeDate(r.date || r.fecha),
+    company: normalizeText(r['customer/company'] || r.customer || r.company || r.cliente || r.empresa, 'Unknown'),
+    task: normalizeText(r.task || r.tarea),
+    status: normalizeText(r.status || r.estatus || r.estado),
+    notes: normalizeText(r.notes || r.notas)
+  };
+};
+
 // API Endpoint
 app.get('/api/debtors', async (req, res) => {
   try {
@@ -345,9 +357,14 @@ app.get('/api/debtors', async (req, res) => {
     console.log('[Zoho Sync] Sheets found:', workbook.SheetNames.join(', '));
 
     const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
+    
+    const trackerSheetName = workbook.SheetNames.find((name) => {
+      const lower = name.trim().toLowerCase();
+      return lower === 'tracker' || lower === 'traker';
+    });
 
     const debtors = workbook.SheetNames
-      .filter((sheetName) => sheetName !== csSheetName)
+      .filter((sheetName) => sheetName !== csSheetName && sheetName !== trackerSheetName)
       .flatMap((sheetName, index) => {
         const sheet = workbook.Sheets[sheetName];
         const rowsRaw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
@@ -363,9 +380,14 @@ app.get('/api/debtors', async (req, res) => {
       ? XLSX.utils.sheet_to_json(workbook.Sheets[csSheetName], { defval: '' }).map(mapCsByAgentRow)
       : [];
 
+    const trackerLogs = trackerSheetName
+      ? XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], { defval: '' }).map(mapTrackerRow)
+      : [];
+
     res.json({
       debtors: consolidatedDebtors,
-      clientsByAgent
+      clientsByAgent,
+      trackerLogs
     });
 
   } catch (error) {

@@ -8,7 +8,7 @@ import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
-import InvoiceRoadmap from './components/InvoiceRoadmap';
+import SupportTracker from './components/SupportTracker';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
@@ -573,7 +573,8 @@ const aggregateByCompany = (rows) => {
 function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
-  const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'sla'
+  const [trackerData, setTrackerData] = useState([]);
+  const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
@@ -706,8 +707,12 @@ function App() {
     setIsSyncing(true);
 
     try {
-      const { debtors: sheetData, clientsByAgent: csData } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
+
+      if (trackerLogs) {
+        setTrackerData(trackerLogs);
+      }
 
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
@@ -1098,84 +1103,7 @@ function App() {
     });
   };
 
-  const handleConfirmProcess = (debtor) => {
-    if (!debtor) return;
-    const idToUpdate = debtor.latestId || debtor.id;
-    if (!idToUpdate) return;
-    
-    const invNumber = debtor.invoiceNumber || '';
-    const now = new Date();
-    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
-
-        let newStatus = item.status;
-        if ((!item.status || item.status === 'no_invoice') && invNumber) {
-          newStatus = 'pending';
-        }
-
-        const dateObj = new Date(todayDate + 'T00:00:00');
-        dateObj.setDate(dateObj.getDate() + 1);
-        const calculatedDue = dateObj.toISOString().split('T')[0];
-
-        const updated = {
-          ...item,
-          lastInvoicedDate: todayDate,
-          dueDate: calculatedDue,
-          invoiceNumber: invNumber || item.invoiceNumber,
-          status: newStatus,
-          noUsageCount: 0 
-        };
-        changed.push(updated);
-        return updated;
-      });
-
-      if (changed.length > 0) {
-        persistEditedRows(changed);
-      }
-      return next;
-    });
-
-    toast.success(`${debtor.company} confirmed`, {
-      icon: '✅',
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
-
-  const handleMarkNoUsage = (debtor) => {
-    const idToUpdate = debtor.latestId || debtor.id;
-    if (!idToUpdate) return;
-
-    const todayDate = new Date().toISOString().split('T')[0];
-
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
-
-        const nextCount = (Number(item.noUsageCount) || 0) + 1;
-        const updated = { 
-          ...item, 
-          lastNoUsageDate: todayDate,
-          noUsageCount: nextCount,
-          status: nextCount >= 3 ? 'inactive' : item.status
-        };
-        changed.push(updated);
-        return updated;
-      });
-
-      persistEditedRows(changed);
-      return next;
-    });
-
-    toast.success(`${debtor.company} marked as No Usage (Streak: ${(Number(debtor.noUsageCount) || 0) + 1})`, {
-      icon: '🚫',
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
 
 
   const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
@@ -1293,99 +1221,7 @@ function App() {
     };
   }, [activeCompany, data, selectedAgent, selectedWeek]);
 
-  const slaPriorityCount = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
-    const getEarliestUnprocessedInvDate = (item) => {
-      const cycle = normalizeBillingCycle(item.billingCycle);
-      if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED, BILLING_CYCLES.MULTIPLE].includes(cycle)) return null;
-
-      const getDates = (type, refDate) => {
-        const inv = new Date(refDate);
-        const day = refDate.getDay();
-        
-        if (type === BILLING_CYCLES.MONDAY_SUNDAY) {
-          let diff = day - 1;
-          if (diff < 0) diff += 7;
-          inv.setDate(refDate.getDate() - diff);
-        } else if (type === BILLING_CYCLES.THURSDAY_WEDNESDAY) {
-          let diff = day - 4;
-          if (diff < 0) diff += 7;
-          inv.setDate(refDate.getDate() - diff);
-        } else if (type === BILLING_CYCLES.TWICE) {
-          const d1 = new Date(refDate);
-          let diff1 = d1.getDay() - 1; // Monday
-          if (diff1 < 0) diff1 += 7;
-          d1.setDate(d1.getDate() - diff1);
-
-          const d2 = new Date(refDate);
-          let diff2 = d2.getDay() - 4; // Thursday
-          if (diff2 < 0) diff2 += 7;
-          d2.setDate(d2.getDate() - diff2);
-
-          const active = d1 > d2 ? d1 : d2;
-          inv.setTime(active.getTime());
-        }
-        return inv;
-      };
-
-      let currentRef = new Date(today);
-      let iterations = 0;
-      let finalInv = null;
-
-      while (iterations < 2) {
-        const inv = getDates(cycle, currentRef);
-        if (!inv) break;
-
-        const isProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= inv) ||
-          (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= inv);
-
-        if (!isProcessed) {
-          finalInv = inv;
-          break;
-        }
-
-        // If processed, check if we should look FORWARD (only on first iteration)
-        if (iterations === 0) {
-          const lookAheadRef = new Date(inv);
-          lookAheadRef.setDate(lookAheadRef.getDate() + 7);
-          const nextInv = getDates(cycle, lookAheadRef);
-          
-          const isNextProcessed = (item.lastInvoicedDate && new Date(item.lastInvoicedDate + 'T00:00:00') >= nextInv) ||
-            (item.lastNoUsageDate && new Date(item.lastNoUsageDate + 'T00:00:00') >= nextInv);
-          
-          if (!isNextProcessed) {
-            finalInv = nextInv;
-            break; 
-          }
-        }
-
-        currentRef = new Date(inv);
-        currentRef.setDate(inv.getDate() - 1);
-        iterations++;
-      }
-      return finalInv;
-    };
-
-    return agentData.filter(item => {
-      const cycle = normalizeBillingCycle(item.billingCycle);
-      if ([BILLING_CYCLES.CS_BY_AGENT, BILLING_CYCLES.UNSPECIFIED].includes(cycle)) return false;
-
-      // Logic from InvoiceRoadmap to determine if it's Closing, Today, or Overdue
-      const invDate = getEarliestUnprocessedInvDate(item);
-      if (!invDate) return false;
-
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      // Calculate diff in days
-      const diff = Math.floor((todayStart - invDate) / (1000 * 60 * 60 * 24));
-      
-      // Count if it's Closing Period (diff -1), Today (0), or Overdue (>0)
-      return diff >= -1;
-    }).length;
-  }, [agentData]);
 
   const overviewContent = (
     <div style={{ 
@@ -1402,10 +1238,7 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        <ViewButton type="button" $statusColor="#38bdf8" $active={activeView === 'sla'} onClick={() => setActiveView('sla')} style={{ position: 'relative' }}>
-          SLA Monitor
-          {slaPriorityCount > 0 && <div className="priority-badge">{slaPriorityCount}</div>}
-        </ViewButton>
+        <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
       </ViewSwitch>
 
       <div style={{ marginBottom: '1.4rem' }}>
@@ -1471,14 +1304,10 @@ function App() {
         />
       )}
 
-      {activeView === 'sla' && (
-        <InvoiceRoadmap 
-          data={agentData}
-          onConfirm={handleConfirmProcess}
-          onMarkNoUsage={handleMarkNoUsage}
-          today={lastTick}
-        />
+      {activeView === 'tracker' && (
+        <SupportTracker data={trackerData} />
       )}
+
     </div>
   );
 
