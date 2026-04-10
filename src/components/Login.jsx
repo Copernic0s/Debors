@@ -1,141 +1,250 @@
 import React, { useState } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import { supabase } from '../lib/supabase';
 import { Lock, LogIn, Mail } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import AlmaFuelLogo from './AlmaFuelLogo';
+
+// Animations
+const float = keyframes`
+  0% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-20px) scale(1.05); }
+  100% { transform: translateY(0px) scale(1); }
+`;
+
+const floatReverse = keyframes`
+  0% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(20px) scale(0.95); }
+  100% { transform: translateY(0px) scale(1); }
+`;
+
+const fadeIn = keyframes`
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+`;
+
+const glowActive = keyframes`
+  0% { box-shadow: 0 0 10px rgba(249, 115, 22, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.5); }
+  100% { box-shadow: 0 0 10px rgba(249, 115, 22, 0.2); }
+`;
 
 const LoginContainer = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 40%, #0a0f1d 100%);
-  position: relative;
+  width: 100vw;
+  /* Use transparent to let the glorious index.css body flame background shine through, or add our own deep base */
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.8) 0%, rgba(6, 11, 20, 1) 100%);
+  position: fixed;
+  top: 0;
+  left: 0;
   overflow: hidden;
+  z-index: 1000;
+`;
+
+// Dynamic Vector Background Orbs
+const VectorOrbBrand = styled.div`
+  position: absolute;
+  top: -10%;
+  left: -5%;
+  width: 50vw;
+  height: 50vw;
+  max-width: 600px;
+  max-height: 600px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, transparent 60%);
+  border-radius: 50%;
+  filter: blur(60px);
+  animation: ${float} 12s ease-in-out infinite;
+  pointer-events: none;
+`;
+
+const VectorOrbBlue = styled.div`
+  position: absolute;
+  bottom: -15%;
+  right: -10%;
+  width: 60vw;
+  height: 60vw;
+  max-width: 700px;
+  max-height: 700px;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.12) 0%, transparent 60%);
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: ${floatReverse} 15s ease-in-out infinite;
+  pointer-events: none;
 `;
 
 const LoginCard = styled.div`
   width: 100%;
-  max-width: 420px;
-  padding: 3rem;
-  background: var(--surface);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(25px) saturate(180%);
-  -webkit-backdrop-filter: blur(25px) saturate(180%);
-  animation: fadeIn 0.8s ease-out;
+  max-width: 440px;
+  padding: 3.5rem 3rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  animation: ${fadeIn} 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.5), transparent);
+    opacity: 0.5;
+  }
 `;
 
 const Header = styled.div`
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+`;
+
+const LogoWrapper = styled.div`
+  margin-bottom: 1rem;
+  animation: ${float} 6s ease-in-out infinite;
 `;
 
 const Title = styled.h2`
-  font-size: 2.25rem;
+  font-size: 2rem;
   font-weight: 800;
-  margin-bottom: 0.5rem;
+  margin: 0;
   font-family: 'Montserrat', sans-serif;
-  background: linear-gradient(135deg, var(--brand), var(--accent-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  letter-spacing: -0.04em;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   
-  span {
-    -webkit-text-fill-color: var(--text-main);
-    opacity: 0.9;
+  span.brand {
+    color: var(--brand); /* Vibrant orange */
+  }
+
+  span.accent {
+    color: var(--brand-blue);
   }
 `;
 
 const Subtitle = styled.p`
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+  font-weight: 500;
 `;
 
 const Form = styled.form`
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
 `;
 
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
 `;
 
 const Label = styled.label`
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
+  margin-left: 0.2rem;
+  letter-spacing: 0.02em;
 `;
 
 const InputWrapper = styled.div`
   position: relative;
   display: flex;
   align-items: center;
+  transition: all 0.3s ease;
 `;
 
 const IconWrapper = styled.div`
   position: absolute;
-  left: 0.75rem;
+  left: 1rem;
   color: var(--text-muted);
   display: flex;
   align-items: center;
+  transition: color 0.3s ease;
+  z-index: 2;
 `;
 
 const Input = styled.input`
   width: 100%;
-  padding: 0.85rem 0.85rem 0.85rem 2.8rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  padding: 0.95rem 1rem 0.95rem 3rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   color: var(--text-main);
-  font-family: inherit;
-  font-size: 0.95rem;
+  font-family: 'Manrope', inherit;
+  font-size: 1rem;
   outline: none;
-  transition: all 0.3s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+  }
 
   &:focus {
-    border-color: var(--brand);
+    border-color: rgba(249, 115, 22, 0.6);
     background: rgba(255, 255, 255, 0.08);
-    box-shadow: var(--shadow-glow);
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+    transform: translateY(-2px);
+  }
+
+  &:focus + ${IconWrapper}, &:focus-within ~ ${IconWrapper} {
+    color: var(--brand); /* Icon glows orange when input focused */
   }
 `;
 
 const SubmitButton = styled.button`
   width: 100%;
-  margin-top: 1.5rem;
-  padding: 0.9rem;
-  background: linear-gradient(135deg, var(--brand), var(--accent-secondary));
-  color: #0c1220;
+  margin-top: 1rem;
+  padding: 1.1rem;
+  background: linear-gradient(135deg, var(--brand), #ea580c);
+  color: #fff;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 1.05rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.3);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 
-  &:hover {
+  &:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.01);
+    box-shadow: 0 12px 25px rgba(249, 115, 22, 0.45);
     filter: brightness(1.1);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(56, 189, 248, 0.35);
   }
 
-  &:active {
+  &:active:not(:disabled) {
     transform: translateY(0);
   }
 
   &:disabled {
-    opacity: 0.6;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.4);
+    box-shadow: none;
     cursor: not-allowed;
-    transform: none !important;
   }
 `;
 
@@ -156,21 +265,41 @@ function Login({ onLogin }) {
 
       if (error) throw error;
 
-      toast.success('Welcome back!');
+      toast.success('Welcome back!', {
+        icon: '👋',
+        style: {
+          background: '#0f172a',
+          color: '#fff',
+          border: '1px solid rgba(255,255,255,0.1)'
+        }
+      });
       if (onLogin) onLogin(data.user);
     } catch (error) {
-      toast.error(error.message || 'Error signing in');
+      toast.error(error.message || 'Error signing in', {
+        style: {
+          background: '#0f172a',
+          color: '#fff',
+          border: '1px solid rgba(239, 68, 68, 0.3)'
+        }
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <LoginContainer style={{ background: 'transparent' }}>
-      <LoginCard style={{ zIndex: 1, position: 'relative' }}>
+    <LoginContainer>
+      <VectorOrbBrand />
+      <VectorOrbBlue />
+      <LoginCard>
         <Header>
-          <Title style={{ fontSize: '1.8rem' }}>DEBORS <span>ALMAFUEL</span></Title>
-          <Subtitle>Sign in to access the dashboard</Subtitle>
+          <LogoWrapper>
+            <AlmaFuelLogo size={64} />
+          </LogoWrapper>
+          <Title>
+            DEBORS <span className="brand">ALMA</span><span className="accent">FUEL</span>
+          </Title>
+          <Subtitle>Welcome back, please sign in</Subtitle>
         </Header>
         <Form onSubmit={handleLogin}>
           <FormGroup>
@@ -179,7 +308,7 @@ function Login({ onLogin }) {
               <IconWrapper><Mail size={18} /></IconWrapper>
               <Input
                 type="email"
-                placeholder="you@company.com"
+                placeholder="you@almafuel.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -200,7 +329,7 @@ function Login({ onLogin }) {
             </InputWrapper>
           </FormGroup>
           <SubmitButton type="submit" disabled={loading}>
-            {loading ? 'Signing in...' : <><LogIn size={18} /> Sign In</>}
+            {loading ? 'Authenticating...' : <><LogIn size={20} /> Access System</>}
           </SubmitButton>
         </Form>
       </LoginCard>
