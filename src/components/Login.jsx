@@ -5,17 +5,11 @@ import { Lock, LogIn, Mail } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import AlmaFuelLogo from './AlmaFuelLogo';
 
-// Animations
+// Subtle floating animation for the logo
 const float = keyframes`
-  0% { transform: translateY(0px) scale(1); }
-  50% { transform: translateY(-30px) scale(1.05); }
-  100% { transform: translateY(0px) scale(1); }
-`;
-
-const floatReverse = keyframes`
-  0% { transform: translateY(0px) scale(1); }
-  50% { transform: translateY(30px) scale(0.95); }
-  100% { transform: translateY(0px) scale(1); }
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
 `;
 
 const fadeIn = keyframes`
@@ -23,20 +17,21 @@ const fadeIn = keyframes`
   100% { opacity: 1; transform: translateY(0); }
 `;
 
-const floatUpEmber = keyframes`
+// Subtle sparks floating up
+const floatUpSpark = keyframes`
   0% {
-    transform: translateY(100vh) translateX(0) scale(0) rotate(0deg);
+    transform: translateY(100vh) scale(0);
     opacity: 0;
   }
-  20% {
-    opacity: 0.8;
-    transform: translateY(80vh) translateX(-20px) scale(1) rotate(45deg);
+  10% {
+    opacity: 0.6;
+    transform: translateY(80vh) scale(1);
   }
-  80% {
-    opacity: 0.5;
+  90% {
+    opacity: 0.2;
   }
   100% {
-    transform: translateY(-20vh) translateX(20px) scale(0) rotate(360deg);
+    transform: translateY(-10vh) scale(0);
     opacity: 0;
   }
 `;
@@ -47,8 +42,8 @@ const LoginContainer = styled.div`
   justify-content: center;
   min-height: 100vh;
   width: 100vw;
-  /* Deep background with a hot fiery base */
-  background: radial-gradient(circle at 50% 120%, rgba(200, 50, 0, 0.4) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(6, 11, 20, 1) 100%);
+  /* Deep dark background so the flame logo is the sole bright focal point */
+  background: radial-gradient(circle at center, #0f172a 0%, #060b14 100%);
   position: fixed;
   top: 0;
   left: 0;
@@ -56,164 +51,103 @@ const LoginContainer = styled.div`
   z-index: 1000;
 `;
 
-// Subtle noise texture overlay for absolute premium feel
+// Subtle noise texture overlay
 const NoiseOverlay = styled.div`
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.03;
+  opacity: 0.02;
   pointer-events: none;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
 `;
 
-// Dynamic Vector Background Orbs
-const VectorOrbBrand = styled.div`
-  position: absolute;
-  top: -10%;
-  left: -5%;
-  width: 50vw;
-  height: 50vw;
-  max-width: 800px;
-  max-height: 800px;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.25) 0%, transparent 65%);
-  border-radius: 50%;
-  filter: blur(80px);
-  animation: ${float} 14s ease-in-out infinite;
-  pointer-events: none;
-`;
-
-const VectorOrbBlue = styled.div`
-  position: absolute;
-  bottom: -15%;
-  right: -10%;
-  width: 60vw;
-  height: 60vw;
-  max-width: 900px;
-  max-height: 900px;
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 60%);
-  border-radius: 50%;
-  filter: blur(100px);
-  animation: ${floatReverse} 18s ease-in-out infinite;
-  pointer-events: none;
-`;
-
-const VectorOrbCenter = styled.div`
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80vw;
-  height: 80vw;
-  max-width: 600px;
-  max-height: 600px;
-  background: radial-gradient(circle, rgba(2ea043, 0.1) 0%, transparent 50%);
-  border-radius: 50%;
-  filter: blur(120px);
-  pointer-events: none;
-`;
-
-const Ember = styled.div`
+const Spark = styled.div`
   position: absolute;
   width: ${(props) => props.$size}px;
   height: ${(props) => props.$size}px;
   background: ${(props) => props.$color};
   border-radius: 50%;
   filter: blur(${(props) => props.$blur}px);
-  box-shadow: 0 0 ${(props) => props.$size * 2}px ${(props) => props.$color};
   left: ${(props) => props.$left}%;
-  bottom: -10%;
+  bottom: -5%;
   pointer-events: none;
-  animation: ${floatUpEmber} ${(props) => props.$duration}s linear infinite;
+  animation: ${floatUpSpark} ${(props) => props.$duration}s ease-in infinite;
   animation-delay: ${(props) => props.$delay}s;
   opacity: 0;
 `;
 
 const LoginCard = styled.div`
   width: 100%;
-  max-width: 440px;
-  padding: 3.5rem 3rem;
+  max-width: 420px;
+  padding: 3rem;
   background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(40px) saturate(200%);
-  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.05); /* Very subtle border */
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   animation: ${fadeIn} 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   position: relative;
   z-index: 10;
   display: flex;
   flex-direction: column;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.6), rgba(56, 189, 248, 0.5), transparent);
-    opacity: 0.7;
-    border-radius: 24px 24px 0 0;
-  }
 `;
 
 const Header = styled.div`
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 `;
 
+// Only the logo gets the intense glow and movement
 const LogoWrapper = styled.div`
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
   animation: ${float} 6s ease-in-out infinite;
-  filter: drop-shadow(0 0 25px rgba(249, 115, 22, 0.5));
+  filter: drop-shadow(0 0 35px rgba(249, 115, 22, 0.8));
 `;
 
 const Title = styled.h2`
-  font-size: 2.2rem;
-  font-weight: 900;
+  font-size: 1.8rem;
+  font-weight: 800;
   margin: 0;
   font-family: 'Montserrat', sans-serif;
   color: var(--text-main);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
   
   span.brand {
-    color: var(--brand); /* Vibrant orange */
-    text-shadow: 0 0 20px rgba(249, 115, 22, 0.4);
+    color: var(--brand); /* No heavy glow here anymore */
   }
 
   span.accent {
-    color: var(--brand-blue);
-    text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+    color: var(--brand-blue); /* No heavy glow here anymore */
   }
 `;
 
 const Subtitle = styled.p`
   color: var(--text-muted);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   margin-top: 0.5rem;
-  font-weight: 500;
 `;
 
 const Form = styled.form`
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 `;
 
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.5rem;
 `;
 
 const Label = styled.label`
@@ -221,104 +155,97 @@ const Label = styled.label`
   font-weight: 600;
   color: var(--text-muted);
   margin-left: 0.2rem;
-  letter-spacing: 0.02em;
 `;
 
 const InputWrapper = styled.div`
   position: relative;
   display: flex;
   align-items: center;
-  transition: all 0.3s ease;
 `;
 
 const IconWrapper = styled.div`
   position: absolute;
-  left: 1.1rem;
+  left: 1rem;
   color: #64748b;
   display: flex;
   align-items: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: color 0.3s ease;
   z-index: 2;
 `;
 
 const Input = styled.input`
   width: 100%;
-  padding: 1rem 1rem 1rem 3.2rem;
+  padding: 0.9rem 1rem 0.9rem 3rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--text-main);
-  font-family: 'Manrope', inherit;
-  font-size: 1rem;
+  font-family: inherit;
+  font-size: 0.95rem;
   outline: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s;
 
   &::placeholder {
-    color: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.2);
   }
 
   &:focus {
-    border-color: rgba(249, 115, 22, 0.6);
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
-    transform: translateY(-2px);
+    border-color: rgba(249, 115, 22, 0.4);
+    background: rgba(255, 255, 255, 0.05);
   }
 
   &:focus + ${IconWrapper}, &:focus-within ~ ${IconWrapper} {
-    color: var(--brand); /* Icon glows orange when input focused */
-    filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.5));
+    color: var(--brand);
   }
 `;
 
 const SubmitButton = styled.button`
   width: 100%;
-  margin-top: 1rem;
-  padding: 1.1rem;
-  background: linear-gradient(135deg, var(--brand), #ea580c);
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--brand);
   color: #fff;
   border: none;
-  border-radius: 16px;
-  font-weight: 800;
-  font-size: 1.05rem;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.6rem;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.4);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  transition: all 0.2s ease;
+  
+  /* Reduced shadow so it's not overpowering */
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 
   &:hover:not(:disabled) {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 15px 35px rgba(249, 115, 22, 0.5);
-    filter: saturate(1.2) brightness(1.1);
+    background: #ea580c;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.3);
   }
 
   &:active:not(:disabled) {
-    transform: translateY(0) scale(0.98);
+    transform: translateY(0);
   }
 
   &:disabled {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.4);
-    box-shadow: none;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 `;
 
-// Helper for generating embers
-const EMBER_COLORS = ['#f97316', '#fbbf24', '#ef4444', '#38bdf8'];
-function generateEmbers(count) {
+// Helper for generating subtle sparks
+const SPARK_COLORS = ['#f97316', '#ffffff', '#38bdf8'];
+function generateSparks(count) {
   return Array.from({ length: count }).map((_, i) => ({
     id: i,
-    size: Math.random() * 6 + 2, // 2px to 8px
+    size: Math.random() * 3 + 1, // very small (1-4px)
     left: Math.random() * 100, // 0 to 100%
-    duration: Math.random() * 10 + 8, // 8s to 18s
-    delay: Math.random() * 10, // 0s to 10s
-    blur: Math.random() * 2 + 1, // 1px to 3px
-    color: EMBER_COLORS[Math.floor(Math.random() * EMBER_COLORS.length)],
+    duration: Math.random() * 8 + 6, // 6s to 14s
+    delay: Math.random() * 5, // 0s to 5s
+    blur: Math.random() * 1.5, // minimal blur
+    color: SPARK_COLORS[Math.floor(Math.random() * SPARK_COLORS.length)],
   }));
 }
 
@@ -326,11 +253,11 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [embers, setEmbers] = useState([]);
+  const [sparks, setSparks] = useState([]);
 
   useEffect(() => {
-    // Generate embers only on client side after mount to avoid hydration mismatches if SSR
-    setEmbers(generateEmbers(25));
+    // Generate delicate sparks
+    setSparks(generateSparks(15));
   }, []);
 
   const handleLogin = async (e) => {
@@ -345,23 +272,10 @@ function Login({ onLogin }) {
 
       if (error) throw error;
 
-      toast.success('Welcome back!', {
-        icon: '👋',
-        style: {
-          background: '#0f172a',
-          color: '#fff',
-          border: '1px solid rgba(255,255,255,0.1)'
-        }
-      });
+      toast.success('Welcome back!');
       if (onLogin) onLogin(data.user);
     } catch (error) {
-      toast.error(error.message || 'Error signing in', {
-        style: {
-          background: '#0f172a',
-          color: '#fff',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
-        }
-      });
+      toast.error(error.message || 'Error signing in');
     } finally {
       setLoading(false);
     }
@@ -369,30 +283,25 @@ function Login({ onLogin }) {
 
   return (
     <LoginContainer>
-      {/* Deep Space Background Effects */}
-      <VectorOrbBrand />
-      <VectorOrbBlue />
-      <VectorOrbCenter />
       <NoiseOverlay />
 
-      {/* Floating Fire Embers */}
-      {embers.map((ember) => (
-        <Ember
-          key={ember.id}
-          $size={ember.size}
-          $left={ember.left}
-          $duration={ember.duration}
-          $delay={ember.delay}
-          $blur={ember.blur}
-          $color={ember.color}
+      {/* Subtle Sparks */}
+      {sparks.map((spark) => (
+        <Spark
+          key={spark.id}
+          $size={spark.size}
+          $left={spark.left}
+          $duration={spark.duration}
+          $delay={spark.delay}
+          $blur={spark.blur}
+          $color={spark.color}
         />
       ))}
 
-      {/* Core Interactive Card */}
       <LoginCard>
         <Header>
           <LogoWrapper>
-            <AlmaFuelLogo size={72} />
+            <AlmaFuelLogo size={64} />
           </LogoWrapper>
           <Title>
             DEBORS <span className="brand">ALMA</span><span className="accent">FUEL</span>
@@ -427,7 +336,7 @@ function Login({ onLogin }) {
             </InputWrapper>
           </FormGroup>
           <SubmitButton type="submit" disabled={loading}>
-            {loading ? 'Authenticating...' : <><LogIn size={20} /> Access System</>}
+            {loading ? 'Authenticating...' : <><LogIn size={18} /> Access System</>}
           </SubmitButton>
         </Form>
       </LoginCard>
