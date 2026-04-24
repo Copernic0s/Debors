@@ -105,7 +105,7 @@ const MainContent = styled.main`
 `;
 
 const Topbar = styled.header`
-  min-height: 94px;
+  min-height: 112px;
   border-bottom: 1px solid var(--glass-border);
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -140,7 +140,7 @@ const Topbar = styled.header`
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
-    padding: 1rem;
+    padding: 1.1rem 1rem;
     justify-items: center;
   }
 `;
@@ -238,34 +238,29 @@ const BrandLockup = styled.div`
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
+  gap: 0.1rem;
   text-align: center;
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2rem;
+  font-size: 2.7rem;
   font-weight: 800;
   margin: 0;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.075em;
   text-transform: uppercase;
   font-family: 'Syne', sans-serif;
   color: var(--brand-ice);
   line-height: 1;
+  text-shadow: 0 0 22px rgba(255, 179, 71, 0.08);
 
   span.brand {
     color: var(--brand-amber);
+    margin-right: 0.02em;
   }
 
   @media (max-width: 900px) {
-    font-size: 1.65rem;
+    font-size: 2.1rem;
   }
-`;
-
-const BrandSubtitle = styled.span`
-  color: var(--text-muted);
-  font-size: 0.76rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 `;
 
 const TopbarRight = styled.div`
@@ -286,13 +281,7 @@ const ActionButtons = styled.div`
   gap: 0.75rem;
 
   @media (max-width: 768px) {
-    width: 100%;
-
-    .btn {
-      flex: 1;
-      padding: 0.58rem 0.75rem;
-      font-size: 0.8rem;
-    }
+    justify-content: center;
   }
 `;
 
@@ -308,20 +297,24 @@ const TopbarMeta = styled.div`
 `;
 
 const SyncButton = styled.button`
-  padding: 0.45rem 0.72rem !important;
-  font-size: 0.8rem !important;
+  padding: 0.68rem 1rem !important;
+  font-size: 0.82rem !important;
+  border-radius: 999px !important;
 `;
 
 const ViewSwitch = styled.div`
   display: inline-flex;
   gap: 0.4rem;
   margin-bottom: 2rem;
-  padding: 0.55rem;
+  padding: 0.45rem;
   background: rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(180, 223, 255, 0.14);
   border-radius: 999px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 40px -30px rgba(0, 0, 0, 0.8);
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
 `;
 
 const ViewButton = styled.button`
@@ -329,13 +322,16 @@ const ViewButton = styled.button`
   background: ${(props) => (props.$active ? 'linear-gradient(135deg, rgba(255, 179, 71, 0.16), rgba(255, 122, 26, 0.2))' : 'transparent')};
   color: ${(props) => (props.$active ? 'var(--brand-ice)' : 'var(--text-muted)')};
   font-weight: 800;
-  padding: 0.7rem 1.45rem;
+  padding: 0.82rem 1.7rem;
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-size: 0.83rem;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 180px;
+  text-align: center;
 
   &:hover {
     color: var(--brand-ice);
@@ -349,8 +345,9 @@ const ViewButton = styled.button`
   `}
 
   @media (max-width: 768px) {
-    padding: 0.5rem 0.8rem;
-    font-size: 0.75rem;
+    min-width: 150px;
+    padding: 0.78rem 1.2rem;
+    font-size: 0.76rem;
   }
 
   .priority-badge {
@@ -1355,9 +1352,8 @@ function App() {
           </TopbarLeft>
 
           <BrandLockup>
-            <AlmaFuelLogo size={42} />
+            <AlmaFuelLogo size={60} />
             <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
-            <BrandSubtitle>Collections and Support Console</BrandSubtitle>
           </BrandLockup>
 
           <TopbarRight>
@@ -1368,7 +1364,7 @@ function App() {
               <button
                 className="btn btn-outline"
                 onClick={() => supabase.auth.signOut()}
-                style={{ fontSize: '0.8rem', padding: '0.45rem 0.72rem' }}
+                style={{ fontSize: '0.82rem', padding: '0.68rem 1rem', borderRadius: '999px' }}
               >
                 Logout
               </button>
