@@ -1,31 +1,32 @@
-@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 
 :root {
-  /* Brand Palette (Flame & Navy) */
-  --brand: #f97316; /* Vibrant Orange */
-  --brand-navy: #0b1426; /* Deep Navy */
-  --brand-blue: #38bdf8; /* Sky Blue accent */
-  --brand-indigo: #6366f1; /* Indigo accent */
-  
-  --bg-1: #060b14;
-  --bg-2: #0b1426;
-  --bg-3: #1e293b;
+  --brand: #ff7a1a;
+  --brand-deep: #d94f04;
+  --brand-amber: #ffb347;
+  --brand-cyan: #55d6ff;
+  --brand-ice: #dff7ff;
+
+  --bg-1: #06111f;
+  --bg-2: #0d1b31;
+  --bg-3: #142742;
+  --bg-4: #20385e;
   
   /* Glassmorphism Tokens */
-  --glass-bg: rgba(15, 23, 42, 0.45);
-  --glass-bg-lite: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.12);
-  --glass-blur: 20px;
+  --glass-bg: rgba(8, 18, 34, 0.62);
+  --glass-bg-lite: rgba(255, 255, 255, 0.045);
+  --glass-border: rgba(180, 223, 255, 0.16);
+  --glass-blur: 22px;
   
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-main: #f5fbff;
+  --text-muted: #9ab0c9;
   
   --ok: #10b981;
   --warn: #fbbf24;
   --danger: #ef4444;
   
-  --shadow-lg: 0 20px 60px -12px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 30px rgba(249, 115, 22, 0.15);
+  --shadow-lg: 0 28px 80px -28px rgba(0, 0, 0, 0.85);
+  --shadow-glow: 0 0 40px rgba(255, 122, 26, 0.22);
   
   --radius-xl: 28px;
   --radius-lg: 18px;
@@ -39,15 +40,13 @@
 }
 
 body {
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--bg-1);
-  /* "Flame" Background: Deep blues and vibrant orange radial gradients */
   background-image: 
-    radial-gradient(at 0% 0%, hsla(210, 100%, 15%, 1) 0px, transparent 100%),
-    radial-gradient(at 0% 80%, hsla(220, 100%, 20%, 0.8) 0px, transparent 60%),
-    radial-gradient(at 100% 0%, hsla(25, 100%, 45%, 0.15) 0px, transparent 40%),
-    radial-gradient(at 100% 100%, hsla(240, 100%, 15%, 0.4) 0px, transparent 60%),
-    radial-gradient(circle at 80% 80%, rgba(249, 115, 22, 0.1), transparent 40%);
+    radial-gradient(circle at 15% 20%, rgba(85, 214, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 15%, rgba(255, 122, 26, 0.2), transparent 24%),
+    radial-gradient(circle at 82% 78%, rgba(255, 179, 71, 0.12), transparent 22%),
+    linear-gradient(145deg, #04101d 0%, #0b1a30 42%, #132746 100%);
   color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -64,11 +63,13 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.12), transparent 70%),
-              radial-gradient(circle at 15% 85%, rgba(99, 102, 241, 0.08), transparent 60%);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(85, 214, 255, 0.14), transparent 42%),
+    radial-gradient(circle at 76% 14%, rgba(255, 122, 26, 0.12), transparent 30%),
+    radial-gradient(circle at 64% 78%, rgba(255, 179, 71, 0.08), transparent 28%);
   z-index: -1;
   pointer-events: none;
-  animation: flameMove 20s ease-in-out infinite alternate;
+  animation: flameMove 16s ease-in-out infinite alternate;
 }
 
 @keyframes flameMove {
@@ -82,7 +83,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Syne', sans-serif;
   letter-spacing: -0.02em;
 }
 
@@ -114,7 +115,7 @@ h6 {
   gap: 0.6rem;
   padding: 0.75rem 1.5rem;
   border-radius: var(--radius-md);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 600;
   font-size: 0.875rem;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -126,7 +127,7 @@ h6 {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--brand), #ea580c);
+  background: linear-gradient(135deg, var(--brand-amber), var(--brand), var(--brand-deep));
   color: white;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -141,7 +142,7 @@ h6 {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
   color: var(--text-main);
@@ -230,7 +231,7 @@ h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #314158;
+  background: #405678;
   border-radius: 10px;
 }
 

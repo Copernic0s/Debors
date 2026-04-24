@@ -105,13 +105,14 @@ const MainContent = styled.main`
 `;
 
 const Topbar = styled.header`
-  min-height: 72px;
+  min-height: 94px;
   border-bottom: 1px solid var(--glass-border);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
   padding: 0 2rem;
-  background: var(--glass-bg);
+  background: linear-gradient(180deg, rgba(8, 18, 34, 0.78), rgba(8, 18, 34, 0.58));
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   z-index: 100;
@@ -138,10 +139,9 @@ const Topbar = styled.header`
   }
 
   @media (max-width: 900px) {
-    padding: 0.75rem 1rem;
-    gap: 0.8rem;
-    align-items: center;
-    flex-direction: row;
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    justify-items: center;
   }
 `;
 
@@ -226,43 +226,57 @@ const AgentSnapshot = styled.div`
 const TopbarLeft = styled.div`
   display: flex;
   align-items: center;
-  gap: 1rem;
+  min-height: 1px;
+
+  @media (max-width: 900px) {
+    display: none;
+  }
+`;
+
+const BrandLockup = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  text-align: center;
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 1.8rem;
-  font-weight: 900;
+  font-size: 2rem;
+  font-weight: 800;
   margin: 0;
-  letter-spacing: 0.05em;
+  letter-spacing: -0.05em;
   text-transform: uppercase;
-  font-family: 'Montserrat', sans-serif;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  font-family: 'Syne', sans-serif;
+  color: var(--brand-ice);
+  line-height: 1;
 
-  span.brand-blue {
-    color: var(--brand-blue);
-    text-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
-  }
-
-  span.brand-white {
-    color: #ffffff;
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+  span.brand {
+    color: var(--brand-amber);
   }
 
   @media (max-width: 900px) {
-    font-size: 1.4rem;
+    font-size: 1.65rem;
   }
+`;
+
+const BrandSubtitle = styled.span`
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 `;
 
 const TopbarRight = styled.div`
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 1rem;
 
   @media (max-width: 900px) {
     width: 100%;
-    justify-content: space-between;
+    justify-content: center;
     flex-wrap: wrap;
   }
 `;
@@ -302,21 +316,21 @@ const ViewSwitch = styled.div`
   display: inline-flex;
   gap: 0.4rem;
   margin-bottom: 2rem;
-  padding: 0.5rem;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border);
-  border-radius: 18px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 0.55rem;
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(180, 223, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 40px -30px rgba(0, 0, 0, 0.8);
 `;
 
 const ViewButton = styled.button`
-  border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.4)' : 'transparent')};
-  background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.15)' : 'transparent')};
-  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
+  border: 1px solid ${(props) => (props.$active ? 'rgba(255, 179, 71, 0.35)' : 'transparent')};
+  background: ${(props) => (props.$active ? 'linear-gradient(135deg, rgba(255, 179, 71, 0.16), rgba(255, 122, 26, 0.2))' : 'transparent')};
+  color: ${(props) => (props.$active ? 'var(--brand-ice)' : 'var(--text-muted)')};
   font-weight: 800;
-  padding: 0.6rem 1.4rem;
-  border-radius: 14px;
+  padding: 0.7rem 1.45rem;
+  border-radius: 999px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   font-size: 0.85rem;
@@ -324,14 +338,14 @@ const ViewButton = styled.button`
   text-transform: uppercase;
 
   &:hover {
-    color: var(--text-main);
-    background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.25)' : 'rgba(255,255,255,0.05)')};
+    color: var(--brand-ice);
+    background: ${(props) => (props.$active ? 'linear-gradient(135deg, rgba(255, 179, 71, 0.22), rgba(255, 122, 26, 0.24))' : 'rgba(255,255,255,0.06)')};
     transform: translateY(-2px);
   }
 
   ${(props) => props.$active && `
-    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2);
-    text-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+    box-shadow: 0 14px 30px -18px rgba(255, 122, 26, 0.7);
+    text-shadow: 0 0 12px rgba(255, 179, 71, 0.2);
   `}
 
   @media (max-width: 768px) {
@@ -1337,12 +1351,14 @@ function App() {
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
-            <AlmaFuelLogo size={42} />
-            <BrandTitle>
-              <span className="brand-blue">DEBORS</span>
-              <span className="brand-white">ALMAFUEL</span>
-            </BrandTitle>
+            <div />
           </TopbarLeft>
+
+          <BrandLockup>
+            <AlmaFuelLogo size={42} />
+            <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
+            <BrandSubtitle>Collections and Support Console</BrandSubtitle>
+          </BrandLockup>
 
           <TopbarRight>
             <ActionButtons>

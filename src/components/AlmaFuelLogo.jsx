@@ -8,7 +8,7 @@ const AlmaFuelLogo = ({ size = 32, className = "" }) => (
     fill="none" 
     xmlns="http://www.w3.org/2000/svg"
     className={className}
-    style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))' }}
+    style={{ filter: 'drop-shadow(0 0 18px rgba(255, 122, 26, 0.45))' }}
   >
     {/* Outer Flame */}
     <path 
@@ -29,8 +29,9 @@ const AlmaFuelLogo = ({ size = 32, className = "" }) => (
     />
     <defs>
       <linearGradient id="outerGradient" x1="50" y1="5" x2="50" y2="100" gradientUnits="userSpaceOnUse">
-        <stop stopColor="#f97316" />
-        <stop offset="1" stopColor="#9a3412" />
+        <stop stopColor="#ffb347" />
+        <stop offset="0.45" stopColor="#ff7a1a" />
+        <stop offset="1" stopColor="#9c2f00" />
       </linearGradient>
     </defs>
   </svg>

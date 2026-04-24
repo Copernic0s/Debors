@@ -43,7 +43,10 @@ const LoginContainer = styled.div`
   min-height: 100vh;
   width: 100vw;
   /* Deep dark background so the flame logo is the sole bright focal point */
-  background: radial-gradient(circle at center, #0f172a 0%, #060b14 100%);
+  background:
+    radial-gradient(circle at 18% 18%, rgba(85, 214, 255, 0.18), transparent 26%),
+    radial-gradient(circle at 82% 14%, rgba(255, 122, 26, 0.16), transparent 22%),
+    linear-gradient(145deg, #04101d 0%, #09172a 42%, #132746 100%);
   position: fixed;
   top: 0;
   left: 0;
@@ -80,14 +83,14 @@ const Spark = styled.div`
 
 const LoginCard = styled.div`
   width: 100%;
-  max-width: 420px;
-  padding: 3rem;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05); /* Very subtle border */
-  border-radius: 20px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  max-width: 460px;
+  padding: 3.3rem;
+  background: linear-gradient(180deg, rgba(13, 27, 49, 0.72), rgba(8, 18, 34, 0.78));
+  border: 1px solid rgba(180, 223, 255, 0.14);
+  border-radius: 28px;
+  box-shadow: 0 32px 80px -32px rgba(0, 0, 0, 0.86), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   animation: ${fadeIn} 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   position: relative;
   z-index: 10;
@@ -108,34 +111,33 @@ const Header = styled.div`
 const LogoWrapper = styled.div`
   margin-bottom: 1.5rem;
   animation: ${float} 6s ease-in-out infinite;
-  filter: drop-shadow(0 0 35px rgba(249, 115, 22, 0.8));
+  filter: drop-shadow(0 0 40px rgba(255, 122, 26, 0.65));
 `;
 
 const Title = styled.h2`
-  font-size: 1.8rem;
+  font-size: 2.15rem;
   font-weight: 800;
   margin: 0;
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Syne', sans-serif;
   color: var(--text-main);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.2rem;
   
   span.brand {
-    color: var(--brand); /* No heavy glow here anymore */
-  }
-
-  span.accent {
-    color: var(--brand-blue); /* No heavy glow here anymore */
+    color: var(--brand-amber);
+    text-shadow: 0 0 18px rgba(255, 179, 71, 0.15);
   }
 `;
 
 const Subtitle = styled.p`
   color: var(--text-muted);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+  max-width: 280px;
+  line-height: 1.5;
 `;
 
 const Form = styled.form`
@@ -151,9 +153,11 @@ const FormGroup = styled.div`
 `;
 
 const Label = styled.label`
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(223, 247, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   margin-left: 0.2rem;
 `;
 
@@ -166,7 +170,7 @@ const InputWrapper = styled.div`
 const IconWrapper = styled.div`
   position: absolute;
   left: 1rem;
-  color: #64748b;
+  color: #7f95b0;
   display: flex;
   align-items: center;
   transition: color 0.3s ease;
@@ -176,9 +180,9 @@ const IconWrapper = styled.div`
 const Input = styled.input`
   width: 100%;
   padding: 0.9rem 1rem 0.9rem 3rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(180, 223, 255, 0.12);
+  border-radius: 16px;
   color: var(--text-main);
   font-family: inherit;
   font-size: 0.95rem;
@@ -190,8 +194,9 @@ const Input = styled.input`
   }
 
   &:focus {
-    border-color: rgba(249, 115, 22, 0.4);
-    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 179, 71, 0.4);
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 0 0 4px rgba(255, 122, 26, 0.08);
   }
 
   &:focus + ${IconWrapper}, &:focus-within ~ ${IconWrapper} {
@@ -203,7 +208,7 @@ const SubmitButton = styled.button`
   width: 100%;
   margin-top: 1.5rem;
   padding: 1rem;
-  background: var(--brand);
+  background: linear-gradient(135deg, var(--brand-amber), var(--brand), var(--brand-deep));
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -220,7 +225,7 @@ const SubmitButton = styled.button`
   box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 
   &:hover:not(:disabled) {
-    background: #ea580c;
+    background: linear-gradient(135deg, #ffc46b, #ff7a1a, #cb4200);
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(249, 115, 22, 0.3);
   }
@@ -304,9 +309,9 @@ function Login({ onLogin }) {
             <AlmaFuelLogo size={64} />
           </LogoWrapper>
           <Title>
-            DEBORS <span className="brand">ALMA</span><span className="accent">FUEL</span>
+            <span className="brand">ALMAFUEL</span>
           </Title>
-          <Subtitle>Welcome back, please sign in</Subtitle>
+          <Subtitle>Operational cockpit for collections, support tracking, and account follow-up.</Subtitle>
         </Header>
         <Form onSubmit={handleLogin}>
           <FormGroup>
