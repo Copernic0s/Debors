@@ -1,16 +1,7 @@
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-const XLSX = require('xlsx');
-
-const app = express();
-const PORT = process.env.PORT || 3001;
-
-app.use(cors());
+import * as XLSX from 'xlsx';
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
 
-// Constants and Normalization Fns from Frontend
 const BILLING_CYCLES = {
   MONDAY_SUNDAY: 'Monday - Sunday',
   THURSDAY_WEDNESDAY: 'Thursday - Wednesday',
@@ -18,21 +9,23 @@ const BILLING_CYCLES = {
   UNSPECIFIED: 'Unspecified'
 };
 
-const BILLING_PROFILE = { OWNER_A: 'owner_a', OWNER_B: 'owner_b', COMPANY_DUAL: 'company_dual' };
+const BILLING_PROFILE = {
+  OWNER_A: 'owner_a',
+  OWNER_B: 'owner_b',
+  COMPANY_DUAL: 'company_dual'
+};
 
 const normalizeText = (value, fallback = '') => {
   const normalized = String(value ?? '').trim();
   return normalized || fallback;
 };
 
-// New Helper for robust matching
-const normalizeMatchKey = (value) => {
-  return String(value ?? '')
+const normalizeMatchKey = (value) =>
+  String(value ?? '')
     .toLowerCase()
     .replace(/\s+(llc|inc|corp|co|limited|ltd|transportation|logistics|express)\b/g, '')
     .replace(/[^a-z0-9]/g, '')
     .trim();
-};
 
 const normalizeBillingCycle = (value) => {
   const raw = normalizeMatchKey(value);
@@ -45,13 +38,13 @@ const normalizeBillingCycle = (value) => {
 
 const normalizeAmount = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) return Number(value.toFixed(2));
+
   let raw = String(value ?? '').trim();
   if (!raw) return 0;
-  
-  // Basic cleanup: remove symbols and whitespace
-  raw = raw.replace(/[$€£]/g, '').replace(/[\s\u00A0\u202F]/g, '').replace(/[^0-9,.-]/g, '');
+
+  raw = raw.replace(/[$â‚¬Â£]/g, '').replace(/[\s\u00A0\u202F]/g, '').replace(/[^0-9,.-]/g, '');
   if (!raw) return 0;
-  
+
   const lastComma = raw.lastIndexOf(',');
   const lastDot = raw.lastIndexOf('.');
   const sepIndex = Math.max(lastComma, lastDot);
@@ -64,9 +57,8 @@ const normalizeAmount = (value) => {
   const hasBoth = lastComma !== -1 && lastDot !== -1;
   const decPart = raw.slice(sepIndex + 1);
   const intPart = raw.slice(0, sepIndex);
-  
+
   let normalized;
-  // If only one type of separator and followed by exactly 3 digits, it's ambiguous but likely thousands
   if (!hasBoth && decPart.length === 3) {
     normalized = raw.replace(/[.,]/g, '');
   } else {
@@ -85,10 +77,13 @@ const normalizeDate = (value) => {
       return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
     }
   }
+
   const raw = String(value ?? '').trim();
   if (!raw) return '';
+
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw;
+
   const year = parsed.getFullYear();
   const month = String(parsed.getMonth() + 1).padStart(2, '0');
   const day = String(parsed.getDate()).padStart(2, '0');
@@ -108,6 +103,7 @@ const normalizeStatus = (value, dueDate) => {
     const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     if (!Number.isNaN(parsedDate.getTime()) && parsedDate < dayStart) return 'overdue';
   }
+
   return 'pending';
 };
 
@@ -119,7 +115,7 @@ const parseBoolean = (value) => {
 const normalizeDebtFlag = (value) => {
   const normalized = normalizeText(value).toLowerCase();
   if (!normalized) return null;
-  if (['no debt', 'without debt', 'clear', 'no', 'paid', 'al dia', 'al día'].includes(normalized)) return false;
+  if (['no debt', 'without debt', 'clear', 'no', 'paid', 'al dia', 'al dÃ­a'].includes(normalized)) return false;
   if (['debt', 'has debt', 'pending', 'overdue', 'yes', 'mora'].includes(normalized)) return true;
   return null;
 };
@@ -134,9 +130,9 @@ const createLookup = (row) => {
 
 const parseSheetWeekStart = (sheetName) => {
   const raw = String(sheetName || '').trim();
-  // Matches "Month Day - Day" (e.g., "March 16 - 20" or "Feb 10-16")
   const match = raw.match(/^([A-Za-z]+)\s+(\d+)\s*[-\s]*(\d+)$/);
   if (!match) return null;
+
   const [, monthName, startDay] = match;
   const currentYear = new Date().getFullYear();
   const parsed = new Date(`${monthName} ${startDay}, ${currentYear}`);
@@ -153,11 +149,9 @@ const toDateKey = (date) => {
 
 const getWeekdayInSheet = (sheetStartDate, targetWeekday) => {
   if (!sheetStartDate) return null;
-  // Look ahead up to 9 days to find the target weekday in the "Next Week" context
   for (let i = 0; i < 10; i += 1) {
     const current = new Date(sheetStartDate);
     current.setDate(sheetStartDate.getDate() + i);
-    // getDay(): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
     if (current.getDay() === targetWeekday) return current;
   }
   return null;
@@ -176,35 +170,24 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
   const weekStart = parseSheetWeekStart(sheetName);
   if (!weekStart) return '';
 
-  // Rule A: Monday -> Sunday cycle. Works ends Sunday. 
-  // Invoice sent Monday. Due TUESDAY (next week start + 8 or 9 days depending on sheet start)
   if (profile === BILLING_PROFILE.OWNER_A) {
     const nextTuesday = getWeekdayInSheet(weekStart, 2);
-    // Ensure it's at least 7 days after week start to be in the "following" week
     if (nextTuesday) {
       const dayDiff = Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24));
-      if (dayDiff < 7) {
-        nextTuesday.setDate(nextTuesday.getDate() + 7);
-      }
+      if (dayDiff < 7) nextTuesday.setDate(nextTuesday.getDate() + 7);
       return toDateKey(nextTuesday);
     }
   }
 
-  // Rule B: Thursday -> Wednesday cycle. Work ends Wednesday.
-  // Invoice sent Thursday. Due FRIDAY.
   if (profile === BILLING_PROFILE.OWNER_B) {
     const nextFriday = getWeekdayInSheet(weekStart, 5);
     if (nextFriday) {
       const dayDiff = Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24));
-      // FRIDAY of Rule B usually comes 8 days after the Thursday start
-      if (dayDiff < 7) {
-        nextFriday.setDate(nextFriday.getDate() + 7);
-      }
+      if (dayDiff < 7) nextFriday.setDate(nextFriday.getDate() + 7);
       return toDateKey(nextFriday);
     }
   }
 
-  // Rule Twice: Monday & Thursday. 
   if (profile === BILLING_PROFILE.COMPANY_DUAL) {
     const today = new Date();
     const nextFriday = getWeekdayInSheet(weekStart, 5);
@@ -214,41 +197,41 @@ const inferDueDateFromCycle = (billingCycleText, sheetName) => {
       const dayDiff = Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24));
       if (dayDiff < 7) nextFriday.setDate(nextFriday.getDate() + 7);
     }
+
     if (nextTuesday) {
       const dayDiff = Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24));
       if (dayDiff < 7) nextTuesday.setDate(nextTuesday.getDate() + 7);
     }
 
-    // If today is past the Friday due date (or same day late), we likely look at the Tuesday one
-    if (nextFriday && today > nextFriday) {
-      return toDateKey(nextTuesday);
-    }
+    if (nextFriday && today > nextFriday) return toDateKey(nextTuesday);
     return toDateKey(nextFriday || nextTuesday);
   }
 
   return '';
 };
 
-const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
+const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder) => {
   const r = createLookup(row);
   const rd = createLookup(rowDisplay || {});
   const company = normalizeText(r['company name'] || r.company || r.clientname, 'Unknown Company');
   const billingCycle = normalizeBillingCycle(r['billing cycle'] || r.billingcycle || sheetName);
   const explicitDueDate = normalizeDate(r.duedate || r['due date'] || r.due_date);
   const dueDate = explicitDueDate || inferDueDateFromCycle(billingCycle, sheetName);
-  
-  // Preference: 1. Raw number from Zoho, 2. Formatted display string, 3. Raw string
+
   const rAmt = r['total due ($)'] ?? r['total due ()'] ?? r.amount ?? r.totaldue;
   const rdAmt = rd['total due ($)'] ?? rd['total due ()'] ?? rd.amount ?? rd.totaldue;
-  const amountInput = (typeof rAmt === 'number') ? rAmt : (rdAmt || rAmt);
+  const amountInput = typeof rAmt === 'number' ? rAmt : (rdAmt || rAmt);
   const amountNormalized = normalizeAmount(amountInput);
-  
+
   const generateId = () => {
     const inv = normalizeText(r['invoice number'] || r.id);
     if (inv) return inv;
+
     const compStr = company.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 15);
-    const agentStr = String(r['sales rep'] || r.agentid || r.agent || 'NA').replace(/[^a-zA-Z0-9]/g, '').toLowerCase().substring(0, 10);
-    // Use company + agent for stability across sheet shifts
+    const agentStr = String(r['sales rep'] || r.agentid || r.agent || 'NA')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase()
+      .substring(0, 10);
     return `GEN-${compStr}-${agentStr}`;
   };
 
@@ -259,7 +242,7 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
     clientName: company,
     contactPerson: normalizeText(r['contact person'] || r.contact || r.contactperson),
     agentId: normalizeText(
-      r['sales rep'] || r.agentid || r.agent || r.sales_rep || r.vendedor || r.representative || r['assigned to'], 
+      r['sales rep'] || r.agentid || r.agent || r.sales_rep || r.vendedor || r.representative || r['assigned to'],
       'Unassigned'
     ),
     billingCycle,
@@ -274,13 +257,11 @@ const mapDebtorRow = (row, rowDisplay, sheetName, sheetOrder, rowIndex) => {
 
 const consolidateDebtorRows = (rows) => {
   const grouped = new Map();
+
   rows.forEach((row) => {
     const rawInv = String(row.invoiceNumber || '').trim();
     const invoiceNorm = normalizeMatchKey(rawInv);
     const companyNorm = normalizeMatchKey(row.company || row.clientName);
-    
-    // If there's an invoice, group by normalized company + normalized invoice.
-    // If not, use the generated unique ID.
     const key = invoiceNorm ? `${companyNorm}|${invoiceNorm}` : `${companyNorm}|row:${row.id}`;
 
     if (!grouped.has(key)) {
@@ -289,21 +270,12 @@ const consolidateDebtorRows = (rows) => {
     }
 
     const current = grouped.get(key);
-    
-    // LATEST-WINS CONSISTENCY: 
-    // If this row comes from a more recent sheet (higher index), it is the SOURCE OF TRUTH.
-    // This ensures that if an invoice was $1000 last week but is $200 this week (partial payment),
-    // we correctly show $200, not $1000.
     const isMoreRecent = (Number(row.sourceSheetOrder) || 0) >= (Number(current.sourceSheetOrder) || 0);
 
     if (isMoreRecent) {
-      // Overwrite everything with latest version
       Object.assign(current, row);
-    } else {
-      // If it's an older row, we only take information if the current one is missing it (unlikely)
-      if (!current.billingCycle || current.billingCycle === BILLING_CYCLES.UNSPECIFIED) {
-        current.billingCycle = row.billingCycle;
-      }
+    } else if (!current.billingCycle || current.billingCycle === BILLING_CYCLES.UNSPECIFIED) {
+      current.billingCycle = row.billingCycle;
     }
   });
 
@@ -326,18 +298,22 @@ const mapCsByAgentRow = (row) => {
   };
 };
 
-const mapTrackerRow = (row) => {
+const buildTrackerId = ({ date, company, task, rowIndex }) => {
+  const stableKey = [date, company, task, rowIndex]
+    .map((part) => normalizeMatchKey(part))
+    .filter(Boolean)
+    .join('-');
+  return `TRK-${stableKey || rowIndex}`;
+};
+
+const mapTrackerRow = (row, rowIndex) => {
   const r = createLookup(row);
   const date = normalizeDate(r.date || r.fecha);
   const company = normalizeText(r['customer/company'] || r.customer || r.company || r.cliente || r.empresa, 'Unknown');
   const task = normalizeText(r.task || r.tarea);
-  const stableKey = [date, company, task]
-    .map((part) => normalizeMatchKey(part))
-    .filter(Boolean)
-    .join('-');
 
   return {
-    id: `TRK-${stableKey || 'row'}`,
+    id: buildTrackerId({ date, company, task, rowIndex }),
     date,
     company,
     agent: normalizeText(r.agent || r['sales rep'] || r['support agent'] || r.responsible),
@@ -347,26 +323,27 @@ const mapTrackerRow = (row) => {
   };
 };
 
-// API Endpoint
-app.get('/api/debtors', async (req, res) => {
+const fetchWorkbook = async () => {
+  const response = await fetch(`${SHEET_XLSX_URL}&t=${Date.now()}`, {
+    headers: {
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+      Expires: '0'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Zoho workbook request failed with ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return XLSX.read(arrayBuffer, { type: 'array' });
+};
+
+export default async function handler(_req, res) {
   try {
-    const sourceUrl = `${SHEET_XLSX_URL}&t=${Date.now()}`;
-    console.log('[Zoho Sync] Fetching from:', sourceUrl);
-
-    const response = await axios.get(sourceUrl, {
-      responseType: 'arraybuffer',
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-
-    const workbook = XLSX.read(response.data, { type: 'buffer' });
-    console.log('[Zoho Sync] Sheets found:', workbook.SheetNames.join(', '));
-
+    const workbook = await fetchWorkbook();
     const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
-    
     const trackerSheetName = workbook.SheetNames.find((name) => {
       const lower = name.trim().toLowerCase();
       return lower === 'tracker' || lower === 'traker';
@@ -377,7 +354,6 @@ app.get('/api/debtors', async (req, res) => {
       .flatMap((sheetName, index) => {
         const sheet = workbook.Sheets[sheetName];
         const rowsRaw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
-        console.log(`[Zoho Sync] Sheet "${sheetName}" has ${rowsRaw.length} rows`);
         const rowsDisplay = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
         return rowsRaw.map((row, rowIndex) => mapDebtorRow(row, rowsDisplay[rowIndex], sheetName, index));
       })
@@ -393,18 +369,13 @@ app.get('/api/debtors', async (req, res) => {
       ? XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], { defval: '' }).map(mapTrackerRow)
       : [];
 
-    res.json({
+    res.status(200).json({
       debtors: consolidatedDebtors,
       clientsByAgent,
       trackerLogs
     });
-
   } catch (error) {
-    console.error('Error fetching/parsing Zoho sheet:', error.message);
+    console.error('Error fetching/parsing Zoho sheet:', error);
     res.status(500).json({ error: 'Failed to ingest data from Zoho' });
   }
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend listening on port ${PORT}`);
-});
+}

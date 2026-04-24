@@ -7,7 +7,14 @@ const getBaseApiUrl = () => {
     console.log('[API] Using production URL:', finalUrl);
     return finalUrl;
   }
-  const fallback = `http://${window.location.hostname}:3001/api/debtors`;
+
+  if (import.meta.env.DEV) {
+    const fallback = `http://${window.location.hostname}:3001/api/debtors`;
+    console.log('[API] Using local fallback URL:', fallback);
+    return fallback;
+  }
+
+  const fallback = '/api/debtors';
   console.log('[API] Using local fallback URL:', fallback);
   return fallback;
 };
