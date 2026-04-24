@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { Search, Filter, CheckCircle, Clock3, AlertCircle, ClipboardList, UserRound } from 'lucide-react';
+import { Search, CheckCircle, Clock3, AlertCircle, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const TrackerContainer = styled.div`
   background: var(--glass-bg);
@@ -24,21 +24,15 @@ const TrackerContainer = styled.div`
 const HeaderRow = styled.div`
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
 
   h3 {
     margin: 0;
     font-size: 1.4rem;
     font-weight: 800;
     color: var(--text-main);
-  }
-
-  p {
-    margin: 0.35rem 0 0;
-    color: var(--text-muted);
-    font-size: 0.92rem;
   }
 `;
 
@@ -76,24 +70,11 @@ const SummaryCard = styled.div`
   }
 `;
 
-const ControlsGrid = styled.div`
-  display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(170px, 0.9fr));
-  gap: 1rem;
-
-  @media (max-width: 1050px) {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-  }
-
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
 const SearchInputBox = styled.div`
   position: relative;
   display: flex;
   align-items: center;
+  max-width: 460px;
 
   svg {
     position: absolute;
@@ -121,40 +102,19 @@ const SearchInputBox = styled.div`
   }
 `;
 
-const SelectBox = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
+const PageSizeSelect = styled.select`
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.88rem;
+  outline: none;
 
-  select {
-    width: 100%;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--glass-border);
+  option {
+    background: #0f172a;
     color: var(--text-main);
-    padding: 0.7rem 2rem 0.7rem 0.9rem;
-    border-radius: var(--radius-md);
-    font-family: 'Manrope', sans-serif;
-    font-size: 0.9rem;
-    outline: none;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    appearance: none;
-
-    &:focus {
-      border-color: var(--brand);
-    }
-
-    option {
-      background: #0f172a;
-      color: var(--text-main);
-    }
-  }
-
-  svg {
-    position: absolute;
-    right: 12px;
-    color: var(--text-muted);
-    pointer-events: none;
   }
 `;
 
@@ -224,11 +184,6 @@ const StyledTable = styled.table`
     min-width: 220px;
   }
 
-  .col-agent {
-    color: var(--text-muted);
-    min-width: 150px;
-  }
-
   .col-task {
     white-space: normal;
     min-width: 280px;
@@ -258,6 +213,48 @@ const StatusBadge = styled.span`
   color: ${(props) => props.$color};
   border: 1px solid ${(props) => props.$border};
   box-shadow: 0 0 10px ${(props) => props.$glow || 'transparent'};
+`;
+
+const PaginationRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+`;
+
+const PaginationInfo = styled.span`
+  color: var(--text-muted);
+  font-size: 0.88rem;
+`;
+
+const PaginationControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const PageButton = styled.button`
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    border-color: var(--brand);
+    color: var(--brand);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 `;
 
 const normalizeStatusLabel = (status) => {
@@ -322,9 +319,8 @@ const sortByNewestDate = (items) =>
 
 const SupportTracker = ({ data = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [companyFilter, setCompanyFilter] = useState('all');
-  const [agentFilter, setAgentFilter] = useState('all');
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
 
   const normalizedData = useMemo(
     () =>
@@ -332,67 +328,53 @@ const SupportTracker = ({ data = [] }) => {
         data.map((item, index) => ({
           ...item,
           id: item.id || `tracker-row-${index}`,
-          statusLabel: normalizeStatusLabel(item.status),
-          agentLabel: String(item.agent || '').trim() || 'Unassigned'
+          statusLabel: normalizeStatusLabel(item.status)
         }))
       ),
     [data]
   );
 
-  const uniqueStatuses = useMemo(
-    () => Array.from(new Set(normalizedData.map((item) => item.statusLabel))).sort(),
-    [normalizedData]
-  );
-
-  const uniqueCompanies = useMemo(
-    () => Array.from(new Set(normalizedData.map((item) => String(item.company || '').trim()).filter(Boolean))).sort(),
-    [normalizedData]
-  );
-
-  const uniqueAgents = useMemo(
-    () => Array.from(new Set(normalizedData.map((item) => item.agentLabel))).sort(),
-    [normalizedData]
-  );
-
   const filteredData = useMemo(() => {
     const term = searchTerm.toLowerCase();
 
-    return normalizedData.filter((item) => {
-      const matchSearch =
-        term === '' ||
-        String(item.company || '').toLowerCase().includes(term) ||
-        String(item.task || '').toLowerCase().includes(term) ||
-        String(item.notes || '').toLowerCase().includes(term);
-
-      const matchStatus = statusFilter === 'all' || item.statusLabel === statusFilter;
-      const matchCompany = companyFilter === 'all' || String(item.company || '').trim() === companyFilter;
-      const matchAgent = agentFilter === 'all' || item.agentLabel === agentFilter;
-
-      return matchSearch && matchStatus && matchCompany && matchAgent;
-    });
-  }, [normalizedData, searchTerm, statusFilter, companyFilter, agentFilter]);
+    return normalizedData.filter((item) => (
+      term === '' ||
+      String(item.company || '').toLowerCase().includes(term) ||
+      String(item.task || '').toLowerCase().includes(term) ||
+      String(item.notes || '').toLowerCase().includes(term)
+    ));
+  }, [normalizedData, searchTerm]);
 
   const summary = useMemo(() => {
     const completed = normalizedData.filter((item) => item.statusLabel === 'Completed').length;
     const inProgress = normalizedData.filter((item) => item.statusLabel === 'In Progress').length;
     const followUp = normalizedData.filter((item) => item.statusLabel === 'Follow-up').length;
-    const companies = new Set(normalizedData.map((item) => String(item.company || '').trim()).filter(Boolean)).size;
 
     return {
       total: normalizedData.length,
       completed,
       inProgress,
-      followUp,
-      companies
+      followUp
     };
   }, [normalizedData]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const paginatedData = filteredData.slice(pageStart, pageStart + pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   if (!data || data.length === 0) {
     return (
       <TrackerContainer style={{ textAlign: 'center', padding: '3rem 1rem' }}>
         <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-muted)' }}>No Support Logs Found</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Add a "Tracker" sheet to your Zoho document with Date, Customer, Agent, Task, Status, and Notes columns.
+          Add a "Tracker" sheet to your Zoho document with Date, Customer, Task, Status, and Notes columns.
         </p>
       </TrackerContainer>
     );
@@ -401,10 +383,17 @@ const SupportTracker = ({ data = [] }) => {
   return (
     <TrackerContainer>
       <HeaderRow>
-        <div>
-          <h3>Support & CS Tracker</h3>
-          <p>Quick visibility into follow-ups, completed work, and operational history by company.</p>
-        </div>
+        <h3>Support & CS Tracker</h3>
+        <PageSizeSelect
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(1);
+          }}
+        >
+          <option value={10}>10 per page</option>
+          <option value={20}>20 per page</option>
+        </PageSizeSelect>
       </HeaderRow>
 
       <SummaryGrid>
@@ -436,56 +425,20 @@ const SupportTracker = ({ data = [] }) => {
             <span>Follow-up</span>
           </div>
         </SummaryCard>
-        <SummaryCard $accent="#a78bfa">
-          <UserRound size={20} />
-          <div>
-            <strong>{summary.companies}</strong>
-            <span>Companies</span>
-          </div>
-        </SummaryCard>
       </SummaryGrid>
 
-      <ControlsGrid>
-        <SearchInputBox>
-          <Search size={16} />
-          <input
-            type="text"
-            placeholder="Search company, task, or notes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </SearchInputBox>
-
-        <SelectBox>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">All statuses</option>
-            {uniqueStatuses.map((status) => (
-              <option key={status} value={status}>{status}</option>
-            ))}
-          </select>
-          <Filter size={14} />
-        </SelectBox>
-
-        <SelectBox>
-          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
-            <option value="all">All companies</option>
-            {uniqueCompanies.map((company) => (
-              <option key={company} value={company}>{company}</option>
-            ))}
-          </select>
-          <Filter size={14} />
-        </SelectBox>
-
-        <SelectBox>
-          <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
-            <option value="all">All agents</option>
-            {uniqueAgents.map((agent) => (
-              <option key={agent} value={agent}>{agent}</option>
-            ))}
-          </select>
-          <Filter size={14} />
-        </SelectBox>
-      </ControlsGrid>
+      <SearchInputBox>
+        <Search size={16} />
+        <input
+          type="text"
+          placeholder="Search company, task, or notes..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPage(1);
+          }}
+        />
+      </SearchInputBox>
 
       <TableWrapper>
         <StyledTable>
@@ -493,21 +446,19 @@ const SupportTracker = ({ data = [] }) => {
             <tr>
               <th>Date</th>
               <th>Company</th>
-              <th>Agent</th>
               <th>Task</th>
               <th>Status</th>
               <th>Notes</th>
             </tr>
           </thead>
           <tbody>
-            {filteredData.map((item) => {
+            {paginatedData.map((item) => {
               const badgeProps = getStatusBadgeProps(item.statusLabel);
 
               return (
                 <tr key={item.id}>
                   <td className="col-date">{item.date || 'No date'}</td>
                   <td className="col-company">{item.company || 'Unknown'}</td>
-                  <td className="col-agent">{item.agentLabel}</td>
                   <td className="col-task">{item.task || 'No task provided'}</td>
                   <td>
                     <StatusBadge {...badgeProps}>
@@ -518,9 +469,9 @@ const SupportTracker = ({ data = [] }) => {
                 </tr>
               );
             })}
-            {filteredData.length === 0 && (
+            {paginatedData.length === 0 && (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   No matches found for your current filters.
                 </td>
               </tr>
@@ -528,6 +479,24 @@ const SupportTracker = ({ data = [] }) => {
           </tbody>
         </StyledTable>
       </TableWrapper>
+
+      <PaginationRow>
+        <PaginationInfo>
+          Showing {filteredData.length === 0 ? 0 : pageStart + 1} to {Math.min(pageStart + pageSize, filteredData.length)} of {filteredData.length} records
+        </PaginationInfo>
+
+        <PaginationControls>
+          <PageButton type="button" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+            <ChevronLeft size={16} />
+            Previous
+          </PageButton>
+          <PaginationInfo>Page {currentPage} of {totalPages}</PaginationInfo>
+          <PageButton type="button" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+            Next
+            <ChevronRight size={16} />
+          </PageButton>
+        </PaginationControls>
+      </PaginationRow>
     </TrackerContainer>
   );
 };

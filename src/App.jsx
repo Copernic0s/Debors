@@ -1241,43 +1241,43 @@ function App() {
         <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
       </ViewSwitch>
 
-      <div style={{ marginBottom: '1.4rem' }}>
-        <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
-      </div>
-
-      <AgentToolbar>
-        <FiltersRow>
-          <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-            <option value="all">All agents</option>
-            {agentOptions.map((agentName) => (
-              <option key={agentName} value={agentName}>{agentName}</option>
-            ))}
-          </AgentSelect>
-
-          <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
-            <option value="all">All weeks</option>
-            {weekOptions.map((weekName) => (
-              <option key={weekName} value={weekName}>{weekName}</option>
-            ))}
-          </AgentSelect>
-
-          <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
-            <option value="all">All records</option>
-            <option value="open">Open balances only</option>
-          </AgentSelect>
-
-        </FiltersRow>
-
-        <AgentSnapshot>
-          <Users size={16} color="var(--brand)" />
-          <div>
-            <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-          </div>
-        </AgentSnapshot>
-      </AgentToolbar>
-
       {activeView === 'overview' && (
         <>
+          <div style={{ marginBottom: '1.4rem' }}>
+            <h2 style={{ fontSize: '1.875rem', fontWeight: '800', marginBottom: '0.5rem' }}>Collections Overview</h2>
+          </div>
+
+          <AgentToolbar>
+            <FiltersRow>
+              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+                <option value="all">All agents</option>
+                {agentOptions.map((agentName) => (
+                  <option key={agentName} value={agentName}>{agentName}</option>
+                ))}
+              </AgentSelect>
+
+              <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
+                <option value="all">All weeks</option>
+                {weekOptions.map((weekName) => (
+                  <option key={weekName} value={weekName}>{weekName}</option>
+                ))}
+              </AgentSelect>
+
+              <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
+                <option value="all">All records</option>
+                <option value="open">Open balances only</option>
+              </AgentSelect>
+
+            </FiltersRow>
+
+            <AgentSnapshot>
+              <Users size={16} color="var(--brand)" />
+              <div>
+                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
+              </div>
+            </AgentSnapshot>
+          </AgentToolbar>
+
           <Dashboard metrics={metrics} />
           <DebtorsList
             data={agentData}
