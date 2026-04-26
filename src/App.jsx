@@ -9,6 +9,7 @@ import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import SupportTracker from './components/SupportTracker';
+import InvoiceEntry from './components/InvoiceEntry';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
@@ -583,6 +584,7 @@ function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
   const [trackerData, setTrackerData] = useState([]);
+  const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -718,6 +720,7 @@ function App() {
     try {
       const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
+      setClientsByAgent(csData || []);
 
       if (trackerLogs) {
         setTrackerData(trackerLogs);
@@ -1248,6 +1251,7 @@ function App() {
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
+        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1314,10 +1318,20 @@ function App() {
       )}
 
       {activeView === 'tracker' && (
-        <SupportTracker data={trackerData} />
+        <ContentScroll>
+          <SupportTracker data={trackerData} />
+        </ContentScroll>
       )}
 
-    </div>
+      {activeView === 'invoice_entry' && (
+        <ContentScroll>
+          <InvoiceEntry 
+            clientsByAgent={clientsByAgent} 
+            existingData={data} 
+            onSaveInvoice={(invoice) => persistEditedRows([invoice])} 
+          />
+        </ContentScroll>
+      )}</div>
   );
 
   if (!hasSupabaseConfig) {
