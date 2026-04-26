@@ -307,6 +307,26 @@ const TopbarRight = styled.div`
   }
 `;
 
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 0.75rem;
+
+  @media (max-width: 768px) {
+    justify-content: center;
+  }
+`;
+
+const TopbarMeta = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.45rem;
+
+  span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+`;
+
 const SyncButton = styled.button`
   display: flex;
   align-items: center;
@@ -356,32 +376,6 @@ const LogoutButton = styled.button`
     color: var(--danger);
     transform: translateY(-2px);
   }
-`;
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 0.75rem;
-
-  @media (max-width: 768px) {
-    justify-content: center;
-  }
-`;
-
-const TopbarMeta = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.45rem;
-
-  span {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-  }
-`;
-
-const SyncButton = styled.button`
-  padding: 0.68rem 1rem !important;
-  font-size: 0.82rem !important;
-  border-radius: 999px !important;
 `;
 
 const ViewSwitch = styled.div`
