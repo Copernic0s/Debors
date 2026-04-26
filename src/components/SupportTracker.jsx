@@ -9,8 +9,11 @@ import {
   Clock3,
   ClipboardList,
   Download,
+  MessageSquare,
+  PanelRightOpen,
+  Save,
   Search,
-  UserRound
+  X
 } from 'lucide-react';
 
 const TrackerContainer = styled.div`
@@ -471,6 +474,253 @@ const EmptyState = styled.div`
   }
 `;
 
+const DetailPanel = styled.div`
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 1rem 1.05rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const DetailHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  h4 {
+    margin: 0 0 0.25rem 0;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+  }
+`;
+
+const DetailMeta = styled.div`
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+`;
+
+const CloseButton = styled.button`
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+`;
+
+const DetailGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr);
+  gap: 1rem;
+
+  @media (max-width: 980px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const DetailBlock = styled.div`
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+
+  h5 {
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--text-main);
+  }
+`;
+
+const DetailText = styled.p`
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+`;
+
+const FormGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const FieldGroup = styled.label`
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    padding: 0.78rem 0.9rem;
+    border-radius: 12px;
+    font-family: 'Manrope', sans-serif;
+    font-size: 0.88rem;
+    outline: none;
+    transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  textarea {
+    min-height: 104px;
+    resize: vertical;
+    line-height: 1.45;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: rgba(249, 115, 22, 0.35);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
+  }
+
+  option {
+    background: #0f172a;
+    color: var(--text-main);
+  }
+`;
+
+const FullWidthField = styled(FieldGroup)`
+  grid-column: 1 / -1;
+`;
+
+const DetailActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+`;
+
+const PrimaryButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--brand);
+  padding: 0.72rem 1rem;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: rgba(249, 115, 22, 0.18);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const GhostButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  padding: 0.72rem 1rem;
+  font-family: 'Manrope', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+`;
+
+const CommentList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+`;
+
+const CommentCard = styled.div`
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.8rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+
+  strong {
+    color: var(--text-main);
+    font-size: 0.82rem;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 0.84rem;
+    line-height: 1.45;
+  }
+`;
+
+const ActionCellButton = styled.button`
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba(249, 115, 22, 0.35);
+    color: var(--brand);
+  }
+`;
+
 const CYCLE_CLOSE_DAY = 26;
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -540,6 +790,17 @@ const formatShortDate = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatDateTime = (value) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value || '';
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+};
+
 const sortByNewestDate = (items) =>
   [...items].sort((a, b) => {
     const aDate = String(a.date || '');
@@ -602,13 +863,17 @@ const csvEscape = (value) => {
 };
 
 const buildCsv = (rows) => {
-  const header = ['Date', 'Company', 'Agent', 'Task', 'Status', 'Notes'];
+  const header = ['Date', 'Company', 'Agent', 'Task', 'Status', 'Owner', 'Next Action', 'Follow-up Due', 'Latest Comment', 'Notes'];
   const body = rows.map((item) => [
     item.date || '',
     item.company || '',
-    item.agent || '',
+    item.agentLabel || item.agent || '',
     item.task || '',
     item.statusLabel || '',
+    item.owner || '',
+    item.nextAction || '',
+    item.followUpDue || '',
+    item.lastComment?.text || '',
     item.notes || ''
   ]);
 
@@ -628,13 +893,27 @@ const downloadCsv = (filename, rows) => {
   URL.revokeObjectURL(url);
 };
 
-const SupportTracker = ({ data = [] }) => {
+const SupportTracker = ({
+  data = [],
+  canManageEntries = false,
+  canComment = false,
+  currentUserEmail = '',
+  onSaveFollowUp
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('current-cycle');
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [selectedRecordId, setSelectedRecordId] = useState('');
+  const [detailDraft, setDetailDraft] = useState({
+    status: 'Follow-up',
+    owner: '',
+    nextAction: '',
+    followUpDue: '',
+    newComment: ''
+  });
 
   const cycleWindow = useMemo(() => getCycleWindow(new Date()), []);
 
@@ -646,7 +925,12 @@ const SupportTracker = ({ data = [] }) => {
           id: item.id || `tracker-row-${index}`,
           statusLabel: normalizeStatusLabel(item.status),
           agentLabel: String(item.agent || 'Unassigned').trim() || 'Unassigned',
-          agingDays: getAgingDays(item.date)
+          agingDays: getAgingDays(item.date),
+          owner: String(item.owner || '').trim(),
+          nextAction: String(item.nextAction || '').trim(),
+          followUpDue: String(item.followUpDue || '').trim(),
+          comments: Array.isArray(item.comments) ? item.comments : [],
+          lastComment: Array.isArray(item.comments) && item.comments.length > 0 ? item.comments[item.comments.length - 1] : item.lastComment || null
         }))
       ),
     [data]
@@ -667,7 +951,10 @@ const SupportTracker = ({ data = [] }) => {
         String(item.company || '').toLowerCase().includes(term) ||
         String(item.task || '').toLowerCase().includes(term) ||
         String(item.notes || '').toLowerCase().includes(term) ||
-        String(item.agentLabel || '').toLowerCase().includes(term);
+        String(item.agentLabel || '').toLowerCase().includes(term) ||
+        String(item.owner || '').toLowerCase().includes(term) ||
+        String(item.nextAction || '').toLowerCase().includes(term) ||
+        item.comments.some((comment) => String(comment?.text || '').toLowerCase().includes(term));
 
       const matchesStatus = statusFilter === 'all' || item.statusLabel === statusFilter;
       const matchesAgent = agentFilter === 'all' || item.agentLabel === agentFilter;
@@ -690,15 +977,11 @@ const SupportTracker = ({ data = [] }) => {
     const attentionItems = filteredData.filter((item) =>
       item.statusLabel !== 'Completed' && typeof item.agingDays === 'number' && item.agingDays >= 7
     ).length;
-    const activeAccounts = new Set(filteredData.map((item) => String(item.company || '').trim()).filter(Boolean)).size;
-    const activeAgents = new Set(filteredData.map((item) => String(item.agentLabel || '').trim()).filter(Boolean)).size;
 
     return {
       total: filteredData.length,
       openItems,
-      attentionItems,
-      activeAccounts,
-      activeAgents
+      attentionItems
     };
   }, [filteredData]);
 
@@ -707,6 +990,7 @@ const SupportTracker = ({ data = [] }) => {
     const openItems = currentCycleRows.filter((item) => item.statusLabel !== 'Completed').length;
     const accountsTouched = new Set(currentCycleRows.map((item) => item.company).filter(Boolean)).size;
     const agentsActive = new Set(currentCycleRows.map((item) => item.agentLabel).filter(Boolean)).size;
+    const rowsWithComments = currentCycleRows.filter((item) => item.comments.length > 0).length;
     const endKey = new Date(cycleWindow.current.end);
     const today = new Date();
     const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -716,6 +1000,7 @@ const SupportTracker = ({ data = [] }) => {
       openItems,
       accountsTouched,
       agentsActive,
+      rowsWithComments,
       daysUntilClose
     };
   }, [normalizedData, cycleWindow]);
@@ -729,6 +1014,59 @@ const SupportTracker = ({ data = [] }) => {
       return bScore - aScore;
     }).slice(0, 5);
   }, [filteredData]);
+
+  const currentCycleRows = useMemo(
+    () => normalizedData.filter((item) => isWithinWindow(item.date, cycleWindow.current)),
+    [normalizedData, cycleWindow]
+  );
+
+  const selectedRecord = useMemo(
+    () => normalizedData.find((item) => item.id === selectedRecordId) || null,
+    [normalizedData, selectedRecordId]
+  );
+
+  const openRecord = (item) => {
+    setSelectedRecordId(item.id);
+    setDetailDraft({
+      status: item.statusLabel || 'Follow-up',
+      owner: item.owner || '',
+      nextAction: item.nextAction || '',
+      followUpDue: item.followUpDue || '',
+      newComment: ''
+    });
+  };
+
+  const handleSaveDetail = async () => {
+    if (!selectedRecord || !onSaveFollowUp) return;
+    const trimmedComment = detailDraft.newComment.trim();
+    const nextComments = trimmedComment
+      ? [
+          ...(selectedRecord.comments || []),
+          {
+            id: `${selectedRecord.id}-${Date.now()}`,
+            text: trimmedComment,
+            author: currentUserEmail || 'Internal user',
+            createdAt: new Date().toISOString()
+          }
+        ]
+      : (selectedRecord.comments || []);
+
+    await onSaveFollowUp({
+      id: selectedRecord.id,
+      company: selectedRecord.company,
+      agent: selectedRecord.agentLabel,
+      status: detailDraft.status,
+      owner: detailDraft.owner,
+      nextAction: detailDraft.nextAction,
+      followUpDue: detailDraft.followUpDue,
+      comments: nextComments
+    });
+
+    setDetailDraft((prev) => ({
+      ...prev,
+      newComment: ''
+    }));
+  };
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -774,6 +1112,11 @@ const SupportTracker = ({ data = [] }) => {
             <Download size={16} />
             Export current view
           </SecondaryButton>
+
+          <SecondaryButton type="button" onClick={() => downloadCsv('support-cycle-close.csv', currentCycleRows)}>
+            <Download size={16} />
+            Export cycle close
+          </SecondaryButton>
         </HeaderActions>
       </HeaderRow>
 
@@ -803,10 +1146,10 @@ const SupportTracker = ({ data = [] }) => {
         </SummaryCard>
 
         <SummaryCard $accent="#8b5cf6">
-          <UserRound size={20} />
+          <MessageSquare size={20} />
           <div>
-            <strong>{summary.activeAgents}</strong>
-            <span>Active agents</span>
+            <strong>{currentCycleRows.filter((item) => item.comments.length > 0).length}</strong>
+            <span>Items with comments</span>
           </div>
         </SummaryCard>
       </SummaryGrid>
@@ -895,6 +1238,10 @@ const SupportTracker = ({ data = [] }) => {
           <span>Agents active</span>
           <strong>{cycleSummary.agentsActive}</strong>
         </TickerItem>
+        <TickerItem>
+          <span>Commented this cycle</span>
+          <strong>{cycleSummary.rowsWithComments}</strong>
+        </TickerItem>
       </TickerBar>
 
       <QueuePanel>
@@ -922,17 +1269,137 @@ const SupportTracker = ({ data = [] }) => {
                   </StatusBadge>
                 </QueueTop>
 
-                <QueueTask>{item.task || 'No task provided'}</QueueTask>
+                <QueueTask>{item.nextAction || item.task || 'No task provided'}</QueueTask>
 
                 <QueueMeta>
                   <span>{typeof item.agingDays === 'number' ? `${item.agingDays} day${item.agingDays === 1 ? '' : 's'} open` : 'No aging data'}</span>
-                  <span>{item.notes || 'No notes'}</span>
+                  <span>{item.followUpDue ? `Due ${formatShortDate(item.followUpDue)}` : (item.owner ? `Owner ${item.owner}` : (item.lastComment?.text || item.notes || 'No notes'))}</span>
                 </QueueMeta>
+
+                <div>
+                  <ActionCellButton type="button" onClick={() => openRecord(item)}>
+                    <PanelRightOpen size={14} />
+                    Follow-up
+                  </ActionCellButton>
+                </div>
               </QueueItem>
             );
           })}
         </QueueList>
       </QueuePanel>
+
+      {selectedRecord && (
+        <DetailPanel>
+          <DetailHeader>
+            <div>
+              <h4>{selectedRecord.company || 'Unknown company'}</h4>
+              <p>{selectedRecord.agentLabel} · {formatShortDate(selectedRecord.date)} · {selectedRecord.task || 'No task provided'}</p>
+            </div>
+
+            <DetailMeta>
+              <StatusBadge {...getStatusBadgeProps(detailDraft.status)}>
+                {getStatusBadgeProps(detailDraft.status).icon} {detailDraft.status}
+              </StatusBadge>
+              <CloseButton type="button" onClick={() => setSelectedRecordId('')}>
+                <X size={16} />
+              </CloseButton>
+            </DetailMeta>
+          </DetailHeader>
+
+          <DetailGrid>
+            <DetailBlock>
+              <h5>Follow-up details</h5>
+              <DetailText>{selectedRecord.notes || 'No tracker notes from source.'}</DetailText>
+
+              <FormGrid>
+                <FieldGroup>
+                  Status
+                  <select
+                    value={detailDraft.status}
+                    disabled={!canManageEntries}
+                    onChange={(e) => setDetailDraft((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="Follow-up">Follow-up</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </FieldGroup>
+
+                <FieldGroup>
+                  Owner
+                  <input
+                    type="text"
+                    placeholder="Assigned owner"
+                    value={detailDraft.owner}
+                    disabled={!canManageEntries}
+                    onChange={(e) => setDetailDraft((prev) => ({ ...prev, owner: e.target.value }))}
+                  />
+                </FieldGroup>
+
+                <FieldGroup>
+                  Follow-up due
+                  <input
+                    type="date"
+                    value={detailDraft.followUpDue}
+                    disabled={!canManageEntries}
+                    onChange={(e) => setDetailDraft((prev) => ({ ...prev, followUpDue: e.target.value }))}
+                  />
+                </FieldGroup>
+
+                <FullWidthField>
+                  Next action
+                  <textarea
+                    placeholder="Define the next collection or support step..."
+                    value={detailDraft.nextAction}
+                    disabled={!canManageEntries}
+                    onChange={(e) => setDetailDraft((prev) => ({ ...prev, nextAction: e.target.value }))}
+                  />
+                </FullWidthField>
+
+                <FullWidthField>
+                  Comment
+                  <textarea
+                    placeholder={canComment ? 'Leave an internal note for the next touchpoint...' : 'Comments are not available for this user.'}
+                    value={detailDraft.newComment}
+                    disabled={!canComment}
+                    onChange={(e) => setDetailDraft((prev) => ({ ...prev, newComment: e.target.value }))}
+                  />
+                </FullWidthField>
+              </FormGrid>
+            </DetailBlock>
+
+            <DetailBlock>
+              <h5>Comment history</h5>
+              <CommentList>
+                {selectedRecord.comments.length === 0 && (
+                  <DetailText>No internal comments yet.</DetailText>
+                )}
+                {selectedRecord.comments.slice().reverse().map((comment) => (
+                  <CommentCard key={comment.id || `${comment.author}-${comment.createdAt}`}>
+                    <strong>{comment.author || 'Internal user'}</strong>
+                    <span>{formatDateTime(comment.createdAt)}</span>
+                    <p>{comment.text || ''}</p>
+                  </CommentCard>
+                ))}
+              </CommentList>
+            </DetailBlock>
+          </DetailGrid>
+
+          <DetailActions>
+            <GhostButton type="button" onClick={() => setSelectedRecordId('')}>
+              Close
+            </GhostButton>
+            <PrimaryButton
+              type="button"
+              disabled={!canComment && !canManageEntries}
+              onClick={handleSaveDetail}
+            >
+              <Save size={16} />
+              Save follow-up
+            </PrimaryButton>
+          </DetailActions>
+        </DetailPanel>
+      )}
 
       <TableWrapper>
         <StyledTable>
@@ -944,6 +1411,7 @@ const SupportTracker = ({ data = [] }) => {
               <th>Task</th>
               <th>Status</th>
               <th>Notes</th>
+              <th>Follow-up</th>
             </tr>
           </thead>
           <tbody>
@@ -962,12 +1430,18 @@ const SupportTracker = ({ data = [] }) => {
                     </StatusBadge>
                   </td>
                   <td className="col-notes">{item.notes || 'No notes'}</td>
+                  <td>
+                    <ActionCellButton type="button" onClick={() => openRecord(item)}>
+                      <PanelRightOpen size={14} />
+                      {item.comments.length > 0 || item.nextAction || item.followUpDue ? 'Update' : 'Open'}
+                    </ActionCellButton>
+                  </td>
                 </tr>
               );
             })}
             {paginatedData.length === 0 && (
               <tr>
-                <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                   No matches found for your current filters.
                 </td>
               </tr>
