@@ -20,6 +20,63 @@ import './index.css';
 
 // Table used for cloud persistence
 const TABLE_NAME = 'manual_edits';
+const TRACKER_META_PREFIX = 'TRACKER_META::';
+
+const isTrackerRecordId = (id) => String(id || '').startsWith('TRK-');
+
+const parseTrackerMetaNotes = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw.startsWith(TRACKER_META_PREFIX)) {
+    return {
+      owner: '',
+      nextAction: '',
+      followUpDue: '',
+      comments: []
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(raw.slice(TRACKER_META_PREFIX.length));
+    return {
+      owner: String(parsed?.owner || '').trim(),
+      nextAction: String(parsed?.nextAction || '').trim(),
+      followUpDue: String(parsed?.followUpDue || '').trim(),
+      comments: Array.isArray(parsed?.comments) ? parsed.comments : []
+    };
+  } catch {
+    return {
+      owner: '',
+      nextAction: '',
+      followUpDue: '',
+      comments: []
+    };
+  }
+};
+
+const buildTrackerMetaNotes = (meta) =>
+  `${TRACKER_META_PREFIX}${JSON.stringify({
+    owner: String(meta?.owner || '').trim(),
+    nextAction: String(meta?.nextAction || '').trim(),
+    followUpDue: String(meta?.followUpDue || '').trim(),
+    comments: Array.isArray(meta?.comments) ? meta.comments : []
+  })}`;
+
+const mergeTrackerRows = (rows, overridesById) =>
+  rows.map((row) => {
+    const patch = overridesById[row.id];
+    if (!patch) return row;
+
+    return {
+      ...row,
+      status: patch.status || row.status,
+      agent: patch.agent || row.agent,
+      owner: patch.owner || '',
+      nextAction: patch.nextAction || '',
+      followUpDue: patch.followUpDue || '',
+      comments: Array.isArray(patch.comments) ? patch.comments : [],
+      lastComment: Array.isArray(patch.comments) && patch.comments.length > 0 ? patch.comments[patch.comments.length - 1] : null
+    };
+  });
 
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
@@ -591,6 +648,7 @@ function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
   const [trackerData, setTrackerData] = useState([]);
+  const [trackerOverrides, setTrackerOverrides] = useState({});
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
@@ -659,7 +717,23 @@ function App() {
       if (error) throw error;
 
       const editsById = {};
+      const trackerEditsById = {};
       edits.forEach(edit => {
+        if (isTrackerRecordId(edit.id)) {
+          const trackerMeta = parseTrackerMetaNotes(edit.notes);
+          trackerEditsById[edit.id] = {
+            id: edit.id,
+            company: edit.company,
+            agent: edit.agent_id,
+            status: edit.status,
+            owner: trackerMeta.owner,
+            nextAction: trackerMeta.nextAction,
+            followUpDue: trackerMeta.followUpDue || edit.due_date || '',
+            comments: trackerMeta.comments
+          };
+          return;
+        }
+
         editsById[edit.id] = {
           ...edit,
           // Map DB snake_case to App camelCase
@@ -679,6 +753,7 @@ function App() {
       });
 
       setManualEdits(editsById);
+      setTrackerOverrides(trackerEditsById);
       manualEditsRef.current = editsById;
     } catch (error) {
       console.error('Error fetching manual edits:', error.message);
@@ -1070,6 +1145,71 @@ function App() {
     }
   };
 
+  const persistTrackerFollowUp = async (payload) => {
+    if (!payload?.id || !user) return;
+
+    const canManageTracker = accessProfile.canEditData;
+    const canCommentTracker = Boolean(user);
+    if (!canManageTracker && !canCommentTracker) {
+      denyRestrictedAction();
+      return;
+    }
+
+    const current = trackerOverrides[payload.id] || {};
+    const nextComments = Array.isArray(payload.comments)
+      ? payload.comments
+      : Array.isArray(current.comments)
+        ? current.comments
+        : [];
+
+    const nextRecord = {
+      id: payload.id,
+      company: payload.company || current.company || '',
+      agent: payload.agent || current.agent || '',
+      status: canManageTracker ? (payload.status || current.status || 'Follow-up') : (current.status || payload.status || 'Follow-up'),
+      owner: canManageTracker ? (payload.owner ?? current.owner ?? '') : (current.owner ?? ''),
+      nextAction: canManageTracker ? (payload.nextAction ?? current.nextAction ?? '') : (current.nextAction ?? ''),
+      followUpDue: canManageTracker ? (payload.followUpDue ?? current.followUpDue ?? '') : (current.followUpDue ?? ''),
+      comments: nextComments
+    };
+
+    const upsertRow = {
+      id: String(nextRecord.id),
+      company: nextRecord.company || null,
+      agent_id: nextRecord.agent || null,
+      amount: 0,
+      status: String(nextRecord.status || 'Follow-up'),
+      due_date: nextRecord.followUpDue || null,
+      last_invoiced_date: null,
+      last_no_usage_date: null,
+      billing_cycle: null,
+      invoice_number: null,
+      updated_at: new Date().toISOString(),
+      notes: buildTrackerMetaNotes(nextRecord)
+    };
+
+    try {
+      const { error } = await supabase
+        .from(TABLE_NAME)
+        .upsert([upsertRow]);
+
+      if (error) throw error;
+
+      setTrackerOverrides((prev) => ({
+        ...prev,
+        [nextRecord.id]: nextRecord
+      }));
+
+      toast.success(canManageTracker ? 'Support follow-up updated' : 'Comment saved', {
+        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+      });
+    } catch (error) {
+      const msg = error?.message || 'Unknown network error';
+      toast.error(`Support Tracker sync failed: ${msg}`, { duration: 5000 });
+      console.error('[Tracker Persistence] Detailed Error:', error);
+    }
+  };
+
   const quickUpdateBillingCycle = (row, nextCycle) => {
     if (!canManageData) {
       denyRestrictedAction();
@@ -1177,10 +1317,12 @@ function App() {
     [accessibleData]
   );
 
+  const mergedTrackerData = React.useMemo(() => mergeTrackerRows(trackerData, trackerOverrides), [trackerData, trackerOverrides]);
+
   const accessibleTrackerData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return trackerData;
-    return trackerData.filter((item) => accessibleClientNames.has(String(item.company || '').trim().toLowerCase()));
-  }, [trackerData, accessProfile, accessibleClientNames]);
+    if (accessProfile.canViewAllData) return mergedTrackerData;
+    return mergedTrackerData.filter((item) => accessibleClientNames.has(String(item.company || '').trim().toLowerCase()));
+  }, [mergedTrackerData, accessProfile, accessibleClientNames]);
 
   const accessibleClientsByAgent = React.useMemo(() => {
     if (accessProfile.canViewAllData) return clientsByAgent;
@@ -1242,6 +1384,25 @@ function App() {
       snapshotClientsClear: size - inDebt
     };
   }, [agentData]);
+
+  const trackerOverview = React.useMemo(() => {
+    const openItems = accessibleTrackerData.filter((item) => String(item.status || '').toLowerCase() !== 'completed');
+    const dueToday = openItems.filter((item) => {
+      if (!item.followUpDue) return false;
+      const due = new Date(`${item.followUpDue}T00:00:00`);
+      const today = new Date();
+      const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      return !Number.isNaN(due.getTime()) && due <= todayKey;
+    }).length;
+    const withOwner = openItems.filter((item) => String(item.owner || '').trim()).length;
+
+    return {
+      openItems: openItems.length,
+      dueToday,
+      withOwner
+    };
+  }, [accessibleTrackerData]);
+
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
@@ -1361,6 +1522,33 @@ function App() {
             </AgentSnapshot>
           </AgentToolbar>
 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '1rem',
+            flexWrap: 'wrap',
+            marginBottom: '1rem',
+            padding: '0.9rem 1rem',
+            borderRadius: '18px',
+            border: '1px solid var(--glass-border)',
+            background: 'rgba(255,255,255,0.035)'
+          }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+              Support follow-up: <strong style={{ color: 'var(--text-main)' }}>{trackerOverview.openItems}</strong> open |
+              <strong style={{ color: 'var(--brand)', marginLeft: '0.35rem' }}>{trackerOverview.dueToday}</strong> due now |
+              <strong style={{ color: 'var(--text-main)', marginLeft: '0.35rem' }}>{trackerOverview.withOwner}</strong> assigned
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setActiveView('tracker')}
+              style={{ padding: '0.62rem 1rem', borderRadius: '999px', fontSize: '0.82rem' }}
+            >
+              Open Support Tracker
+            </button>
+          </div>
+
           <Dashboard metrics={metrics} />
           <DebtorsList
             data={agentData}
@@ -1391,7 +1579,13 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={accessibleTrackerData} />
+          <SupportTracker
+            data={accessibleTrackerData}
+            canManageEntries={accessProfile.canEditData}
+            canComment={Boolean(user)}
+            currentUserEmail={user?.email || ''}
+            onSaveFollowUp={persistTrackerFollowUp}
+          />
         </ContentScroll>
       )}
 
