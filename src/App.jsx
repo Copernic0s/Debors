@@ -89,7 +89,7 @@ const AppContainer = styled.div`
   min-height: 100vh;
   background: transparent;
   color: var(--text-main);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -183,7 +183,7 @@ const AgentSelect = styled.select`
   border-radius: var(--radius-md);
   padding: 0.75rem 1rem;
   color: var(--text-main);
-  font-family: 'Manrope', inherit;
+  font-family: 'Plus Jakarta Sans', inherit;
   font-size: 0.9rem;
   outline: none;
   transition: all 0.2s ease;
@@ -246,9 +246,8 @@ const BrandTitle = styled.h1`
   font-size: 2.7rem;
   font-weight: 800;
   margin: 0;
-  letter-spacing: -0.075em;
   text-transform: uppercase;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   color: var(--brand-ice);
   line-height: 1;
   text-shadow: 0 0 22px rgba(255, 179, 71, 0.08);
@@ -438,7 +437,8 @@ const aggregateByCompany = (rows) => {
     if (!company) return;
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const key = company.toLowerCase();
+    const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const key = `${company.toLowerCase()}-${invKey}`;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;
@@ -448,7 +448,6 @@ const aggregateByCompany = (rows) => {
     const isCsSource = row.id?.startsWith('CS-') || row.source === 'cs';
 
     if (!current) {
-      const invKey = String(row.invoiceNumber || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       grouped.set(key, {
         ...row,
         company,
@@ -474,7 +473,6 @@ const aggregateByCompany = (rows) => {
     }
 
     // Accumulate SUM (non-paid only), AGENTS, and CYCLES with deduplication
-    const invKey = String(row.invoiceNumber || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!current.seenInvoices.has(invKey)) {
       current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
       current.seenInvoices.add(invKey);
