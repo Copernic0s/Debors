@@ -35,8 +35,13 @@ const mergeManualEdits = (rows, editsById) => {
 
   const existingIds = new Set(merged.map((r) => r.id));
   Object.values(editsById).forEach((edit) => {
-    if (edit.__isNew && !edit.__deleted && !existingIds.has(edit.id)) {
-      merged.unshift({ ...edit });
+    // Treat purely new entries or entries without a matching ID in Zoho as new rows
+    if ((edit.__isNew || !existingIds.has(edit.id)) && !edit.__deleted) {
+      // Ensure they look like real invoices
+      merged.unshift({ 
+        ...edit,
+        source: edit.source === 'manual_entry' ? 'invoice' : (edit.source || 'invoice')
+      });
     }
   });
 

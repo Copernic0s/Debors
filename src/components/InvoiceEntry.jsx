@@ -81,6 +81,46 @@ const Button = styled.button`
   }
 `;
 
+const AgentGroup = styled.div`
+  margin-bottom: 1.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+`;
+
+const AgentHeader = styled.div`
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  border-bottom: ${props => props.$isOpen ? '1px solid var(--glass-border)' : 'none'};
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+`;
+
+const AgentName = styled.h3`
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+const Badge = styled.span`
+  background: var(--brand);
+  color: white;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+`;
+
 export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoice }) {
   const [week, setWeek] = useState(() => {
     // Basic week string generation for UI default
@@ -128,7 +168,29 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
     return slots;
   }, [clientsByAgent, existingData, week]);
 
+  const groupedSlots = useMemo(() => {
+    const groups = {};
+    expectedSlots.forEach(slot => {
+      const agent = slot.agentId || 'Unassigned';
+      if (!groups[agent]) groups[agent] = [];
+      groups[agent].push(slot);
+    });
+    // Sort agents alphabetically
+    return Object.keys(groups).sort().map(agent => ({
+      agent,
+      slots: groups[agent]
+    }));
+  }, [expectedSlots]);
+
   const [entries, setEntries] = useState({});
+  const [expandedAgents, setExpandedAgents] = useState({});
+
+  const toggleAgent = (agent) => {
+    setExpandedAgents(prev => ({
+      ...prev,
+      [agent]: !prev[agent]
+    }));
+  };
 
   const handleEntryChange = (id, field, value) => {
     setEntries(prev => ({
@@ -171,58 +233,77 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         />
       </Header>
       
-      <Table>
-        <thead>
-          <tr>
-            <Th>Company</Th>
-            <Th>Agent</Th>
-            <Th>Cycle</Th>
-            <Th>Invoice #</Th>
-            <Th>Amount ($)</Th>
-            <Th>Action</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {expectedSlots.length === 0 ? (
-            <tr><Td colSpan={6} style={{textAlign: 'center'}}>All caught up for this week!</Td></tr>
-          ) : (
-            expectedSlots.map(slot => {
-              const entry = entries[slot.id] || slot;
-              const isReady = entry.invoiceNumber && entry.amount;
-              return (
-                <tr key={slot.id}>
-                  <Td><strong>{slot.company}</strong></Td>
-                  <Td>{slot.agentId}</Td>
-                  <Td>{slot.cycle}</Td>
-                  <Td>
-                    <Input 
-                      placeholder="INV-..." 
-                      value={entry.invoiceNumber}
-                      onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
-                    />
-                  </Td>
-                  <Td>
-                    <Input 
-                      type="number"
-                      placeholder="0.00" 
-                      value={entry.amount}
-                      onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
-                    />
-                  </Td>
-                  <Td>
-                    <Button 
-                      disabled={!isReady}
-                      onClick={() => handleSave(slot.id)}
-                    >
-                      <Save size={16} /> Save
-                    </Button>
-                  </Td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </Table>
+      {expectedSlots.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+          All caught up for this week!
+        </div>
+      ) : (
+        groupedSlots.map(group => (
+          <AgentGroup key={group.agent}>
+            <AgentHeader 
+              $isOpen={expandedAgents[group.agent]} 
+              onClick={() => toggleAgent(group.agent)}
+            >
+              <AgentName>
+                {group.agent}
+                <Badge>{group.slots.length}</Badge>
+              </AgentName>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
+              </span>
+            </AgentHeader>
+            
+            {expandedAgents[group.agent] && (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Company</Th>
+                    <Th>Cycle</Th>
+                    <Th>Invoice #</Th>
+                    <Th>Amount ($)</Th>
+                    <Th>Action</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.slots.map(slot => {
+                    const entry = entries[slot.id] || slot;
+                    const isReady = entry.invoiceNumber && entry.amount;
+                    return (
+                      <tr key={slot.id}>
+                        <Td><strong>{slot.company}</strong></Td>
+                        <Td>{slot.cycle}</Td>
+                        <Td>
+                          <Input 
+                            placeholder="INV-..." 
+                            value={entry.invoiceNumber}
+                            onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
+                          />
+                        </Td>
+                        <Td>
+                          <Input 
+                            type="number"
+                            placeholder="0.00" 
+                            value={entry.amount}
+                            onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
+                          />
+                        </Td>
+                        <Td>
+                          <Button 
+                            disabled={!isReady}
+                            onClick={() => handleSave(slot.id)}
+                          >
+                            <Save size={16} /> Save
+                          </Button>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            )}
+          </AgentGroup>
+        ))
+      )}
     </Container>
   );
 }
