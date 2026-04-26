@@ -26,23 +26,73 @@ const Title = styled.h2`
   color: var(--text-main);
 `;
 
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
+const GridContainer = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.1);
 `;
 
-const Th = styled.th`
-  padding: 1rem;
-  font-size: 0.75rem;
+const Card = styled.div`
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+`;
+
+const CompanyName = styled.h4`
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.2;
+`;
+
+const CycleBadge = styled.span`
+  display: inline-block;
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--violet);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  text-align: left;
+  letter-spacing: 0.05em;
 `;
 
-const Td = styled.td`
-  padding: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+const CardFooter = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--glass-border);
+`;
+
+const InputGroup = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 `;
 
 const Input = styled.input`
@@ -51,11 +101,17 @@ const Input = styled.input`
   border-radius: var(--radius-md);
   padding: 0.5rem 0.75rem;
   color: var(--text-main);
-  width: 120px;
+  width: 100%;
 
   &:focus {
     outline: none;
     border-color: var(--brand);
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
+  }
+  
+  &::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
   }
 `;
 
@@ -69,7 +125,10 @@ const Button = styled.button`
   font-weight: 600;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  width: 100%;
+  transition: all 0.2s;
 
   &:hover {
     background: var(--brand-deep);
@@ -314,59 +373,50 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
             </AgentHeader>
             
             {expandedAgents[group.agent] && (
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Company</Th>
-                    <Th>Cycle</Th>
-                    <Th>Invoice #</Th>
-                    <Th>Amount ($)</Th>
-                    <Th>Action</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.slots.map(slot => {
-                    const entry = entries[slot.id] || slot;
-                    const isReady = entry.invoiceNumber && entry.amount;
-                    return (
-                      <tr key={slot.id}>
-                        <Td>
-                          <strong>{slot.company}</strong>
-                          {slot.customLabel && (
-                            <div style={{ fontSize: '0.7rem', color: 'var(--brand)', marginTop: '0.25rem' }}>
-                              {slot.customLabel}
-                            </div>
-                          )}
-                        </Td>
-                        <Td>{slot.cycle}</Td>
-                        <Td>
+              <GridContainer>
+                {group.slots.map(slot => {
+                  const entry = entries[slot.id] || slot;
+                  const isReady = entry.invoiceNumber && entry.amount;
+                  return (
+                    <Card key={slot.id}>
+                      <CardHeader>
+                        <CompanyName>{slot.company}</CompanyName>
+                      </CardHeader>
+                      
+                      <div>
+                        <CycleBadge>{slot.cycle}</CycleBadge>
+                        {slot.customLabel && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--brand)', marginTop: '0.5rem', fontWeight: '600' }}>
+                            {slot.customLabel}
+                          </div>
+                        )}
+                      </div>
+
+                      <CardFooter>
+                        <InputGroup>
                           <Input 
-                            placeholder="INV-..." 
+                            placeholder="Invoice #" 
                             value={entry.invoiceNumber}
                             onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
                           />
-                        </Td>
-                        <Td>
                           <Input 
                             type="number"
-                            placeholder="0.00" 
+                            placeholder="Amount ($)" 
                             value={entry.amount}
                             onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
                           />
-                        </Td>
-                        <Td>
-                          <Button 
-                            disabled={!isReady}
-                            onClick={() => handleSave(slot.id)}
-                          >
-                            <Save size={16} /> Save
-                          </Button>
-                        </Td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
+                        </InputGroup>
+                        <Button 
+                          disabled={!isReady}
+                          onClick={() => handleSave(slot.id)}
+                        >
+                          <Save size={16} /> Save Invoice
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </GridContainer>
             )}
           </AgentGroup>
         ))
