@@ -174,13 +174,6 @@ const PulsatingLogo = styled.div`
   }
 `;
 
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-    padding: 1.1rem 1rem;
-    justify-items: center;
-  }
-`;
-
 const ContentScroll = styled.div`
   flex: 1;
   overflow-y: auto;
