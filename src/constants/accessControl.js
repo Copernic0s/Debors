@@ -66,6 +66,7 @@ export const resolveAccessProfile = (user) => {
     role,
     email,
     agentScope,
+    accessLabel: isManager ? 'Control Access' : 'Assigned Portfolio',
     canEditData: isManager,
     canDeleteData: isManager,
     canResetData: isManager,
