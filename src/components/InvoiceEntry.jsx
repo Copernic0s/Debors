@@ -101,7 +101,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         const slotId = `EXPECTED-${company}-${week}${suffix}`.replace(/[^a-zA-Z0-9-]/g, '');
         // Check if we already have an invoice for this in existingData
         const existing = existingData.find(d => 
-          d.company.toLowerCase() === company.toLowerCase() && 
+          String(d.company || '').toLowerCase() === String(company || '').toLowerCase() && 
           (d.weekLabel === week || (d.id && d.id.includes(slotId)))
         );
 
