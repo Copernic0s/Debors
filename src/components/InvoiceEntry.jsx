@@ -3,27 +3,6 @@ import styled from 'styled-components';
 import { Search, Save, Check, X } from 'lucide-react';
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
-const PALETTE = [
-  '#f97316', // Orange/Brand
-  '#10b981', // Emerald Green
-  '#8b5cf6', // Violet
-  '#06b6d4', // Cyan
-  '#ec4899', // Pink
-  '#eab308', // Yellow
-  '#3b82f6', // Blue
-  '#ef4444', // Red
-];
-
-const getAgentColor = (agentName) => {
-  if (!agentName) return PALETTE[0];
-  let hash = 0;
-  for (let i = 0; i < agentName.length; i++) {
-    hash = agentName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % PALETTE.length;
-  return PALETTE[index];
-};
-
 const Container = styled.div`
   padding: 2rem;
   animation: fadeIn 0.6s ease-out;
@@ -58,7 +37,6 @@ const GridContainer = styled.div`
 const Card = styled.div`
   background: var(--surface-2);
   border: 1px solid var(--glass-border);
-  border-top: 3px solid ${props => props.$agentColor || 'var(--brand)'};
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   display: flex;
@@ -69,8 +47,8 @@ const Card = styled.div`
 
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 20px ${props => props.$agentColor ? `${props.$agentColor}20` : 'rgba(249, 115, 22, 0.15)'};
-    border-color: ${props => props.$agentColor || 'rgba(255, 255, 255, 0.15)'};
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(255, 255, 255, 0.15);
   }
 `;
 
@@ -138,7 +116,7 @@ const Input = styled.input`
 `;
 
 const Button = styled.button`
-  background: ${props => props.$agentColor || 'var(--brand)'};
+  background: ${props => props.$color || 'var(--brand)'};
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -153,7 +131,7 @@ const Button = styled.button`
   transition: all 0.2s;
 
   &:hover {
-    background: var(--brand-deep);
+    filter: brightness(1.2);
   }
   
   &:disabled {
@@ -161,6 +139,24 @@ const Button = styled.button`
     cursor: not-allowed;
   }
 `;
+
+const getAgentColor = (name) => {
+  const colors = [
+    '#f97316', // Orange
+    '#0ea5e9', // Sky
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#10b981', // Emerald
+    '#f59e0b', // Amber
+    '#6366f1', // Indigo
+    '#ef4444', // Red
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
 
 const AgentGroup = styled.div`
   margin-bottom: 1.5rem;
@@ -178,7 +174,6 @@ const AgentHeader = styled.div`
   align-items: center;
   cursor: pointer;
   border-bottom: ${props => props.$isOpen ? '1px solid var(--glass-border)' : 'none'};
-  border-left: 4px solid ${props => props.$agentColor || 'transparent'};
 
   &:hover {
     background: rgba(255, 255, 255, 0.05);
@@ -195,7 +190,7 @@ const AgentName = styled.h3`
 `;
 
 const Badge = styled.span`
-  background: ${props => props.$agentColor || 'var(--brand)'};
+  background: var(--brand);
   color: white;
   padding: 0.2rem 0.6rem;
   border-radius: 999px;
@@ -383,15 +378,15 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         groupedSlots.map(group => {
           const agentColor = getAgentColor(group.agent);
           return (
-            <AgentGroup key={group.agent}>
+            <AgentGroup key={group.agent} style={{ borderColor: `${agentColor}33` }}>
               <AgentHeader 
                 $isOpen={expandedAgents[group.agent]} 
-                $agentColor={agentColor}
                 onClick={() => toggleAgent(group.agent)}
+                style={{ borderLeft: `4px solid ${agentColor}` }}
               >
                 <AgentName>
                   {group.agent}
-                  <Badge $agentColor={agentColor}>{group.slots.length}</Badge>
+                  <Badge style={{ background: agentColor }}>{group.slots.length}</Badge>
                 </AgentName>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                   {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
@@ -404,36 +399,42 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
                     const entry = entries[slot.id] || slot;
                     const isReady = entry.invoiceNumber && entry.amount;
                     return (
-                      <Card key={slot.id} $agentColor={agentColor}>
+                      <Card key={slot.id} style={{ borderColor: `${agentColor}44` }}>
                         <CardHeader>
                           <CompanyName>{slot.company}</CompanyName>
                         </CardHeader>
                         
                         <div>
-                          <CycleBadge>{slot.cycle}</CycleBadge>
+                          <CycleBadge style={{ background: `${agentColor}22`, color: agentColor, borderColor: `${agentColor}44` }}>
+                            {slot.cycle}
+                          </CycleBadge>
                           {slot.customLabel && (
-                            <div style={{ fontSize: '0.75rem', color: agentColor, marginTop: '0.5rem', fontWeight: '600' }}>
+                            <div style={{ fontSize: '0.75rem', color: agentColor, marginTop: '0.5rem', fontWeight: '600', opacity: 0.9 }}>
                               {slot.customLabel}
                             </div>
                           )}
                         </div>
 
-                        <CardFooter>
+                        <CardFooter style={{ borderTopColor: `${agentColor}22` }}>
                           <InputGroup>
                             <Input 
                               placeholder="Invoice #" 
                               value={entry.invoiceNumber}
                               onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
                             />
                             <Input 
                               type="number"
                               placeholder="Amount ($)" 
                               value={entry.amount}
                               onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
                             />
                           </InputGroup>
                           <Button 
-                            $agentColor={agentColor}
+                            $color={agentColor}
                             disabled={!isReady}
                             onClick={() => handleSave(slot.id)}
                           >
