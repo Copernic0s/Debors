@@ -1,15 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
-  ArrowUpRight,
   AlertTriangle,
-  Funnel,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
-  Filter,
-  TrendingDown,
-  TrendingUp,
   UserRound
 } from 'lucide-react';
 import {
@@ -93,19 +88,6 @@ const agingLabelToKey = (label) => {
   return '15+';
 };
 
-const getPercentChange = (current, previous) => {
-  if (!previous && !current) return 0;
-  if (!previous) return 100;
-  return ((current - previous) / previous) * 100;
-};
-
-const formatDelta = (value) => {
-  if (!Number.isFinite(value)) return '0%';
-  const rounded = Math.round(value);
-  if (rounded === 0) return '0%';
-  return `${rounded > 0 ? '+' : ''}${rounded}%`;
-};
-
 const RechartsVisualFix = createGlobalStyle`
   .recharts-wrapper:focus,
   .recharts-wrapper *:focus,
@@ -178,17 +160,6 @@ const UtilityGroup = styled.div`
   align-items: center;
 `;
 
-const UtilityLabel = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--text-muted);
-  font-size: 0.73rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-`;
-
 const UtilityChip = styled.button`
   border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.36)' : 'rgba(148, 163, 184, 0.16)')};
   background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
@@ -205,48 +176,6 @@ const UtilityChip = styled.button`
     color: var(--text-main);
     transform: translateY(-1px);
   }
-`;
-
-const CompareGrid = styled.section`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.9rem;
-
-  @media (max-width: 960px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const CompareCard = styled.div`
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 16px;
-  padding: 0.95rem 1rem;
-  background: linear-gradient(180deg, rgba(12, 18, 31, 0.94), rgba(12, 18, 31, 0.78));
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-  display: grid;
-  gap: 0.3rem;
-`;
-
-const CompareLabel = styled.span`
-  color: var(--text-muted);
-  font-size: 0.73rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-`;
-
-const CompareValue = styled.strong`
-  color: var(--text-main);
-  font-size: 1.15rem;
-`;
-
-const CompareMeta = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: ${(props) => props.$tone === 'up' ? 'var(--danger)' : props.$tone === 'down' ? 'var(--success)' : 'rgba(217, 227, 240, 0.72)'};
-  font-size: 0.8rem;
-  font-weight: 700;
 `;
 
 const KPIGrid = styled.section`
@@ -906,26 +835,6 @@ export default function ManagerAnalytics({
       });
     }
 
-    const previousWeek = weekTrendData.length > 1 ? weekTrendData[weekTrendData.length - 2] : null;
-    const currentWeek = weekTrendData.length > 0 ? weekTrendData[weekTrendData.length - 1] : null;
-    const comparisons = {
-      open: {
-        current: currentWeek?.open || 0,
-        delta: getPercentChange(currentWeek?.open || 0, previousWeek?.open || 0)
-      },
-      collected: {
-        current: currentWeek?.collected || 0,
-        delta: getPercentChange(currentWeek?.collected || 0, previousWeek?.collected || 0)
-      },
-      overdue: {
-        current: currentWeek?.overdue || totalOverdue,
-        delta: getPercentChange(
-          currentWeek?.overdue || totalOverdue,
-          previousWeek?.overdue || 0
-        )
-      }
-    };
-
     const drilldownAccounts = openPortfolio.filter((row) => {
       if (drilldown.type === 'status') return normalizeStatus(row.status) === drilldown.value;
       if (drilldown.type === 'aging') return getAgingBucket(getDaysPastDue(row.dueDate)) === drilldown.value;
@@ -953,7 +862,6 @@ export default function ManagerAnalytics({
       agingData,
       actionItems: actionItems.slice(0, 4),
       agentData,
-      comparisons,
       activeFiltersLabel: {
         all: 'All records',
         overdue: 'Overdue only',
@@ -1010,10 +918,6 @@ export default function ManagerAnalytics({
 
         <UtilityBar>
           <UtilityGroup>
-            <UtilityLabel>
-              <Filter size={14} />
-              Quick filters
-            </UtilityLabel>
             <UtilityChip type="button" $active={quickFilter === 'all'} onClick={() => setQuickFilter('all')}>
               All
             </UtilityChip>
@@ -1032,10 +936,6 @@ export default function ManagerAnalytics({
           </UtilityGroup>
 
           <UtilityGroup>
-            <UtilityLabel>
-              <Funnel size={14} />
-              Active view
-            </UtilityLabel>
             <UtilityChip type="button" $active={drilldown.type === 'all'} onClick={() => setDrilldown({ type: 'all', value: 'all' })}>
               {analytics.activeFiltersLabel}
             </UtilityChip>
@@ -1046,33 +946,6 @@ export default function ManagerAnalytics({
             )}
           </UtilityGroup>
         </UtilityBar>
-
-        <CompareGrid>
-          <CompareCard>
-            <CompareLabel>Open vs prior week</CompareLabel>
-            <CompareValue>{formatCurrency(analytics.comparisons.open.current)}</CompareValue>
-            <CompareMeta $tone={analytics.comparisons.open.delta > 0 ? 'up' : analytics.comparisons.open.delta < 0 ? 'down' : 'flat'}>
-              {analytics.comparisons.open.delta > 0 ? <TrendingUp size={15} /> : analytics.comparisons.open.delta < 0 ? <TrendingDown size={15} /> : <ArrowUpRight size={15} />}
-              {formatDelta(analytics.comparisons.open.delta)}
-            </CompareMeta>
-          </CompareCard>
-          <CompareCard>
-            <CompareLabel>Collected vs prior week</CompareLabel>
-            <CompareValue>{formatCurrency(analytics.comparisons.collected.current)}</CompareValue>
-            <CompareMeta $tone={analytics.comparisons.collected.delta >= 0 ? 'down' : 'up'}>
-              {analytics.comparisons.collected.delta >= 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
-              {formatDelta(analytics.comparisons.collected.delta)}
-            </CompareMeta>
-          </CompareCard>
-          <CompareCard>
-            <CompareLabel>Overdue pressure</CompareLabel>
-            <CompareValue>{formatCurrency(analytics.totalOverdue)}</CompareValue>
-            <CompareMeta $tone={analytics.riskShare > 35 ? 'up' : analytics.riskShare < 20 ? 'down' : 'flat'}>
-              {analytics.riskShare > 35 ? <TrendingUp size={15} /> : analytics.riskShare < 20 ? <TrendingDown size={15} /> : <ArrowUpRight size={15} />}
-              {analytics.riskShare.toFixed(0)}% of open balance
-            </CompareMeta>
-          </CompareCard>
-        </CompareGrid>
 
         <KPIGrid>
           <KpiCard>
