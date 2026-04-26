@@ -1,10 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
+  ArrowUpRight,
   AlertTriangle,
+  Funnel,
   CheckCircle2,
   CircleDollarSign,
   Clock3,
+  Filter,
+  TrendingDown,
+  TrendingUp,
   UserRound
 } from 'lucide-react';
 import {
@@ -81,6 +86,26 @@ const getAgingBucket = (daysPastDue) => {
   return '15+';
 };
 
+const agingLabelToKey = (label) => {
+  if (label === 'Current') return 'current';
+  if (label === '1-7 days') return '1-7';
+  if (label === '8-14 days') return '8-14';
+  return '15+';
+};
+
+const getPercentChange = (current, previous) => {
+  if (!previous && !current) return 0;
+  if (!previous) return 100;
+  return ((current - previous) / previous) * 100;
+};
+
+const formatDelta = (value) => {
+  if (!Number.isFinite(value)) return '0%';
+  const rounded = Math.round(value);
+  if (rounded === 0) return '0%';
+  return `${rounded > 0 ? '+' : ''}${rounded}%`;
+};
+
 const RechartsVisualFix = createGlobalStyle`
   .recharts-wrapper:focus,
   .recharts-wrapper *:focus,
@@ -136,6 +161,92 @@ const SummaryValue = styled.strong`
 const SummaryMeta = styled.span`
   color: rgba(217, 227, 240, 0.72);
   font-size: 0.82rem;
+`;
+
+const UtilityBar = styled.section`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+`;
+
+const UtilityGroup = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+`;
+
+const UtilityLabel = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+const UtilityChip = styled.button`
+  border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.36)' : 'rgba(148, 163, 184, 0.16)')};
+  background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
+  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
+  border-radius: 999px;
+  padding: 0.42rem 0.82rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+
+  &:hover {
+    color: var(--text-main);
+    transform: translateY(-1px);
+  }
+`;
+
+const CompareGrid = styled.section`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const CompareCard = styled.div`
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  padding: 0.95rem 1rem;
+  background: linear-gradient(180deg, rgba(12, 18, 31, 0.94), rgba(12, 18, 31, 0.78));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
+  display: grid;
+  gap: 0.3rem;
+`;
+
+const CompareLabel = styled.span`
+  color: var(--text-muted);
+  font-size: 0.73rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+`;
+
+const CompareValue = styled.strong`
+  color: var(--text-main);
+  font-size: 1.15rem;
+`;
+
+const CompareMeta = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: ${(props) => props.$tone === 'up' ? 'var(--danger)' : props.$tone === 'down' ? 'var(--success)' : 'rgba(217, 227, 240, 0.72)'};
+  font-size: 0.8rem;
+  font-weight: 700;
 `;
 
 const KPIGrid = styled.section`
@@ -374,6 +485,18 @@ const AgingCard = styled.div`
   justify-content: space-between;
   gap: 1rem;
   align-items: center;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    border-color: rgba(249, 115, 22, 0.28);
+  }
+
+  ${(props) => props.$active && `
+    border-color: rgba(249, 115, 22, 0.35);
+    background: rgba(249, 115, 22, 0.12);
+  `}
 `;
 
 const AgingInfo = styled.div`
@@ -443,6 +566,12 @@ const SeverityPill = styled.span`
 
 const TableWrap = styled.div`
   overflow: auto;
+`;
+
+const TableState = styled.div`
+  padding: 1rem 0.5rem 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
 `;
 
 const Table = styled.table`
@@ -583,8 +712,47 @@ export default function ManagerAnalytics({
   onSelectAgent,
   onOpenCompanyProfile
 }) {
+  const [quickFilter, setQuickFilter] = useState('all');
+  const [drilldown, setDrilldown] = useState({ type: 'all', value: 'all' });
+
   const analytics = useMemo(() => {
-    const cleanInvoiceRows = (invoiceRows || []).filter((row) => {
+    const baseInvoiceRows = invoiceRows || [];
+    const latestWeek = Array.from(new Set(baseInvoiceRows.map((row) => String(row.weekLabel || '').trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b))
+      .at(-1) || null;
+
+    const openInvoiceRows = baseInvoiceRows.filter((row) => {
+      const status = normalizeStatus(row.status);
+      return status === 'pending' || status === 'overdue';
+    });
+
+    const sortedOpenInvoices = [...openInvoiceRows].sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+    const topOpenIds = new Set(sortedOpenInvoices.slice(0, 12).map((row) => row.id));
+    const allAggregatedRows = aggregatedRows || [];
+    const topAggregatedIds = new Set(
+      [...allAggregatedRows]
+        .filter((row) => {
+          const status = normalizeStatus(row.status);
+          return status === 'pending' || status === 'overdue';
+        })
+        .sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0))
+        .slice(0, 12)
+        .map((row) => row.id)
+    );
+
+    const applyQuickFilter = (row, source = 'invoice') => {
+      const status = normalizeStatus(row.status);
+      if (quickFilter === 'overdue') return status === 'overdue';
+      if (quickFilter === 'top_balances') return source === 'invoice' ? topOpenIds.has(row.id) : topAggregatedIds.has(row.id);
+      if (quickFilter === 'latest_week') return latestWeek ? String(row.weekLabel || '').trim() === latestWeek : true;
+      if (quickFilter === 'high_risk') return status === 'overdue' || getDaysPastDue(row.dueDate) >= 8;
+      return true;
+    };
+
+    const filteredInvoiceBase = baseInvoiceRows.filter((row) => applyQuickFilter(row, 'invoice'));
+    const filteredAggregatedBase = allAggregatedRows.filter((row) => applyQuickFilter(row, 'aggregated'));
+
+    const cleanInvoiceRows = filteredInvoiceBase.filter((row) => {
       const status = normalizeStatus(row.status);
       return status !== 'no_invoice' && status !== 'inactive';
     });
@@ -620,8 +788,9 @@ export default function ManagerAnalytics({
       if (status === 'paid') currentAgent.paid += amount;
       agentMap.set(agent, currentAgent);
 
-      const currentWeek = weekMap.get(week) || { week, open: 0, collected: 0 };
+      const currentWeek = weekMap.get(week) || { week, open: 0, collected: 0, overdue: 0 };
       if (status === 'pending' || status === 'overdue') currentWeek.open += amount;
+      if (status === 'overdue') currentWeek.overdue += amount;
       if (status === 'paid') currentWeek.collected += amount;
       weekMap.set(week, currentWeek);
 
@@ -632,7 +801,7 @@ export default function ManagerAnalytics({
       bucket.amount += amount;
     });
 
-    const aggregated = aggregatedRows || [];
+    const aggregated = filteredAggregatedBase;
     const openPortfolio = aggregated.filter((row) => {
       const status = normalizeStatus(row.status);
       return status === 'pending' || status === 'overdue';
@@ -728,7 +897,43 @@ export default function ManagerAnalytics({
       });
     }
 
+    const openConcentration = topAccounts.slice(0, 3).reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
+    if (totalOpen > 0 && openConcentration / totalOpen >= 0.45) {
+      actionItems.push({
+        title: 'Open balance is concentrated in a few accounts',
+        body: `${Math.round((openConcentration / totalOpen) * 100)}% of the open balance sits in the top 3 accounts.`,
+        severity: 'high'
+      });
+    }
+
+    const previousWeek = weekTrendData.length > 1 ? weekTrendData[weekTrendData.length - 2] : null;
+    const currentWeek = weekTrendData.length > 0 ? weekTrendData[weekTrendData.length - 1] : null;
+    const comparisons = {
+      open: {
+        current: currentWeek?.open || 0,
+        delta: getPercentChange(currentWeek?.open || 0, previousWeek?.open || 0)
+      },
+      collected: {
+        current: currentWeek?.collected || 0,
+        delta: getPercentChange(currentWeek?.collected || 0, previousWeek?.collected || 0)
+      },
+      overdue: {
+        current: currentWeek?.overdue || totalOverdue,
+        delta: getPercentChange(
+          currentWeek?.overdue || totalOverdue,
+          previousWeek?.overdue || 0
+        )
+      }
+    };
+
+    const drilldownAccounts = openPortfolio.filter((row) => {
+      if (drilldown.type === 'status') return normalizeStatus(row.status) === drilldown.value;
+      if (drilldown.type === 'aging') return getAgingBucket(getDaysPastDue(row.dueDate)) === drilldown.value;
+      return true;
+    }).sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0)).slice(0, 10);
+
     return {
+      latestWeek,
       totalOpen,
       totalOverdue,
       totalCollected,
@@ -743,13 +948,22 @@ export default function ManagerAnalytics({
       statusChartData,
       weekTrendData,
       topAccounts,
+      drilldownAccounts,
       agentWorkload,
       agingData,
       actionItems: actionItems.slice(0, 4),
       agentData,
+      comparisons,
+      activeFiltersLabel: {
+        all: 'All records',
+        overdue: 'Overdue only',
+        top_balances: 'Top balances',
+        latest_week: latestWeek ? latestWeek : 'Latest week',
+        high_risk: 'High risk'
+      }[quickFilter],
       animateCharts: cleanInvoiceRows.length <= 180
     };
-  }, [invoiceRows, aggregatedRows]);
+  }, [invoiceRows, aggregatedRows, quickFilter, drilldown]);
 
   if (!analytics.totalAccounts && !analytics.statusChartData.length) {
     return (
@@ -793,6 +1007,72 @@ export default function ManagerAnalytics({
             <SummaryMeta>{formatCurrency(analytics.totalOverdue)} overdue</SummaryMeta>
           </SummaryCard>
         </SummaryStrip>
+
+        <UtilityBar>
+          <UtilityGroup>
+            <UtilityLabel>
+              <Filter size={14} />
+              Quick filters
+            </UtilityLabel>
+            <UtilityChip type="button" $active={quickFilter === 'all'} onClick={() => setQuickFilter('all')}>
+              All
+            </UtilityChip>
+            <UtilityChip type="button" $active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}>
+              Overdue only
+            </UtilityChip>
+            <UtilityChip type="button" $active={quickFilter === 'top_balances'} onClick={() => setQuickFilter('top_balances')}>
+              Top balances
+            </UtilityChip>
+            <UtilityChip type="button" $active={quickFilter === 'latest_week'} onClick={() => setQuickFilter('latest_week')}>
+              Latest week
+            </UtilityChip>
+            <UtilityChip type="button" $active={quickFilter === 'high_risk'} onClick={() => setQuickFilter('high_risk')}>
+              High risk
+            </UtilityChip>
+          </UtilityGroup>
+
+          <UtilityGroup>
+            <UtilityLabel>
+              <Funnel size={14} />
+              Active view
+            </UtilityLabel>
+            <UtilityChip type="button" $active={drilldown.type === 'all'} onClick={() => setDrilldown({ type: 'all', value: 'all' })}>
+              {analytics.activeFiltersLabel}
+            </UtilityChip>
+            {drilldown.type !== 'all' && (
+              <UtilityChip type="button" $active onClick={() => setDrilldown({ type: 'all', value: 'all' })}>
+                Clear detail
+              </UtilityChip>
+            )}
+          </UtilityGroup>
+        </UtilityBar>
+
+        <CompareGrid>
+          <CompareCard>
+            <CompareLabel>Open vs prior week</CompareLabel>
+            <CompareValue>{formatCurrency(analytics.comparisons.open.current)}</CompareValue>
+            <CompareMeta $tone={analytics.comparisons.open.delta > 0 ? 'up' : analytics.comparisons.open.delta < 0 ? 'down' : 'flat'}>
+              {analytics.comparisons.open.delta > 0 ? <TrendingUp size={15} /> : analytics.comparisons.open.delta < 0 ? <TrendingDown size={15} /> : <ArrowUpRight size={15} />}
+              {formatDelta(analytics.comparisons.open.delta)}
+            </CompareMeta>
+          </CompareCard>
+          <CompareCard>
+            <CompareLabel>Collected vs prior week</CompareLabel>
+            <CompareValue>{formatCurrency(analytics.comparisons.collected.current)}</CompareValue>
+            <CompareMeta $tone={analytics.comparisons.collected.delta >= 0 ? 'down' : 'up'}>
+              {analytics.comparisons.collected.delta >= 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
+              {formatDelta(analytics.comparisons.collected.delta)}
+            </CompareMeta>
+          </CompareCard>
+          <CompareCard>
+            <CompareLabel>Overdue pressure</CompareLabel>
+            <CompareValue>{formatCurrency(analytics.totalOverdue)}</CompareValue>
+            <CompareMeta $tone={analytics.riskShare > 35 ? 'up' : analytics.riskShare < 20 ? 'down' : 'flat'}>
+              {analytics.riskShare > 35 ? <TrendingUp size={15} /> : analytics.riskShare < 20 ? <TrendingDown size={15} /> : <ArrowUpRight size={15} />}
+              {analytics.riskShare.toFixed(0)}% of open balance
+            </CompareMeta>
+          </CompareCard>
+        </CompareGrid>
 
         <KPIGrid>
           <KpiCard>
@@ -973,7 +1253,18 @@ export default function ManagerAnalytics({
                     const total = analytics.statusChartData.reduce((sum, entry) => sum + entry.value, 0);
                     const width = total > 0 ? (item.value / total) * 100 : 0;
                     return (
-                      <StatusRow key={item.key}>
+                      <StatusRow
+                        key={item.key}
+                        as="button"
+                        type="button"
+                        onClick={() => setDrilldown({ type: 'status', value: item.key })}
+                        style={{
+                          border: '0',
+                          background: 'transparent',
+                          padding: 0,
+                          cursor: 'pointer'
+                        }}
+                      >
                         <StatusLabel>{item.name}</StatusLabel>
                         <StatusBar>
                           <StatusFill $width={width} $color={item.color} />
@@ -995,7 +1286,15 @@ export default function ManagerAnalytics({
 
               <AgingGrid>
                 {analytics.agingData.map((bucket) => (
-                  <AgingCard key={bucket.label}>
+                  <AgingCard
+                    key={bucket.label}
+                    type="button"
+                    as="button"
+                    $active={drilldown.type === 'aging' && drilldown.value === agingLabelToKey(bucket.label)}
+                    onClick={() => {
+                      setDrilldown({ type: 'aging', value: agingLabelToKey(bucket.label) });
+                    }}
+                  >
                     <AgingInfo>
                       <strong>{bucket.label}</strong>
                       <span>{bucket.count} records</span>
@@ -1042,31 +1341,67 @@ export default function ManagerAnalytics({
             <Panel>
               <PanelHeader>
                 <PanelTitleWrap>
-                  <h3>Recommended Actions</h3>
+                  <h3>{drilldown.type === 'all' ? 'Recommended Actions' : 'Focus Queue'}</h3>
                 </PanelTitleWrap>
               </PanelHeader>
 
-              <ActionList>
-                {analytics.actionItems.map((item) => {
-                  const severityMeta = item.severity === 'high'
-                    ? { color: '#ef4444', background: 'rgba(239, 68, 68, 0.15)', label: 'High' }
-                    : item.severity === 'medium'
-                      ? { color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', label: 'Medium' }
-                      : { color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', label: 'Low' };
+              {drilldown.type === 'all' ? (
+                <ActionList>
+                  {analytics.actionItems.map((item) => {
+                    const severityMeta = item.severity === 'high'
+                      ? { color: '#ef4444', background: 'rgba(239, 68, 68, 0.15)', label: 'High' }
+                      : item.severity === 'medium'
+                        ? { color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', label: 'Medium' }
+                        : { color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', label: 'Low' };
 
-                  return (
-                    <ActionItem key={item.title}>
-                      <ActionTitle>
-                        <strong>{item.title}</strong>
-                        <SeverityPill $color={severityMeta.color} $background={severityMeta.background}>
-                          {severityMeta.label}
-                        </SeverityPill>
-                      </ActionTitle>
-                      <ActionCopy>{item.body}</ActionCopy>
-                    </ActionItem>
-                  );
-                })}
-              </ActionList>
+                    return (
+                      <ActionItem key={item.title}>
+                        <ActionTitle>
+                          <strong>{item.title}</strong>
+                          <SeverityPill $color={severityMeta.color} $background={severityMeta.background}>
+                            {severityMeta.label}
+                          </SeverityPill>
+                        </ActionTitle>
+                        <ActionCopy>{item.body}</ActionCopy>
+                      </ActionItem>
+                    );
+                  })}
+                </ActionList>
+              ) : (
+                <TableWrap>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Company</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: 'right' }}>Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.drilldownAccounts.map((item) => {
+                        const status = normalizeStatus(item.status);
+                        const meta = STATUS_META[status];
+                        return (
+                          <tr key={item.id}>
+                            <td>
+                              <CompanyButton type="button" onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}>
+                                {item.company || item.clientName}
+                              </CompanyButton>
+                            </td>
+                            <td>
+                              <SeverityPill $color={meta.color} $background={`${meta.color}22`}>
+                                {meta.label}
+                              </SeverityPill>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatCurrency(item.amount)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                  {analytics.drilldownAccounts.length === 0 && <TableState>No accounts match the selected detail.</TableState>}
+                </TableWrap>
+              )}
             </Panel>
           </Column>
         </MainGrid>
