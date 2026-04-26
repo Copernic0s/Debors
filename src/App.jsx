@@ -1328,7 +1328,25 @@ function App() {
           <InvoiceEntry 
             clientsByAgent={clientsByAgent} 
             existingData={data} 
-            onSaveInvoice={(invoice) => persistEditedRows([invoice])} 
+            onSaveInvoice={(invoice) => {
+              // Optimistically update local data state so it shows in Overview immediately
+              setData(prev => {
+                // If it's a completely new manual entry, we add it to the array.
+                // If it already exists (e.g. replacing 'no_invoice' with real invoice), we update it.
+                const existingIndex = prev.findIndex(item => item.id === invoice.id || 
+                  (item.company === invoice.company && item.weekLabel === invoice.weekLabel && item.status === 'no_invoice')
+                );
+                
+                if (existingIndex >= 0) {
+                  const next = [...prev];
+                  next[existingIndex] = { ...next[existingIndex], ...invoice };
+                  return next;
+                }
+                return [...prev, invoice];
+              });
+              
+              persistEditedRows([invoice]);
+            }} 
           />
         </ContentScroll>
       )}</div>
