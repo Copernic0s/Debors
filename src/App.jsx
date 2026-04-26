@@ -1328,7 +1328,7 @@ function App() {
     }}>
       <TopbarMeta>
         <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-        <AccessBadge $role={accessProfile.role}>{accessProfile.role}</AccessBadge>
+        <AccessBadge $role={accessProfile.role}>{accessProfile.accessLabel}</AccessBadge>
       </TopbarMeta>
 
       <ViewSwitch>
