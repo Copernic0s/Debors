@@ -160,7 +160,7 @@ const getStatusTone = (status) => {
   return { label: 'Pending', color: 'var(--warn)' };
 };
 
-export default function CompanyProfileModal({ isOpen, onClose, profile, onEditInvoice }) {
+export default function CompanyProfileModal({ isOpen, onClose, profile, onEditInvoice, canEditInvoice = true }) {
   if (!isOpen || !profile) return null;
 
   return (
@@ -224,7 +224,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                 <th>Cycle</th>
                 <th>Status</th>
                 <th>Amount</th>
-                <th>Actions</th>
+                {canEditInvoice && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -236,21 +236,23 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                     <td>{item.billingCycle || '-'}</td>
                     <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
                     <td>{formatCurrency(item.amount)}</td>
-                    <td>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '0.25rem', minWidth: 'auto' }}
-                        onClick={() => onEditInvoice(item)}
-                        title="Edit this invoice"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                    </td>
+                    {canEditInvoice && (
+                      <td>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '0.25rem', minWidth: 'auto' }}
+                          onClick={() => onEditInvoice(item)}
+                          title="Edit this invoice"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               }) : (
                 <tr>
-                  <td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                  <td colSpan={canEditInvoice ? 5 : 4} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
                 </tr>
               )}
             </tbody>
