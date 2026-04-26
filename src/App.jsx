@@ -1505,11 +1505,15 @@ function App() {
           <TopbarLeft>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <UserAvatar>
-                <img 
-                  src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
-                  alt="Andres Mendez" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
-                />
+                {user?.email?.toLowerCase().includes('andres') ? (
+                  <img 
+                    src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                    alt="User" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                  />
+                ) : (
+                  user?.email?.split('@')[0].split('.').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'
+                )}
               </UserAvatar>
               <UserInfo>
                 <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>

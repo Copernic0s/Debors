@@ -34,7 +34,7 @@ const normalizeScopeValue = (value) => String(value || '').trim().toLowerCase();
 
 const hasPrivilegedIdentityFallback = (email) => {
   const localPart = String(email || '').split('@')[0] || '';
-  return localPart.includes('andres') || localPart.includes('kevin');
+  return localPart.includes('andres') || localPart.includes('kevin') || localPart.includes('hector');
 };
 
 export const resolveAccessProfile = (user) => {
