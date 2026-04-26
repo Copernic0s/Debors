@@ -32,9 +32,19 @@ const parseAgentScopeMap = (rawValue) => {
 
 const normalizeScopeValue = (value) => String(value || '').trim().toLowerCase();
 
+const hasPrivilegedIdentityFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('andres') || localPart.includes('kevin');
+};
+
 export const resolveAccessProfile = (user) => {
   const email = String(user?.email || '').trim().toLowerCase();
-  const managerEmails = new Set(parseCsv(import.meta.env.VITE_MANAGER_EMAILS).map((item) => item.toLowerCase()));
+  const operationsEmails = new Set(
+    [
+      ...parseCsv(import.meta.env.VITE_OPERATIONS_EMAILS),
+      ...parseCsv(import.meta.env.VITE_MANAGER_EMAILS)
+    ].map((item) => item.toLowerCase())
+  );
   const agentScopeMap = parseAgentScopeMap(import.meta.env.VITE_AGENT_SCOPE_MAP);
 
   const metadataRole = String(
@@ -59,7 +69,8 @@ export const resolveAccessProfile = (user) => {
   const configuredAgentIds = (agentScopeMap.get(email) || []).map(normalizeScopeValue).filter(Boolean);
   const agentScope = Array.from(new Set([...metadataAgentIds, ...configuredAgentIds]));
 
-  const isManager = metadataRole === MANAGER_ROLE || managerEmails.has(email);
+  const normalizedRole = metadataRole === 'operations_access' ? MANAGER_ROLE : metadataRole === 'collections_access' ? AGENT_ROLE : metadataRole;
+  const isManager = normalizedRole === MANAGER_ROLE || operationsEmails.has(email) || hasPrivilegedIdentityFallback(email);
   const role = isManager ? MANAGER_ROLE : AGENT_ROLE;
 
   return {

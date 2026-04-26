@@ -304,21 +304,6 @@ const TopbarMeta = styled.div`
   }
 `;
 
-const AccessBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.14)' : 'rgba(56, 189, 248, 0.14)'};
-  color: ${(props) => props.$role === MANAGER_ROLE ? 'var(--brand)' : 'var(--brand-blue)'};
-  border: 1px solid ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.28)' : 'rgba(56, 189, 248, 0.28)'};
-`;
-
 const SyncButton = styled.button`
   padding: 0.68rem 1rem !important;
   font-size: 0.82rem !important;
@@ -1328,7 +1313,6 @@ function App() {
     }}>
       <TopbarMeta>
         <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-        <AccessBadge $role={accessProfile.role}>{accessProfile.accessLabel}</AccessBadge>
       </TopbarMeta>
 
       <ViewSwitch>
