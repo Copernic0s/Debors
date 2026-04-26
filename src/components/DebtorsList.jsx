@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Search, ChevronDown, ChevronUp, Edit2, Trash2 } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Edit2, Trash2, Inbox, PlusCircle } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
@@ -222,8 +222,6 @@ const SourceBadge = styled.span`
   letter-spacing: 0.02em;
 `;
 
-// Removed InvoiceStepper and StepButton as they are no longer needed
-
 const DueInput = styled.input`
   width: 112px;
   background: rgba(255, 255, 255, 0.06);
@@ -261,6 +259,57 @@ const IconActionButton = styled.button`
   }
 `;
 
+const EmptyStateContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.01);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--glass-border);
+  margin: 1rem 0;
+
+  svg {
+    margin-bottom: 1.5rem;
+    opacity: 0.2;
+  }
+
+  h3 {
+    color: var(--text-main);
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  p {
+    font-size: 0.9rem;
+    max-width: 300px;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+  }
+`;
+
+const EmptyStateButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--brand);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--brand-deep);
+    transform: translateY(-2px);
+  }
+`;
+
 const FooterBar = styled.div`
   margin-top: 0.95rem;
   display: flex;
@@ -289,8 +338,6 @@ const PagerButton = styled.button`
     cursor: not-allowed;
   }
 `;
-
-// Status logic is now handled in App.jsx during data hydration
 
 export default function DebtorsList({
   data,
@@ -411,36 +458,43 @@ export default function DebtorsList({
           <tbody>
             {paginatedData.length > 0 ? paginatedData.map((item) => (
               <Tr key={item.id}>
-                <Td style={{ fontWeight: 600 }}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--brand)',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      padding: 0,
-                      textAlign: 'left'
-                    }}
-                  >
-                    {item.company || item.clientName || 'Unassigned Company'}
-                  </button>
+                <Td>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--brand)',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                        textAlign: 'left',
+                        fontSize: '1rem',
+                        marginBottom: '0.2rem'
+                      }}
+                    >
+                      {item.company || item.clientName || 'Unassigned Company'}
+                    </button>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {normalizeBillingCycle(item.billingCycle)}
+                    </span>
+                  </div>
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <div style={{
                       width: '24px', height: '24px', borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.1)', display: 'flex',
+                      background: 'rgba(255,255,255,0.05)', display: 'flex',
                       alignItems: 'center', justifyContent: 'center',
-                      fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-main)',
-                      border: '1px solid var(--border-color)',
+                      fontSize: '0.7rem', fontWeight: 'bold', color: 'var(--text-muted)',
+                      border: '1px solid var(--glass-border)',
                       flexShrink: 0
                     }}>
                       {(item.agentId && typeof item.agentId === 'string') ? item.agentId.charAt(0).toUpperCase() : '?'}
                     </div>
-                    {item.agentId}
+                    <span style={{ color: 'var(--text-main)', opacity: 0.8 }}>{item.agentId}</span>
                   </div>
                 </Td>
                 <Td>
@@ -452,59 +506,68 @@ export default function DebtorsList({
                     {BILLING_CYCLE_OPTIONS.map((cycle) => (
                       <option key={cycle} value={cycle}>{cycle}</option>
                     ))}
-                    <option value="custom">Other (custom)</option>
                   </BillingCycleSelect>
                 </Td>
                 <Td>
                   <StatusSelect
                     $tone={item.status}
-                    value={item.status}
+                    value={item.status || 'pending'}
                     disabled={readOnly}
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
-                    title={item.isAutoOverdue ? 'Automatically marked as overdue based on policy' : ''}
-                    style={item.isAutoOverdue ? { border: '1px solid var(--danger)', boxShadow: '0 0 8px rgba(239, 68, 68, 0.2)' } : {}}
                   >
                     <option value="pending">Pending</option>
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
-                    <option value="no_invoice">No invoice</option>
+                    <option value="no_invoice">No Invoice</option>
                     <option value="inactive">Inactive</option>
                   </StatusSelect>
                 </Td>
-                <Td style={{ fontSize: '0.78rem', color: item.isAutoOverdue ? 'var(--danger)' : 'var(--text-main)', fontWeight: item.isAutoOverdue ? 700 : 500, whiteSpace: 'nowrap' }}>
-                  {item.dueDate ? (() => {
-                    const [y, m, d] = item.dueDate.split('-');
-                    return `${m}-${d}-${y.slice(2)}`;
-                  })() : 'N/A'}
-                </Td>
-                <Td>
-                  <SourceBadge $type={item.sourceType || 'invoice'}>{(item.sourceType || 'invoice') === 'invoice' ? 'Invoice' : 'CS'}</SourceBadge>
-                </Td>
                 <Td>
                   <DueInput
-                    type="text"
-                    inputMode="decimal"
+                    type="date"
                     disabled={readOnly}
-                    value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
-                    onChange={(e) => !readOnly && setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                    onBlur={() => !readOnly && commitQuickAmount(item)}
-                    onKeyDown={(e) => {
-                      if (readOnly) return;
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        commitQuickAmount(item);
-                      }
-                    }}
+                    value={item.dueDate || ''}
+                    onChange={(e) => !readOnly && onEdit?.({ ...item, dueDate: e.target.value })}
                   />
                 </Td>
-                <Td style={{ textAlign: 'right' }}>
+                <Td>
+                  <SourceBadge $type={item.sourceType}>
+                    {item.sourceType || 'N/A'}
+                  </SourceBadge>
+                </Td>
+                <Td>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.5 }}>$</span>
+                    <input
+                      type="text"
+                      disabled={readOnly}
+                      style={{
+                        background: 'rgba(0,0,0,0.2)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '6px',
+                        padding: '0.4rem 0.6rem 0.4rem 1.2rem',
+                        color: 'var(--text-main)',
+                        width: '100px',
+                        fontSize: '0.875rem',
+                        textAlign: 'right'
+                      }}
+                      value={pendingAmounts[item.id] !== undefined ? pendingAmounts[item.id] : (item.amount || '0.00')}
+                      onChange={(e) => !readOnly && setPendingAmounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                      onBlur={() => !readOnly && commitQuickAmount(item)}
+                      onKeyDown={(e) => {
+                        if (!readOnly && e.key === 'Enter') e.currentTarget.blur();
+                      }}
+                    />
+                  </div>
+                </Td>
+                <Td>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                     {!readOnly && (
                       <>
                         <IconActionButton
                           type="button"
-                          onClick={() => onEdit(item)}
-                          title="Edit"
+                          onClick={() => onEdit?.(item)}
+                          title="Edit Details"
                         >
                           <Edit2 size={14} />
                         </IconActionButton>
@@ -523,8 +586,19 @@ export default function DebtorsList({
               </Tr>
             )) : (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  No records found
+                <td colSpan="8">
+                  <EmptyStateContainer>
+                    <Inbox size={64} />
+                    <h3>No Debtors Found</h3>
+                    <p>It looks like everything is clear! Start the new week by entering fresh invoices.</p>
+                    <EmptyStateButton 
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'invoice_entry' }))}
+                    >
+                      <PlusCircle size={18} />
+                      Go to Invoice Entry
+                    </EmptyStateButton>
+                  </EmptyStateContainer>
                 </td>
               </tr>
             )}
