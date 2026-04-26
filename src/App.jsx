@@ -320,26 +320,33 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2.2rem;
+  font-size: 2.5rem;
   font-weight: 900;
   margin: 0;
   text-transform: uppercase;
   font-family: 'Syne', sans-serif;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.15em;
   color: var(--text-main);
   line-height: 1;
   display: flex;
   align-items: center;
+  transition: all 0.3s ease;
 
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-right: 0.05em;
+    margin-right: 0.1em;
+  }
+
+  &:hover {
+    letter-spacing: 0.2em;
+    filter: drop-shadow(0 0 15px rgba(255, 122, 26, 0.3));
   }
 
   @media (max-width: 900px) {
     font-size: 1.8rem;
+    letter-spacing: 0.05em;
   }
 `;
 
@@ -1389,13 +1396,6 @@ function App() {
                 ))}
               </AgentSelect>
 
-              <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
-                <option value="all">All weeks</option>
-                {weekOptions.map((weekName) => (
-                  <option key={weekName} value={weekName}>{weekName}</option>
-                ))}
-              </AgentSelect>
-
               <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
                 <option value="all">All records</option>
                 <option value="open">Open balances only</option>
@@ -1517,13 +1517,12 @@ function App() {
           </BrandLockup>
 
           <TopbarRight>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', marginRight: '0.5rem' }}>
-              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Sync</span>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--brand-ice)' }}>{syncTimeLabel}</span>
-            </div>
             <ActionButtons>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.8rem', padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <RefreshCw size={12} color="var(--text-muted)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--brand-ice)' }}>{syncTimeLabel}</span>
+              </div>
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
                 <span>Sync</span>
               </SyncButton>
               <LogoutButton onClick={() => supabase.auth.signOut()}>

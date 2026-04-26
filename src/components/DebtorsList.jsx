@@ -5,15 +5,17 @@ import ConfirmDialog from './ConfirmDialog';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Container = styled.div`
-  padding: 2rem;
+  padding: 1.5rem;
   margin-top: 1.5rem;
   animation: fadeIn 0.6s ease-out;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(8, 18, 34, 0.35);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-radius: 24px;
+  box-shadow: 
+    0 20px 40px -12px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
 
   @media (max-width: 768px) {
     padding: 1.25rem;
@@ -450,7 +452,6 @@ export default function DebtorsList({
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('dueDate')}>Due Date {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
-              <Th onClick={() => handleSort('sourceType')}>Source {sortConfig.key === 'sourceType' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
             </tr>
@@ -531,11 +532,6 @@ export default function DebtorsList({
                   />
                 </Td>
                 <Td>
-                  <SourceBadge $type={item.sourceType}>
-                    {item.sourceType || 'N/A'}
-                  </SourceBadge>
-                </Td>
-                <Td>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <span style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.5 }}>$</span>
                     <input
@@ -586,7 +582,7 @@ export default function DebtorsList({
               </Tr>
             )) : (
               <tr>
-                <td colSpan="8">
+                <td colSpan="7">
                   <EmptyStateContainer>
                     <Inbox size={64} />
                     <h3>No Debtors Found</h3>
