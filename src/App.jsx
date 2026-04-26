@@ -320,34 +320,29 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 800;
   margin: 0;
   text-transform: uppercase;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.15em;
   color: var(--text-main);
   line-height: 1;
   display: flex;
   align-items: center;
+  gap: 0.4rem;
   transition: all 0.3s ease;
-  transform: scaleY(1.1); /* To make it look less 'flat' */
+  transform: scaleY(1.05);
 
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-right: 0.1em;
   }
 
   &:hover {
     letter-spacing: 0.2em;
-    filter: drop-shadow(0 0 15px rgba(255, 122, 26, 0.3));
-  }
-
-  @media (max-width: 900px) {
-    font-size: 1.8rem;
-    letter-spacing: 0.05em;
+    gap: 0.6rem;
   }
 `;
 
@@ -1510,7 +1505,11 @@ function App() {
           <TopbarLeft>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <UserAvatar>
-                {user?.email?.split('@')[0].split('.').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AM'}
+                <img 
+                  src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                  alt="Andres Mendez" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                />
               </UserAvatar>
               <UserInfo>
                 <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
@@ -1520,10 +1519,13 @@ function App() {
           </TopbarLeft>
 
           <BrandLockup>
-            <PulsatingLogo>
-              <AlmaFuelLogo size={54} />
-            </PulsatingLogo>
-            <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
+            <BrandTitle>
+              <span className="brand">Alma</span>
+              <PulsatingLogo>
+                <AlmaFuelLogo size={42} />
+              </PulsatingLogo>
+              <span>fuel</span>
+            </BrandTitle>
           </BrandLockup>
 
           <TopbarRight>
