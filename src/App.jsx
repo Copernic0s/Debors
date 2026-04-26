@@ -15,68 +15,10 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { resolveAccessProfile, userCanAccessAgent, MANAGER_ROLE } from './constants/accessControl';
 import './index.css';
 
 // Table used for cloud persistence
 const TABLE_NAME = 'manual_edits';
-const TRACKER_META_PREFIX = 'TRACKER_META::';
-
-const isTrackerRecordId = (id) => String(id || '').startsWith('TRK-');
-
-const parseTrackerMetaNotes = (value) => {
-  const raw = String(value || '').trim();
-  if (!raw.startsWith(TRACKER_META_PREFIX)) {
-    return {
-      owner: '',
-      nextAction: '',
-      followUpDue: '',
-      comments: []
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(raw.slice(TRACKER_META_PREFIX.length));
-    return {
-      owner: String(parsed?.owner || '').trim(),
-      nextAction: String(parsed?.nextAction || '').trim(),
-      followUpDue: String(parsed?.followUpDue || '').trim(),
-      comments: Array.isArray(parsed?.comments) ? parsed.comments : []
-    };
-  } catch {
-    return {
-      owner: '',
-      nextAction: '',
-      followUpDue: '',
-      comments: []
-    };
-  }
-};
-
-const buildTrackerMetaNotes = (meta) =>
-  `${TRACKER_META_PREFIX}${JSON.stringify({
-    owner: String(meta?.owner || '').trim(),
-    nextAction: String(meta?.nextAction || '').trim(),
-    followUpDue: String(meta?.followUpDue || '').trim(),
-    comments: Array.isArray(meta?.comments) ? meta.comments : []
-  })}`;
-
-const mergeTrackerRows = (rows, overridesById) =>
-  rows.map((row) => {
-    const patch = overridesById[row.id];
-    if (!patch) return row;
-
-    return {
-      ...row,
-      status: patch.status || row.status,
-      agent: patch.agent || row.agent,
-      owner: patch.owner || '',
-      nextAction: patch.nextAction || '',
-      followUpDue: patch.followUpDue || '',
-      comments: Array.isArray(patch.comments) ? patch.comments : [],
-      lastComment: Array.isArray(patch.comments) && patch.comments.length > 0 ? patch.comments[patch.comments.length - 1] : null
-    };
-  });
 
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
@@ -169,43 +111,114 @@ const MainContent = styled.main`
 `;
 
 const Topbar = styled.header`
-  min-height: 112px;
-  border-bottom: 1px solid var(--glass-border);
+  margin: 1.5rem 2rem;
+  height: 90px;
+  background: rgba(8, 18, 34, 0.45);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(180, 223, 255, 0.12);
+  border-radius: 24px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 1rem;
   padding: 0 2rem;
-  background: linear-gradient(180deg, rgba(8, 18, 34, 0.78), rgba(8, 18, 34, 0.58));
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  z-index: 100;
+  z-index: 1000;
   position: sticky;
-  top: 0;
+  top: 1.5rem;
+  box-shadow: 
+    0 20px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(8, 18, 34, 0.55);
+    border-color: rgba(180, 223, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.6),
+      0 0 20px rgba(85, 214, 255, 0.05);
+  }
+
+  @media (max-width: 900px) {
+    margin: 1rem;
+    height: auto;
+    padding: 1rem;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    top: 1rem;
+  }
+`;
+
+const PulsatingLogo = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
   
   &::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand-blue), var(--brand), transparent);
-    background-size: 300% 100%;
-    animation: borderGlow 8s ease-in-out infinite;
-    opacity: 0.8;
+    width: 65px;
+    height: 65px;
+    background: radial-gradient(circle, var(--brand) 0%, transparent 70%);
+    filter: blur(20px);
+    border-radius: 50%;
+    opacity: 0.3;
+    z-index: -1;
+    animation: flickerGlow 3s ease-in-out infinite alternate;
   }
 
-  @keyframes borderGlow {
-    0% { background-position: -100% 0; }
-    50% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
+  @keyframes flickerGlow {
+    0% { transform: scale(0.9); opacity: 0.2; filter: blur(15px); }
+    50% { transform: scale(1.15); opacity: 0.45; filter: blur(25px); }
+    100% { transform: scale(1); opacity: 0.3; filter: blur(20px); }
   }
+`;
 
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-    padding: 1.1rem 1rem;
-    justify-items: center;
+const UserAvatar = styled.div`
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--brand-amber), var(--brand));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(255, 122, 26, 0.3);
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 12px;
+    height: 12px;
+    background: var(--ok);
+    border: 2.5px solid #081222;
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--ok);
+  }
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  .name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .status {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 `;
 
@@ -307,22 +320,29 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2.7rem;
+  font-size: 1.6rem;
   font-weight: 800;
   margin: 0;
   text-transform: uppercase;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  color: var(--brand-ice);
+  letter-spacing: 0.15em;
+  color: var(--text-main);
   line-height: 1;
-  text-shadow: 0 0 22px rgba(255, 179, 71, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.3s ease;
+  transform: scaleY(1.05);
 
   span.brand {
-    color: var(--brand-amber);
-    margin-right: 0.02em;
+    background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
-  @media (max-width: 900px) {
-    font-size: 2.1rem;
+  &:hover {
+    letter-spacing: 0.2em;
+    gap: 0.6rem;
   }
 `;
 
@@ -330,12 +350,11 @@ const TopbarRight = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 1rem;
+  gap: 1.5rem;
 
   @media (max-width: 900px) {
     width: 100%;
     justify-content: center;
-    flex-wrap: wrap;
   }
 `;
 
@@ -352,8 +371,6 @@ const TopbarMeta = styled.div`
   display: flex;
   justify-content: flex-end;
   margin-top: 0.45rem;
-  gap: 0.65rem;
-  flex-wrap: wrap;
 
   span {
     color: var(--text-muted);
@@ -362,9 +379,54 @@ const TopbarMeta = styled.div`
 `;
 
 const SyncButton = styled.button`
-  padding: 0.68rem 1rem !important;
-  font-size: 0.82rem !important;
-  border-radius: 999px !important;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.6rem 1.2rem;
+  border-radius: 14px;
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--brand-cyan);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+  }
+
+  svg {
+    transition: transform 0.6s ease;
+  }
+
+  &:hover svg {
+    transform: rotate(180deg);
+  }
+`;
+
+const LogoutButton = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+    transform: translateY(-2px);
+  }
 `;
 
 const ViewSwitch = styled.div`
@@ -599,6 +661,7 @@ const aggregateByCompany = (rows) => {
 
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
+    const cycles = Array.from(item.cycleSet);
     
     // Re-calculate auto-overdue based on the FINAL aggregated due date
     let status = item.status;
@@ -648,7 +711,6 @@ function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
   const [trackerData, setTrackerData] = useState([]);
-  const [trackerOverrides, setTrackerOverrides] = useState({});
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
@@ -666,9 +728,14 @@ function App() {
   const [user, setUser] = useState(null);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
-  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
-  const canManageData = accessProfile.canEditData;
-  const canUseInvoiceEntry = accessProfile.canUseInvoiceEntry;
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 
   useEffect(() => {
@@ -683,17 +750,6 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (accessProfile.canViewAllData) return;
-    const firstScopedAgent = accessProfile.agentScope[0];
-    setSelectedAgent(firstScopedAgent || 'all');
-    setActiveView((prev) => (prev === 'invoice_entry' ? 'overview' : prev));
-  }, [accessProfile]);
-
-  const denyRestrictedAction = useCallback(() => {
-    toast.error('Your access is limited to viewing and follow-up only.');
   }, []);
 
   useEffect(() => {
@@ -717,23 +773,7 @@ function App() {
       if (error) throw error;
 
       const editsById = {};
-      const trackerEditsById = {};
       edits.forEach(edit => {
-        if (isTrackerRecordId(edit.id)) {
-          const trackerMeta = parseTrackerMetaNotes(edit.notes);
-          trackerEditsById[edit.id] = {
-            id: edit.id,
-            company: edit.company,
-            agent: edit.agent_id,
-            status: edit.status,
-            owner: trackerMeta.owner,
-            nextAction: trackerMeta.nextAction,
-            followUpDue: trackerMeta.followUpDue || edit.due_date || '',
-            comments: trackerMeta.comments
-          };
-          return;
-        }
-
         editsById[edit.id] = {
           ...edit,
           // Map DB snake_case to App camelCase
@@ -753,7 +793,6 @@ function App() {
       });
 
       setManualEdits(editsById);
-      setTrackerOverrides(trackerEditsById);
       manualEditsRef.current = editsById;
     } catch (error) {
       console.error('Error fetching manual edits:', error.message);
@@ -907,10 +946,6 @@ function App() {
   }, [loadData]);
 
   const handleSaveDebtor = (debtor) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
@@ -1001,10 +1036,6 @@ function App() {
   };
 
   const handleResetDebtor = async (id) => {
-    if (!accessProfile.canResetData) {
-      denyRestrictedAction();
-      return;
-    }
     if (!user || !id) return;
     try {
       // 1. Delete from Supabase to effectively remove the override
@@ -1036,10 +1067,6 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
-    if (!accessProfile.canDeleteData) {
-      denyRestrictedAction();
-      return;
-    }
     if (String(id).startsWith('CMP-')) {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
 
@@ -1090,10 +1117,6 @@ function App() {
   };
 
   const persistEditedRows = async (rows) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     if (!rows || rows.length === 0 || !user) return;
 
     // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
@@ -1145,76 +1168,7 @@ function App() {
     }
   };
 
-  const persistTrackerFollowUp = async (payload) => {
-    if (!payload?.id || !user) return;
-
-    const canManageTracker = accessProfile.canEditData;
-    const canCommentTracker = Boolean(user);
-    if (!canManageTracker && !canCommentTracker) {
-      denyRestrictedAction();
-      return;
-    }
-
-    const current = trackerOverrides[payload.id] || {};
-    const nextComments = Array.isArray(payload.comments)
-      ? payload.comments
-      : Array.isArray(current.comments)
-        ? current.comments
-        : [];
-
-    const nextRecord = {
-      id: payload.id,
-      company: payload.company || current.company || '',
-      agent: payload.agent || current.agent || '',
-      status: canManageTracker ? (payload.status || current.status || 'Follow-up') : (current.status || payload.status || 'Follow-up'),
-      owner: canManageTracker ? (payload.owner ?? current.owner ?? '') : (current.owner ?? ''),
-      nextAction: canManageTracker ? (payload.nextAction ?? current.nextAction ?? '') : (current.nextAction ?? ''),
-      followUpDue: canManageTracker ? (payload.followUpDue ?? current.followUpDue ?? '') : (current.followUpDue ?? ''),
-      comments: nextComments
-    };
-
-    const upsertRow = {
-      id: String(nextRecord.id),
-      company: nextRecord.company || null,
-      agent_id: nextRecord.agent || null,
-      amount: 0,
-      status: String(nextRecord.status || 'Follow-up'),
-      due_date: nextRecord.followUpDue || null,
-      last_invoiced_date: null,
-      last_no_usage_date: null,
-      billing_cycle: null,
-      invoice_number: null,
-      updated_at: new Date().toISOString(),
-      notes: buildTrackerMetaNotes(nextRecord)
-    };
-
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert([upsertRow]);
-
-      if (error) throw error;
-
-      setTrackerOverrides((prev) => ({
-        ...prev,
-        [nextRecord.id]: nextRecord
-      }));
-
-      toast.success(canManageTracker ? 'Support follow-up updated' : 'Comment saved', {
-        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-      });
-    } catch (error) {
-      const msg = error?.message || 'Unknown network error';
-      toast.error(`Support Tracker sync failed: ${msg}`, { duration: 5000 });
-      console.error('[Tracker Persistence] Detailed Error:', error);
-    }
-  };
-
   const quickUpdateBillingCycle = (row, nextCycle) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1242,10 +1196,6 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1273,10 +1223,6 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1307,34 +1253,12 @@ function App() {
 
 
 
-  const accessibleData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return data;
-    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [data, accessProfile]);
-
-  const accessibleClientNames = React.useMemo(
-    () => new Set(accessibleData.map((item) => String(item.company || item.clientName || '').trim().toLowerCase()).filter(Boolean)),
-    [accessibleData]
-  );
-
-  const mergedTrackerData = React.useMemo(() => mergeTrackerRows(trackerData, trackerOverrides), [trackerData, trackerOverrides]);
-
-  const accessibleTrackerData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return mergedTrackerData;
-    return mergedTrackerData.filter((item) => accessibleClientNames.has(String(item.company || '').trim().toLowerCase()));
-  }, [mergedTrackerData, accessProfile, accessibleClientNames]);
-
-  const accessibleClientsByAgent = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return clientsByAgent;
-    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [clientsByAgent, accessProfile]);
-
-  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
-    return accessibleData.map(row => {
+    return data.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
@@ -1351,7 +1275,7 @@ function App() {
       }
       return { ...row, status, isAutoOverdue };
     });
-  }, [accessibleData, lastTick]);
+  }, [data, lastTick]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1385,24 +1309,6 @@ function App() {
     };
   }, [agentData]);
 
-  const trackerOverview = React.useMemo(() => {
-    const openItems = accessibleTrackerData.filter((item) => String(item.status || '').toLowerCase() !== 'completed');
-    const dueToday = openItems.filter((item) => {
-      if (!item.followUpDue) return false;
-      const due = new Date(`${item.followUpDue}T00:00:00`);
-      const today = new Date();
-      const todayKey = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      return !Number.isNaN(due.getTime()) && due <= todayKey;
-    }).length;
-    const withOwner = openItems.filter((item) => String(item.owner || '').trim()).length;
-
-    return {
-      openItems: openItems.length,
-      dueToday,
-      withOwner
-    };
-  }, [accessibleTrackerData]);
-
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
@@ -1410,7 +1316,7 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
-    const scopedRows = accessibleData.filter((item) => {
+    const scopedRows = data.filter((item) => {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
@@ -1421,6 +1327,7 @@ function App() {
 
     // Deduplicate by week to avoid double-counting placeholders
     const deduplicatedRows = [];
+    const seenWindows = new Set();
     
     // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
     const sortedScoped = [...scopedRows].sort((a, b) => {
@@ -1460,7 +1367,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
+  }, [activeCompany, data, selectedAgent, selectedWeek]);
 
 
 
@@ -1472,17 +1379,11 @@ function App() {
       opacity: loading ? 0.5 : 1, 
       transition: 'opacity 0.3s' 
     }}>
-      <TopbarMeta>
-        <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-      </TopbarMeta>
-
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        {canUseInvoiceEntry && (
-          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
-        )}
+        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1493,17 +1394,10 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} disabled={!accessProfile.canViewAllData}>
-                {accessProfile.canViewAllData && <option value="all">All agents</option>}
+              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+                <option value="all">All agents</option>
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
-                ))}
-              </AgentSelect>
-
-              <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
-                <option value="all">All weeks</option>
-                {weekOptions.map((weekName) => (
-                  <option key={weekName} value={weekName}>{weekName}</option>
                 ))}
               </AgentSelect>
 
@@ -1522,33 +1416,6 @@ function App() {
             </AgentSnapshot>
           </AgentToolbar>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '1rem',
-            flexWrap: 'wrap',
-            marginBottom: '1rem',
-            padding: '0.9rem 1rem',
-            borderRadius: '18px',
-            border: '1px solid var(--glass-border)',
-            background: 'rgba(255,255,255,0.035)'
-          }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.86rem' }}>
-              Support follow-up: <strong style={{ color: 'var(--text-main)' }}>{trackerOverview.openItems}</strong> open |
-              <strong style={{ color: 'var(--brand)', marginLeft: '0.35rem' }}>{trackerOverview.dueToday}</strong> due now |
-              <strong style={{ color: 'var(--text-main)', marginLeft: '0.35rem' }}>{trackerOverview.withOwner}</strong> assigned
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => setActiveView('tracker')}
-              style={{ padding: '0.62rem 1rem', borderRadius: '999px', fontSize: '0.82rem' }}
-            >
-              Open Support Tracker
-            </button>
-          </div>
-
           <Dashboard metrics={metrics} />
           <DebtorsList
             data={agentData}
@@ -1556,9 +1423,7 @@ function App() {
             onQuickUpdateBillingCycle={quickUpdateBillingCycle}
             onQuickUpdateStatus={quickUpdatePaymentStatus}
             onQuickUpdateAmount={quickUpdateTotalDue}
-            readOnly={!canManageData}
             onEdit={(debtor) => {
-              if (!canManageData) return denyRestrictedAction();
               setCurrentDebtor(debtor);
               setIsModalOpen(true);
             }}
@@ -1579,23 +1444,16 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker
-            data={accessibleTrackerData}
-            canManageEntries={accessProfile.canEditData}
-            canComment={Boolean(user)}
-            currentUserEmail={user?.email || ''}
-            onSaveFollowUp={persistTrackerFollowUp}
-          />
+          <SupportTracker data={trackerData} />
         </ContentScroll>
       )}
 
-      {activeView === 'invoice_entry' && canUseInvoiceEntry && (
+      {activeView === 'invoice_entry' && (
         <ContentScroll>
           <InvoiceEntry 
-            clientsByAgent={accessibleClientsByAgent} 
-            existingData={accessibleData} 
+            clientsByAgent={clientsByAgent} 
+            existingData={data} 
             onSaveInvoice={(invoice) => {
-              if (!canUseInvoiceEntry) return denyRestrictedAction();
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
                 // If it's a completely new manual entry, we add it to the array.
@@ -1645,31 +1503,43 @@ function App() {
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
-            <div />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <UserAvatar>
+                <img 
+                  src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                  alt="Andres Mendez" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                />
+              </UserAvatar>
+              <UserInfo>
+                <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
+                <span className="status">Active Session</span>
+              </UserInfo>
+            </div>
           </TopbarLeft>
 
           <BrandLockup>
-            <AlmaFuelLogo size={60} />
-            <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
+            <BrandTitle>
+              <span className="brand">Alma</span>
+              <PulsatingLogo>
+                <AlmaFuelLogo size={42} />
+              </PulsatingLogo>
+              <span>fuel</span>
+            </BrandTitle>
           </BrandLockup>
 
           <TopbarRight>
             <ActionButtons>
-              <SyncButton
-                className="btn btn-secondary"
-                onClick={() => accessProfile.canSyncData ? loadData({ notifyUser: true }) : denyRestrictedAction()}
-                title={accessProfile.canSyncData ? 'Sync (Ctrl+Shift+S)' : 'Managers only'}
-                disabled={!accessProfile.canSyncData}
-              >
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.8rem', padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <Clock size={12} color="var(--brand)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{timeString}</span>
+              </div>
+              <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
+                <span>Sync</span>
               </SyncButton>
-              <button
-                className="btn btn-outline"
-                onClick={() => supabase.auth.signOut()}
-                style={{ fontSize: '0.82rem', padding: '0.68rem 1rem', borderRadius: '999px' }}
-              >
+              <LogoutButton onClick={() => supabase.auth.signOut()}>
                 Logout
-              </button>
+              </LogoutButton>
             </ActionButtons>
           </TopbarRight>
         </Topbar>
@@ -1686,16 +1556,13 @@ function App() {
         onSave={handleSaveDebtor}
         onReset={handleResetDebtor}
         debtor={currentDebtor}
-        readOnly={!canManageData}
       />
 
       <CompanyProfileModal
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
-        canEditInvoice={accessProfile.canEditInvoiceDetails}
         onEditInvoice={(inv) => {
-          if (!accessProfile.canEditInvoiceDetails) return denyRestrictedAction();
           setActiveCompany(null);
           setCurrentDebtor(inv);
           setIsModalOpen(true);

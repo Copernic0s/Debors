@@ -26,23 +26,73 @@ const Title = styled.h2`
   color: var(--text-main);
 `;
 
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
+const GridContainer = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.1);
 `;
 
-const Th = styled.th`
-  padding: 1rem;
-  font-size: 0.75rem;
+const Card = styled.div`
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+`;
+
+const CompanyName = styled.h4`
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.2;
+`;
+
+const CycleBadge = styled.span`
+  display: inline-block;
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--violet);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  text-align: left;
+  letter-spacing: 0.05em;
 `;
 
-const Td = styled.td`
-  padding: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+const CardFooter = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--glass-border);
+`;
+
+const InputGroup = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 `;
 
 const Input = styled.input`
@@ -51,16 +101,22 @@ const Input = styled.input`
   border-radius: var(--radius-md);
   padding: 0.5rem 0.75rem;
   color: var(--text-main);
-  width: 120px;
+  width: 100%;
 
   &:focus {
     outline: none;
     border-color: var(--brand);
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
+  }
+  
+  &::placeholder {
+    color: var(--text-muted);
+    opacity: 0.5;
   }
 `;
 
 const Button = styled.button`
-  background: var(--brand);
+  background: ${props => props.$color || 'var(--brand)'};
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -69,10 +125,13 @@ const Button = styled.button`
   font-weight: 600;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
+  width: 100%;
+  transition: all 0.2s;
 
   &:hover {
-    background: var(--brand-deep);
+    filter: brightness(1.2);
   }
   
   &:disabled {
@@ -80,6 +139,24 @@ const Button = styled.button`
     cursor: not-allowed;
   }
 `;
+
+const getAgentColor = (name) => {
+  const colors = [
+    '#f97316', // Orange
+    '#0ea5e9', // Sky
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#10b981', // Emerald
+    '#f59e0b', // Amber
+    '#6366f1', // Indigo
+    '#ef4444', // Red
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
 
 const AgentGroup = styled.div`
   margin-bottom: 1.5rem;
@@ -121,6 +198,57 @@ const Badge = styled.span`
   font-weight: 700;
 `;
 
+// Helper to compute actual due date string based on rules and the week label start date
+const calculateDueDate = (weekLabel, cycle, isSecondInvoice = false) => {
+  // Regex to parse things like "Mar 16 - 22" or "Feb 10-16"
+  const match = String(weekLabel || '').match(/^([A-Za-z]+)\s+(\d+)\s*[-\s]*(\d+)$/);
+  if (!match) return '';
+  const [, monthName, startDay] = match;
+  const currentYear = new Date().getFullYear();
+  const weekStart = new Date(`${monthName} ${startDay}, ${currentYear}`);
+  if (Number.isNaN(weekStart.getTime())) return '';
+
+  const getNextWeekday = (date, targetWeekday) => {
+    for (let i = 0; i < 10; i++) {
+      const current = new Date(date);
+      current.setDate(date.getDate() + i);
+      if (current.getDay() === targetWeekday) return current;
+    }
+    return null;
+  };
+
+  const toDateKey = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Option A (Monday -> Sunday) or First Invoice of Twice: Due Tuesday
+  if (cycle === BILLING_CYCLES.MONDAY_SUNDAY || (cycle === BILLING_CYCLES.TWICE && !isSecondInvoice)) {
+    const nextTuesday = getNextWeekday(weekStart, 2);
+    if (nextTuesday) {
+      if (Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24)) < 7) {
+        nextTuesday.setDate(nextTuesday.getDate() + 7);
+      }
+      return toDateKey(nextTuesday);
+    }
+  }
+
+  // Option B (Thursday -> Wednesday) or Second Invoice of Twice: Due Friday
+  if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY || (cycle === BILLING_CYCLES.TWICE && isSecondInvoice)) {
+    const nextFriday = getNextWeekday(weekStart, 5);
+    if (nextFriday) {
+      if (Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24)) < 7) {
+        nextFriday.setDate(nextFriday.getDate() + 7);
+      }
+      return toDateKey(nextFriday);
+    }
+  }
+
+  return '';
+};
+
 export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoice }) {
   const [week, setWeek] = useState(() => {
     // Basic week string generation for UI default
@@ -137,7 +265,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       const company = client.company;
       const agentId = client.agentId;
       
-      const createSlot = (suffix = '') => {
+      const createSlot = (suffix = '', customLabel = '') => {
         const slotId = `EXPECTED-${company}-${week}${suffix}`.replace(/[^a-zA-Z0-9-]/g, '');
         // Check if we already have an invoice for this in existingData
         const existing = existingData.find(d => 
@@ -153,16 +281,20 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
             cycle,
             weekLabel: week,
             invoiceNumber: existing?.invoiceNumber || '',
-            amount: existing?.amount || ''
+            amount: existing?.amount || '',
+            customLabel
           });
         }
       };
 
       if (cycle === BILLING_CYCLES.TWICE) {
-        createSlot('-1');
-        createSlot('-2');
+        createSlot('-1', 'Monday Invoice (Due Tue)');
+        createSlot('-2', 'Thursday Invoice (Due Fri)');
       } else if (cycle !== BILLING_CYCLES.UNSPECIFIED && cycle !== 'CS by agent') {
-        createSlot('');
+        const singleLabel = cycle === BILLING_CYCLES.MONDAY_SUNDAY 
+          ? 'Monday Invoice (Due Tue)' 
+          : (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY ? 'Thursday Invoice (Due Fri)' : '');
+        createSlot('', singleLabel);
       }
     });
     return slots;
@@ -206,10 +338,15 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
     const entry = entries[id];
     if (!entry || !entry.invoiceNumber || !entry.amount) return;
 
+    // Determine if it is the second invoice of a 'Twice' cycle based on slot suffix
+    const isSecondInvoice = id.endsWith('-2');
+    const computedDueDate = calculateDueDate(entry.weekLabel, entry.cycle, isSecondInvoice);
+
     onSaveInvoice({
       ...entry,
       status: 'pending',
       source: 'manual_entry',
+      dueDate: computedDueDate,
       id: `MAN-${Date.now()}-${entry.company.replace(/[^a-zA-Z0-9]/g, '')}`
     });
     
@@ -238,71 +375,80 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
           All caught up for this week!
         </div>
       ) : (
-        groupedSlots.map(group => (
-          <AgentGroup key={group.agent}>
-            <AgentHeader 
-              $isOpen={expandedAgents[group.agent]} 
-              onClick={() => toggleAgent(group.agent)}
-            >
-              <AgentName>
-                {group.agent}
-                <Badge>{group.slots.length}</Badge>
-              </AgentName>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
-              </span>
-            </AgentHeader>
-            
-            {expandedAgents[group.agent] && (
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>Company</Th>
-                    <Th>Cycle</Th>
-                    <Th>Invoice #</Th>
-                    <Th>Amount ($)</Th>
-                    <Th>Action</Th>
-                  </tr>
-                </thead>
-                <tbody>
+        groupedSlots.map(group => {
+          const agentColor = getAgentColor(group.agent);
+          return (
+            <AgentGroup key={group.agent} style={{ borderColor: `${agentColor}33` }}>
+              <AgentHeader 
+                $isOpen={expandedAgents[group.agent]} 
+                onClick={() => toggleAgent(group.agent)}
+                style={{ borderLeft: `4px solid ${agentColor}` }}
+              >
+                <AgentName>
+                  {group.agent}
+                  <Badge style={{ background: agentColor }}>{group.slots.length}</Badge>
+                </AgentName>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
+                </span>
+              </AgentHeader>
+              
+              {expandedAgents[group.agent] && (
+                <GridContainer>
                   {group.slots.map(slot => {
                     const entry = entries[slot.id] || slot;
                     const isReady = entry.invoiceNumber && entry.amount;
                     return (
-                      <tr key={slot.id}>
-                        <Td><strong>{slot.company}</strong></Td>
-                        <Td>{slot.cycle}</Td>
-                        <Td>
-                          <Input 
-                            placeholder="INV-..." 
-                            value={entry.invoiceNumber}
-                            onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
-                          />
-                        </Td>
-                        <Td>
-                          <Input 
-                            type="number"
-                            placeholder="0.00" 
-                            value={entry.amount}
-                            onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
-                          />
-                        </Td>
-                        <Td>
+                      <Card key={slot.id} style={{ borderColor: `${agentColor}44` }}>
+                        <CardHeader>
+                          <CompanyName>{slot.company}</CompanyName>
+                        </CardHeader>
+                        
+                        <div>
+                          <CycleBadge style={{ background: `${agentColor}22`, color: agentColor, borderColor: `${agentColor}44` }}>
+                            {slot.cycle}
+                          </CycleBadge>
+                          {slot.customLabel && (
+                            <div style={{ fontSize: '0.75rem', color: agentColor, marginTop: '0.5rem', fontWeight: '600', opacity: 0.9 }}>
+                              {slot.customLabel}
+                            </div>
+                          )}
+                        </div>
+
+                        <CardFooter style={{ borderTopColor: `${agentColor}22` }}>
+                          <InputGroup>
+                            <Input 
+                              placeholder="Invoice #" 
+                              value={entry.invoiceNumber}
+                              onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
+                            />
+                            <Input 
+                              type="number"
+                              placeholder="Amount ($)" 
+                              value={entry.amount}
+                              onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
+                            />
+                          </InputGroup>
                           <Button 
+                            $color={agentColor}
                             disabled={!isReady}
                             onClick={() => handleSave(slot.id)}
                           >
-                            <Save size={16} /> Save
+                            <Save size={16} /> Save Invoice
                           </Button>
-                        </Td>
-                      </tr>
+                        </CardFooter>
+                      </Card>
                     );
                   })}
-                </tbody>
-              </Table>
-            )}
-          </AgentGroup>
-        ))
+                </GridContainer>
+              )}
+            </AgentGroup>
+          );
+        })
       )}
     </Container>
   );
