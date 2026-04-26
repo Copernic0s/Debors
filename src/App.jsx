@@ -154,23 +154,71 @@ const PulsatingLogo = styled.div`
   align-items: center;
   justify-content: center;
   position: relative;
+  cursor: pointer;
   
   &::after {
     content: '';
     position: absolute;
-    width: 60px;
-    height: 60px;
-    background: var(--brand);
-    filter: blur(35px);
+    width: 65px;
+    height: 65px;
+    background: radial-gradient(circle, var(--brand) 0%, transparent 70%);
+    filter: blur(20px);
     border-radius: 50%;
-    opacity: 0.15;
+    opacity: 0.3;
     z-index: -1;
-    animation: pulseGlow 4s ease-in-out infinite;
+    animation: flickerGlow 3s ease-in-out infinite alternate;
   }
 
-  @keyframes pulseGlow {
-    0%, 100% { transform: scale(1); opacity: 0.15; }
-    50% { transform: scale(1.4); opacity: 0.25; }
+  @keyframes flickerGlow {
+    0% { transform: scale(0.9); opacity: 0.2; filter: blur(15px); }
+    50% { transform: scale(1.15); opacity: 0.45; filter: blur(25px); }
+    100% { transform: scale(1); opacity: 0.3; filter: blur(20px); }
+  }
+`;
+
+const UserAvatar = styled.div`
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--brand-amber), var(--brand));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(255, 122, 26, 0.3);
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 12px;
+    height: 12px;
+    background: var(--ok);
+    border: 2.5px solid #081222;
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--ok);
+  }
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  .name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .status {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 `;
 
@@ -1319,10 +1367,6 @@ function App() {
       opacity: loading ? 0.5 : 1, 
       transition: 'opacity 0.3s' 
     }}>
-      <TopbarMeta>
-        <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-      </TopbarMeta>
-
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
@@ -1454,12 +1498,14 @@ function App() {
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>System Status</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--ok)', boxShadow: '0 0 10px var(--ok)' }} />
-                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Connected</span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <UserAvatar>
+                {user?.email?.split('@')[0].split('.').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AM'}
+              </UserAvatar>
+              <UserInfo>
+                <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
+                <span className="status">Active Session</span>
+              </UserInfo>
             </div>
           </TopbarLeft>
 
@@ -1471,6 +1517,10 @@ function App() {
           </BrandLockup>
 
           <TopbarRight>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', marginRight: '0.5rem' }}>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Sync</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--brand-ice)' }}>{syncTimeLabel}</span>
+            </div>
             <ActionButtons>
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
