@@ -174,6 +174,8 @@ const PulsatingLogo = styled.div`
     50% { transform: scale(1.15); opacity: 0.45; filter: blur(25px); }
     100% { transform: scale(1); opacity: 0.3; filter: blur(20px); }
   }
+
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 `;
 
 const UserAvatar = styled.div`
@@ -330,10 +332,10 @@ const BrandTitle = styled.h1`
   line-height: 1;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  transition: all 0.3s ease;
-  transform: scaleY(1.05);
-
+  gap: 0.8rem;
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
     -webkit-background-clip: text;
@@ -341,8 +343,12 @@ const BrandTitle = styled.h1`
   }
 
   &:hover {
-    letter-spacing: 0.2em;
-    gap: 0.6rem;
+    gap: -0.2rem;
+    letter-spacing: 0.1em;
+  }
+
+  &:hover ${PulsatingLogo} {
+    transform: translateY(-22px) scale(1.2);
   }
 `;
 
