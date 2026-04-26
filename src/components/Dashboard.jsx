@@ -62,23 +62,25 @@ const StatLabel = styled.span`
 `;
 
 const StatValue = styled.span`
-  font-size: 1.8rem;
-  font-weight: 900;
+  font-size: 1.85rem;
+  font-weight: 800;
   color: var(--text-main);
-  font-family: 'Syne', sans-serif;
-  letter-spacing: -0.01em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 `;
 
 const IconWrapper = styled.div`
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   background-color: ${props => props.$bgColor || 'rgba(255, 255, 255, 0.05)'};
   color: ${props => props.$color || 'white'};
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 `;
 
 const formatCurrency = (value) => {
