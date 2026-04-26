@@ -116,7 +116,7 @@ const Input = styled.input`
 `;
 
 const Button = styled.button`
-  background: var(--brand);
+  background: ${props => props.$color || 'var(--brand)'};
   color: white;
   border: none;
   border-radius: var(--radius-md);
@@ -131,7 +131,7 @@ const Button = styled.button`
   transition: all 0.2s;
 
   &:hover {
-    background: var(--brand-deep);
+    filter: brightness(1.2);
   }
   
   &:disabled {
@@ -139,6 +139,24 @@ const Button = styled.button`
     cursor: not-allowed;
   }
 `;
+
+const getAgentColor = (name) => {
+  const colors = [
+    '#f97316', // Orange
+    '#0ea5e9', // Sky
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#10b981', // Emerald
+    '#f59e0b', // Amber
+    '#6366f1', // Indigo
+    '#ef4444', // Red
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
 
 const AgentGroup = styled.div`
   margin-bottom: 1.5rem;
@@ -357,69 +375,80 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
           All caught up for this week!
         </div>
       ) : (
-        groupedSlots.map(group => (
-          <AgentGroup key={group.agent}>
-            <AgentHeader 
-              $isOpen={expandedAgents[group.agent]} 
-              onClick={() => toggleAgent(group.agent)}
-            >
-              <AgentName>
-                {group.agent}
-                <Badge>{group.slots.length}</Badge>
-              </AgentName>
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
-              </span>
-            </AgentHeader>
-            
-            {expandedAgents[group.agent] && (
-              <GridContainer>
-                {group.slots.map(slot => {
-                  const entry = entries[slot.id] || slot;
-                  const isReady = entry.invoiceNumber && entry.amount;
-                  return (
-                    <Card key={slot.id}>
-                      <CardHeader>
-                        <CompanyName>{slot.company}</CompanyName>
-                      </CardHeader>
-                      
-                      <div>
-                        <CycleBadge>{slot.cycle}</CycleBadge>
-                        {slot.customLabel && (
-                          <div style={{ fontSize: '0.75rem', color: 'var(--brand)', marginTop: '0.5rem', fontWeight: '600' }}>
-                            {slot.customLabel}
-                          </div>
-                        )}
-                      </div>
+        groupedSlots.map(group => {
+          const agentColor = getAgentColor(group.agent);
+          return (
+            <AgentGroup key={group.agent} style={{ borderColor: `${agentColor}33` }}>
+              <AgentHeader 
+                $isOpen={expandedAgents[group.agent]} 
+                onClick={() => toggleAgent(group.agent)}
+                style={{ borderLeft: `4px solid ${agentColor}` }}
+              >
+                <AgentName>
+                  {group.agent}
+                  <Badge style={{ background: agentColor }}>{group.slots.length}</Badge>
+                </AgentName>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {expandedAgents[group.agent] ? 'Hide' : 'Show'} Clients
+                </span>
+              </AgentHeader>
+              
+              {expandedAgents[group.agent] && (
+                <GridContainer>
+                  {group.slots.map(slot => {
+                    const entry = entries[slot.id] || slot;
+                    const isReady = entry.invoiceNumber && entry.amount;
+                    return (
+                      <Card key={slot.id} style={{ borderColor: `${agentColor}44` }}>
+                        <CardHeader>
+                          <CompanyName>{slot.company}</CompanyName>
+                        </CardHeader>
+                        
+                        <div>
+                          <CycleBadge style={{ background: `${agentColor}22`, color: agentColor, borderColor: `${agentColor}44` }}>
+                            {slot.cycle}
+                          </CycleBadge>
+                          {slot.customLabel && (
+                            <div style={{ fontSize: '0.75rem', color: agentColor, marginTop: '0.5rem', fontWeight: '600', opacity: 0.9 }}>
+                              {slot.customLabel}
+                            </div>
+                          )}
+                        </div>
 
-                      <CardFooter>
-                        <InputGroup>
-                          <Input 
-                            placeholder="Invoice #" 
-                            value={entry.invoiceNumber}
-                            onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
-                          />
-                          <Input 
-                            type="number"
-                            placeholder="Amount ($)" 
-                            value={entry.amount}
-                            onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
-                          />
-                        </InputGroup>
-                        <Button 
-                          disabled={!isReady}
-                          onClick={() => handleSave(slot.id)}
-                        >
-                          <Save size={16} /> Save Invoice
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  );
-                })}
-              </GridContainer>
-            )}
-          </AgentGroup>
-        ))
+                        <CardFooter style={{ borderTopColor: `${agentColor}22` }}>
+                          <InputGroup>
+                            <Input 
+                              placeholder="Invoice #" 
+                              value={entry.invoiceNumber}
+                              onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
+                            />
+                            <Input 
+                              type="number"
+                              placeholder="Amount ($)" 
+                              value={entry.amount}
+                              onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
+                            />
+                          </InputGroup>
+                          <Button 
+                            $color={agentColor}
+                            disabled={!isReady}
+                            onClick={() => handleSave(slot.id)}
+                          >
+                            <Save size={16} /> Save Invoice
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    );
+                  })}
+                </GridContainer>
+              )}
+            </AgentGroup>
+          );
+        })
       )}
     </Container>
   );
