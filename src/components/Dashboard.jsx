@@ -11,19 +11,21 @@ const DashboardGrid = styled.div`
 `;
 
 const StatCard = styled.div`
-  padding: 1.75rem;
+  padding: 1.5rem 1.75rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.03);
   position: relative;
   overflow: hidden;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  background: rgba(8, 18, 34, 0.35);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-radius: 24px;
+  box-shadow: 
+    0 20px 40px -12px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
 
   &::before {
     content: '';
@@ -32,17 +34,18 @@ const StatCard = styled.div`
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
   }
 
   &:hover {
-    transform: translateY(-8px);
-    border-color: var(--brand);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(249, 115, 22, 0.15);
-    background: rgba(30, 41, 59, 0.5);
+    transform: translateY(-5px);
+    background: rgba(8, 18, 34, 0.5);
+    border-color: rgba(255, 122, 26, 0.2);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.5),
+      0 0 20px rgba(255, 122, 26, 0.05);
   }
 `;
-
 
 const StatInfo = styled.div`
   display: flex;
@@ -50,30 +53,32 @@ const StatInfo = styled.div`
 `;
 
 const StatLabel = styled.span`
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.6rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
 `;
 
 const StatValue = styled.span`
-  font-size: 2rem;
-  font-weight: 800;
+  font-size: 1.8rem;
+  font-weight: 900;
   color: var(--text-main);
-  letter-spacing: -0.02em;
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -0.01em;
 `;
 
 const IconWrapper = styled.div`
-  padding: 0.85rem;
-  border-radius: 16px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   background-color: ${props => props.$bgColor || 'rgba(255, 255, 255, 0.05)'};
   color: ${props => props.$color || 'white'};
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 `;
 
 const formatCurrency = (value) => {
