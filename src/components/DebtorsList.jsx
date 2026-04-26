@@ -299,7 +299,8 @@ export default function DebtorsList({
   onOpenCompanyProfile,
   onQuickUpdateBillingCycle,
   onQuickUpdateStatus,
-  onQuickUpdateAmount
+  onQuickUpdateAmount,
+  readOnly = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
@@ -309,6 +310,7 @@ export default function DebtorsList({
   const pageSize = 20;
 
   const commitQuickAmount = (item) => {
+    if (readOnly) return;
     const raw = pendingAmounts[item.id];
     if (raw === undefined) return;
     onQuickUpdateAmount?.(item, raw);
@@ -444,6 +446,7 @@ export default function DebtorsList({
                 <Td>
                   <BillingCycleSelect
                     value={normalizeBillingCycle(item.billingCycle || BILLING_CYCLES.UNSPECIFIED)}
+                    disabled={readOnly}
                     onChange={(e) => onQuickUpdateBillingCycle?.(item, e.target.value)}
                   >
                     {BILLING_CYCLE_OPTIONS.map((cycle) => (
@@ -456,6 +459,7 @@ export default function DebtorsList({
                   <StatusSelect
                     $tone={item.status}
                     value={item.status}
+                    disabled={readOnly}
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
                     title={item.isAutoOverdue ? 'Automatically marked as overdue based on policy' : ''}
                     style={item.isAutoOverdue ? { border: '1px solid var(--danger)', boxShadow: '0 0 8px rgba(239, 68, 68, 0.2)' } : {}}
@@ -480,10 +484,12 @@ export default function DebtorsList({
                   <DueInput
                     type="text"
                     inputMode="decimal"
+                    disabled={readOnly}
                     value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
-                    onChange={(e) => setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                    onBlur={() => commitQuickAmount(item)}
+                    onChange={(e) => !readOnly && setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    onBlur={() => !readOnly && commitQuickAmount(item)}
                     onKeyDown={(e) => {
+                      if (readOnly) return;
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         commitQuickAmount(item);
@@ -493,21 +499,25 @@ export default function DebtorsList({
                 </Td>
                 <Td style={{ textAlign: 'right' }}>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                    <IconActionButton
-                      type="button"
-                      onClick={() => onEdit(item)}
-                      title="Edit"
-                    >
-                      <Edit2 size={14} />
-                    </IconActionButton>
-                    <IconActionButton
-                      type="button"
-                      $danger
-                      onClick={() => setDeleteDialog({ isOpen: true, item })}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </IconActionButton>
+                    {!readOnly && (
+                      <>
+                        <IconActionButton
+                          type="button"
+                          onClick={() => onEdit(item)}
+                          title="Edit"
+                        >
+                          <Edit2 size={14} />
+                        </IconActionButton>
+                        <IconActionButton
+                          type="button"
+                          $danger
+                          onClick={() => setDeleteDialog({ isOpen: true, item })}
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </IconActionButton>
+                      </>
+                    )}
                   </div>
                 </Td>
               </Tr>

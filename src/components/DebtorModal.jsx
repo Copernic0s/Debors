@@ -186,7 +186,7 @@ const createFormDataFromDebtor = (debtor) => {
   };
 };
 
-export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }) {
+export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor, readOnly = false }) {
   const [formData, setFormData] = useState(() => createFormDataFromDebtor(debtor));
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   useEffect(() => {
@@ -224,6 +224,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (readOnly) return;
 
     let finalBillingCycle = formData.billingCycle === 'custom'
       ? formData.customBillingCycle.trim()
@@ -256,6 +257,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           <FormGroup>
             <label>Invoice Number</label>
             <input
+              disabled={readOnly}
               type="text"
               value={formData.invoiceNumber || ''}
               onChange={e => setFormData({ ...formData, invoiceNumber: e.target.value })}
@@ -266,6 +268,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           <FormGroup>
             <label>Company</label>
             <input
+              disabled={readOnly}
               required
               type="text"
               value={formData.clientName}
@@ -278,6 +281,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <FormGroup>
               <label>Balance ($)</label>
               <input
+                disabled={readOnly}
                 required
                 type="number"
                 step="0.01"
@@ -290,6 +294,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <FormGroup>
               <label>Billing Cycle</label>
               <select
+                disabled={readOnly}
                 value={formData.billingCycle}
                 onChange={e => setFormData({ ...formData, billingCycle: e.target.value })}
               >
@@ -327,6 +332,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <FormGroup>
               <label>Custom Billing Cycle</label>
               <input
+                disabled={readOnly}
                 required
                 type="text"
                 value={formData.customBillingCycle}
@@ -340,6 +346,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <FormGroup>
               <label>Payment Due Date (optional)</label>
               <input
+                disabled={readOnly}
                 type="date"
                 value={formData.dueDate}
                 onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
@@ -348,6 +355,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             <FormGroup>
               <label>Status</label>
               <select
+                disabled={readOnly}
                 value={formData.status}
                 onChange={e => setFormData({ ...formData, status: e.target.value })}
               >
@@ -361,6 +369,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           <FormGroup>
             <label>Assigned Agent</label>
             <input
+              disabled={readOnly}
               required
               type="text"
               value={formData.agentId}
@@ -372,6 +381,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           <FormGroup>
             <label>Notes (Optional)</label>
             <textarea
+              disabled={readOnly}
               value={formData.notes || ''}
               onChange={e => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Payment notes, commitments, follow-up comments..."
@@ -379,7 +389,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
           </FormGroup>
         </ModalBody>
         <ModalFooter>
-          {debtor && (
+          {debtor && !readOnly && (
             <button 
               type="button" 
               className="btn btn-secondary" 
@@ -398,7 +408,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor }
             </button>
           )}
           <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" form="debtor-form" className="btn btn-primary">Save Changes</button>
+          {!readOnly && <button type="submit" form="debtor-form" className="btn btn-primary">Save Changes</button>}
         </ModalFooter>
       </ModalContent>
 

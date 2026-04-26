@@ -15,6 +15,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
+import { resolveAccessProfile, userCanAccessAgent, MANAGER_ROLE } from './constants/accessControl';
 import './index.css';
 
 // Table used for cloud persistence
@@ -294,11 +295,28 @@ const TopbarMeta = styled.div`
   display: flex;
   justify-content: flex-end;
   margin-top: 0.45rem;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 
   span {
     color: var(--text-muted);
     font-size: 0.78rem;
   }
+`;
+
+const AccessBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.14)' : 'rgba(56, 189, 248, 0.14)'};
+  color: ${(props) => props.$role === MANAGER_ROLE ? 'var(--brand)' : 'var(--brand-blue)'};
+  border: 1px solid ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.28)' : 'rgba(56, 189, 248, 0.28)'};
 `;
 
 const SyncButton = styled.button`
@@ -539,7 +557,6 @@ const aggregateByCompany = (rows) => {
 
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
-    const cycles = Array.from(item.cycleSet);
     
     // Re-calculate auto-overdue based on the FINAL aggregated due date
     let status = item.status;
@@ -606,6 +623,9 @@ function App() {
   const [user, setUser] = useState(null);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
+  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
+  const canManageData = accessProfile.canEditData;
+  const canUseInvoiceEntry = accessProfile.canUseInvoiceEntry;
 
 
   useEffect(() => {
@@ -620,6 +640,17 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (accessProfile.canViewAllData) return;
+    const firstScopedAgent = accessProfile.agentScope[0];
+    setSelectedAgent(firstScopedAgent || 'all');
+    setActiveView((prev) => (prev === 'invoice_entry' ? 'overview' : prev));
+  }, [accessProfile]);
+
+  const denyRestrictedAction = useCallback(() => {
+    toast.error('Your access is limited to viewing and follow-up only.');
   }, []);
 
   useEffect(() => {
@@ -816,6 +847,10 @@ function App() {
   }, [loadData]);
 
   const handleSaveDebtor = (debtor) => {
+    if (!canManageData) {
+      denyRestrictedAction();
+      return;
+    }
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
@@ -906,6 +941,10 @@ function App() {
   };
 
   const handleResetDebtor = async (id) => {
+    if (!accessProfile.canResetData) {
+      denyRestrictedAction();
+      return;
+    }
     if (!user || !id) return;
     try {
       // 1. Delete from Supabase to effectively remove the override
@@ -937,6 +976,10 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
+    if (!accessProfile.canDeleteData) {
+      denyRestrictedAction();
+      return;
+    }
     if (String(id).startsWith('CMP-')) {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
 
@@ -987,6 +1030,10 @@ function App() {
   };
 
   const persistEditedRows = async (rows) => {
+    if (!canManageData) {
+      denyRestrictedAction();
+      return;
+    }
     if (!rows || rows.length === 0 || !user) return;
 
     // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
@@ -1039,6 +1086,10 @@ function App() {
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
+    if (!canManageData) {
+      denyRestrictedAction();
+      return;
+    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1066,6 +1117,10 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
+    if (!canManageData) {
+      denyRestrictedAction();
+      return;
+    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1093,6 +1148,10 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
+    if (!canManageData) {
+      denyRestrictedAction();
+      return;
+    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1123,12 +1182,32 @@ function App() {
 
 
 
-  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
+  const accessibleData = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return data;
+    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [data, accessProfile]);
+
+  const accessibleClientNames = React.useMemo(
+    () => new Set(accessibleData.map((item) => String(item.company || item.clientName || '').trim().toLowerCase()).filter(Boolean)),
+    [accessibleData]
+  );
+
+  const accessibleTrackerData = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return trackerData;
+    return trackerData.filter((item) => accessibleClientNames.has(String(item.company || '').trim().toLowerCase()));
+  }, [trackerData, accessProfile, accessibleClientNames]);
+
+  const accessibleClientsByAgent = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return clientsByAgent;
+    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [clientsByAgent, accessProfile]);
+
+  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
-    return data.map(row => {
+    return accessibleData.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
@@ -1145,7 +1224,7 @@ function App() {
       }
       return { ...row, status, isAutoOverdue };
     });
-  }, [data, lastTick]);
+  }, [accessibleData, lastTick]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1185,7 +1264,7 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
-    const scopedRows = data.filter((item) => {
+    const scopedRows = accessibleData.filter((item) => {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
@@ -1196,7 +1275,6 @@ function App() {
 
     // Deduplicate by week to avoid double-counting placeholders
     const deduplicatedRows = [];
-    const seenWindows = new Set();
     
     // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
     const sortedScoped = [...scopedRows].sort((a, b) => {
@@ -1236,7 +1314,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, data, selectedAgent, selectedWeek]);
+  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
 
 
 
@@ -1250,13 +1328,16 @@ function App() {
     }}>
       <TopbarMeta>
         <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
+        <AccessBadge $role={accessProfile.role}>{accessProfile.role}</AccessBadge>
       </TopbarMeta>
 
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        {canUseInvoiceEntry && (
+          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        )}
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1267,8 +1348,8 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-                <option value="all">All agents</option>
+              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} disabled={!accessProfile.canViewAllData}>
+                {accessProfile.canViewAllData && <option value="all">All agents</option>}
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
@@ -1303,7 +1384,9 @@ function App() {
             onQuickUpdateBillingCycle={quickUpdateBillingCycle}
             onQuickUpdateStatus={quickUpdatePaymentStatus}
             onQuickUpdateAmount={quickUpdateTotalDue}
+            readOnly={!canManageData}
             onEdit={(debtor) => {
+              if (!canManageData) return denyRestrictedAction();
               setCurrentDebtor(debtor);
               setIsModalOpen(true);
             }}
@@ -1324,16 +1407,17 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={trackerData} />
+          <SupportTracker data={accessibleTrackerData} />
         </ContentScroll>
       )}
 
-      {activeView === 'invoice_entry' && (
+      {activeView === 'invoice_entry' && canUseInvoiceEntry && (
         <ContentScroll>
           <InvoiceEntry 
-            clientsByAgent={clientsByAgent} 
-            existingData={data} 
+            clientsByAgent={accessibleClientsByAgent} 
+            existingData={accessibleData} 
             onSaveInvoice={(invoice) => {
+              if (!canUseInvoiceEntry) return denyRestrictedAction();
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
                 // If it's a completely new manual entry, we add it to the array.
@@ -1393,7 +1477,12 @@ function App() {
 
           <TopbarRight>
             <ActionButtons>
-              <SyncButton className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
+              <SyncButton
+                className="btn btn-secondary"
+                onClick={() => accessProfile.canSyncData ? loadData({ notifyUser: true }) : denyRestrictedAction()}
+                title={accessProfile.canSyncData ? 'Sync (Ctrl+Shift+S)' : 'Managers only'}
+                disabled={!accessProfile.canSyncData}
+              >
                 <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
               </SyncButton>
               <button
@@ -1419,13 +1508,16 @@ function App() {
         onSave={handleSaveDebtor}
         onReset={handleResetDebtor}
         debtor={currentDebtor}
+        readOnly={!canManageData}
       />
 
       <CompanyProfileModal
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
+        canEditInvoice={accessProfile.canEditInvoiceDetails}
         onEditInvoice={(inv) => {
+          if (!accessProfile.canEditInvoiceDetails) return denyRestrictedAction();
           setActiveCompany(null);
           setCurrentDebtor(inv);
           setIsModalOpen(true);
