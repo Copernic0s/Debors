@@ -5,9 +5,6 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock3,
-  Layers3,
-  Target,
-  TrendingUp,
   UserRound
 } from 'lucide-react';
 import {
@@ -97,81 +94,32 @@ const AnalyticsShell = styled.div`
   gap: 1rem;
 `;
 
-const HeaderBand = styled.section`
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 20px;
-  padding: 1.4rem;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(249, 115, 22, 0.18), transparent 34%),
-    linear-gradient(135deg, rgba(6, 13, 24, 0.96), rgba(12, 25, 44, 0.88));
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
-`;
-
-const HeaderGrid = styled.div`
+const SummaryStrip = styled.section`
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
-  gap: 1rem;
-
-  @media (max-width: 1080px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const HeaderEyebrow = styled.div`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #c7d2e5;
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-transform: uppercase;
-`;
-
-const HeaderTitle = styled.h2`
-  margin: 0.9rem 0 0.45rem;
-  font-size: clamp(1.7rem, 2vw, 2.4rem);
-  line-height: 1.04;
-  color: var(--text-main);
-`;
-
-const HeaderCopy = styled.p`
-  margin: 0;
-  max-width: 60ch;
-  color: rgba(217, 227, 240, 0.78);
-  font-size: 0.96rem;
-  line-height: 1.6;
-`;
-
-const PulseStrip = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.8rem;
-  margin-top: 1rem;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 `;
 
-const PulseCard = styled.div`
+const SummaryCard = styled.div`
   min-height: 92px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 16px;
   padding: 0.95rem 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(12px);
+  background: linear-gradient(180deg, rgba(11, 18, 31, 0.95), rgba(11, 18, 31, 0.78));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
   display: grid;
   gap: 0.2rem;
 `;
 
-const PulseLabel = styled.span`
+const SummaryLabel = styled.span`
   color: var(--text-muted);
   font-size: 0.73rem;
   text-transform: uppercase;
@@ -179,73 +127,15 @@ const PulseLabel = styled.span`
   letter-spacing: 0.04em;
 `;
 
-const PulseValue = styled.strong`
+const SummaryValue = styled.strong`
   color: var(--text-main);
   font-size: 1.25rem;
   font-weight: 800;
 `;
 
-const PulseMeta = styled.span`
+const SummaryMeta = styled.span`
   color: rgba(217, 227, 240, 0.72);
   font-size: 0.82rem;
-`;
-
-const FocusCard = styled.div`
-  min-height: 100%;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 18px;
-  padding: 1.1rem;
-  background: rgba(4, 10, 20, 0.52);
-  display: grid;
-  gap: 0.9rem;
-  align-content: start;
-`;
-
-const FocusTitle = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: flex-start;
-
-  h3 {
-    margin: 0;
-    font-size: 1rem;
-    color: var(--text-main);
-  }
-
-  span {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-  }
-`;
-
-const FocusMetric = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.85rem 0.9rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-
-  svg {
-    color: var(--brand);
-    flex-shrink: 0;
-  }
-`;
-
-const FocusMetricBody = styled.div`
-  display: grid;
-  gap: 0.1rem;
-
-  strong {
-    color: var(--text-main);
-    font-size: 1rem;
-  }
-
-  span {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-  }
 `;
 
 const KPIGrid = styled.section`
@@ -363,13 +253,6 @@ const PanelTitleWrap = styled.div`
     margin: 0;
     color: var(--text-main);
     font-size: 1rem;
-  }
-
-  p {
-    margin: 0.28rem 0 0;
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    line-height: 1.5;
   }
 `;
 
@@ -888,76 +771,28 @@ export default function ManagerAnalytics({
     <>
       <RechartsVisualFix />
       <AnalyticsShell>
-        <HeaderBand>
-          <HeaderGrid>
-            <div>
-              <HeaderEyebrow>
-                <TrendingUp size={14} />
-                Manager analytics
-              </HeaderEyebrow>
-              <HeaderTitle>Fast portfolio readout for who needs attention now.</HeaderTitle>
-              <HeaderCopy>
-                This view is tuned to surface risk quickly: where the open balance is clustered, how much is already being collected, and which accounts or agents deserve the next move.
-              </HeaderCopy>
-
-              <PulseStrip>
-                <PulseCard>
-                  <PulseLabel>Selected scope</PulseLabel>
-                  <PulseValue>{selectedAgent === 'all' ? 'All agents' : selectedAgent}</PulseValue>
-                  <PulseMeta>{analytics.totalAccounts} tracked accounts in this view</PulseMeta>
-                </PulseCard>
-                <PulseCard>
-                  <PulseLabel>Open exposure</PulseLabel>
-                  <PulseValue>{formatCurrency(analytics.totalOpen)}</PulseValue>
-                  <PulseMeta>{analytics.overdueAccounts} accounts already overdue</PulseMeta>
-                </PulseCard>
-                <PulseCard>
-                  <PulseLabel>Collected share</PulseLabel>
-                  <PulseValue>{analytics.recoveryRate.toFixed(0)}%</PulseValue>
-                  <PulseMeta>{formatCurrency(analytics.totalCollected)} already marked paid</PulseMeta>
-                </PulseCard>
-              </PulseStrip>
-            </div>
-
-            <FocusCard>
-              <FocusTitle>
-                <div>
-                  <h3>What should a manager notice first?</h3>
-                  <span>Quick directional summary</span>
-                </div>
-                <Target size={18} color="var(--brand)" />
-              </FocusTitle>
-
-              <FocusMetric>
-                <AlertTriangle size={18} />
-                <FocusMetricBody>
-                  <strong>{formatCurrency(analytics.totalOverdue)} at risk</strong>
-                  <span>{analytics.riskShare.toFixed(0)}% of open balance is already overdue.</span>
-                </FocusMetricBody>
-              </FocusMetric>
-
-              <FocusMetric>
-                <UserRound size={18} />
-                <FocusMetricBody>
-                  <strong>{analytics.busiestAgent?.agent || 'No lead agent yet'}</strong>
-                  <span>
-                    {analytics.busiestAgent
-                      ? `${formatCurrency(analytics.busiestAgent.open)} open across ${analytics.busiestAgent.accounts} records.`
-                      : 'Agent workload will appear here once data is loaded.'}
-                  </span>
-                </FocusMetricBody>
-              </FocusMetric>
-
-              <FocusMetric>
-                <Layers3 size={18} />
-                <FocusMetricBody>
-                  <strong>{formatCurrency(analytics.averageOpenPerAccount)} average per account</strong>
-                  <span>Useful for spotting whether the backlog is concentrated or broadly distributed.</span>
-                </FocusMetricBody>
-              </FocusMetric>
-            </FocusCard>
-          </HeaderGrid>
-        </HeaderBand>
+        <SummaryStrip>
+          <SummaryCard>
+            <SummaryLabel>Selected Scope</SummaryLabel>
+            <SummaryValue>{selectedAgent === 'all' ? 'All agents' : selectedAgent}</SummaryValue>
+            <SummaryMeta>{analytics.totalAccounts} tracked accounts</SummaryMeta>
+          </SummaryCard>
+          <SummaryCard>
+            <SummaryLabel>Open Exposure</SummaryLabel>
+            <SummaryValue>{formatCurrency(analytics.totalOpen)}</SummaryValue>
+            <SummaryMeta>{analytics.overdueAccounts} overdue accounts</SummaryMeta>
+          </SummaryCard>
+          <SummaryCard>
+            <SummaryLabel>Collected Share</SummaryLabel>
+            <SummaryValue>{analytics.recoveryRate.toFixed(0)}%</SummaryValue>
+            <SummaryMeta>{formatCurrency(analytics.totalCollected)} paid</SummaryMeta>
+          </SummaryCard>
+          <SummaryCard>
+            <SummaryLabel>Average Per Account</SummaryLabel>
+            <SummaryValue>{formatCurrency(analytics.averageOpenPerAccount)}</SummaryValue>
+            <SummaryMeta>{formatCurrency(analytics.totalOverdue)} overdue</SummaryMeta>
+          </SummaryCard>
+        </SummaryStrip>
 
         <KPIGrid>
           <KpiCard>
@@ -1019,7 +854,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Agent Exposure Map</h3>
-                  <p>Click a bar to filter the dashboard to that agent. Designed to show queue pressure before you drill into account detail.</p>
                 </PanelTitleWrap>
                 <LegendRow>
                   <LegendPill>
@@ -1052,7 +886,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Weekly Open vs Collected</h3>
-                  <p>Shows whether the team is shrinking the queue week by week or simply moving debt forward.</p>
                 </PanelTitleWrap>
                 <LegendRow>
                   <LegendPill>
@@ -1073,7 +906,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Priority Accounts</h3>
-                  <p>Biggest balances first, with overdue age visible so managers can decide whether to escalate or coach follow-up.</p>
                 </PanelTitleWrap>
               </PanelHeader>
 
@@ -1131,7 +963,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Status Mix</h3>
-                  <p>Money distribution across the portfolio, not just record counts.</p>
                 </PanelTitleWrap>
               </PanelHeader>
 
@@ -1159,7 +990,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Aging Buckets</h3>
-                  <p>Helps separate fresh misses from accounts that may need escalation.</p>
                 </PanelTitleWrap>
               </PanelHeader>
 
@@ -1180,7 +1010,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Agent Workload Snapshot</h3>
-                  <p>Good for spotting coaching needs or lopsided queue assignments.</p>
                 </PanelTitleWrap>
               </PanelHeader>
 
@@ -1214,7 +1043,6 @@ export default function ManagerAnalytics({
               <PanelHeader>
                 <PanelTitleWrap>
                   <h3>Recommended Actions</h3>
-                  <p>Small manager prompts generated from the current portfolio mix.</p>
                 </PanelTitleWrap>
               </PanelHeader>
 
