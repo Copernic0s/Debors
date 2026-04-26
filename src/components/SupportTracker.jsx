@@ -45,12 +45,6 @@ const HeaderRow = styled.div`
     font-weight: 800;
     color: var(--text-main);
   }
-
-  p {
-    margin: 0.35rem 0 0 0;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-  }
 `;
 
 const HeaderActions = styled.div`
@@ -189,17 +183,7 @@ const FieldShell = styled.div`
   }
 `;
 
-const ContextGrid = styled.div`
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.8fr);
-  gap: 1rem;
-
-  @media (max-width: 1080px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const ContextPanel = styled.div`
+const QueuePanel = styled.div`
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.03);
@@ -216,17 +200,12 @@ const ContextPanel = styled.div`
   }
 `;
 
-const CycleHeader = styled.div`
+const SectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-
-  span {
-    color: var(--text-muted);
-    font-size: 0.86rem;
-  }
 `;
 
 const InlineBadge = styled.span`
@@ -244,27 +223,33 @@ const InlineBadge = styled.span`
   text-transform: uppercase;
 `;
 
-const CycleStats = styled.div`
+const TickerBar = styled.div`
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.85rem;
+
+  @media (max-width: 1080px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
   @media (max-width: 720px) {
     grid-template-columns: 1fr;
   }
 `;
 
-const CycleStat = styled.div`
+const TickerItem = styled.div`
   border-radius: 16px;
   border: 1px solid var(--glass-border);
   background: rgba(255, 255, 255, 0.025);
-  padding: 0.9rem 0.95rem;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
 
   strong {
-    display: block;
     color: var(--text-main);
-    font-size: 1.1rem;
-    margin-bottom: 0.25rem;
+    font-size: 1.05rem;
   }
 
   span {
@@ -555,12 +540,6 @@ const formatShortDate = (value) => {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const formatLongDate = (value) => {
-  const parsed = parseIsoDate(value);
-  if (!parsed) return value || 'No date';
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
 const sortByNewestDate = (items) =>
   [...items].sort((a, b) => {
     const aDate = String(a.date || '');
@@ -767,7 +746,6 @@ const SupportTracker = ({ data = [] }) => {
     );
   }
 
-  const cycleLabel = `${formatLongDate(cycleWindow.current.start)} - ${formatLongDate(cycleWindow.current.end)}`;
   const cycleStatusLabel = cycleSummary.daysUntilClose < 0
     ? 'Cycle closed'
     : cycleSummary.daysUntilClose === 0
@@ -777,10 +755,7 @@ const SupportTracker = ({ data = [] }) => {
   return (
     <TrackerContainer>
       <HeaderRow>
-        <div>
-          <h3>Support Tracker</h3>
-          <p>{cycleLabel}</p>
-        </div>
+        <h3>Support Tracker</h3>
 
         <HeaderActions>
           <PageSizeSelect
@@ -896,73 +871,68 @@ const SupportTracker = ({ data = [] }) => {
         </FieldShell>
       </FilterGrid>
 
-      <ContextGrid>
-        <ContextPanel>
-          <CycleHeader>
-            <h4>Cycle Snapshot</h4>
-            <InlineBadge
-              $bg="rgba(249, 115, 22, 0.1)"
-              $color="var(--brand)"
-              $border="rgba(249, 115, 22, 0.2)"
-            >
-              <CalendarRange size={13} />
-              {cycleStatusLabel}
-            </InlineBadge>
-          </CycleHeader>
+      <TickerBar>
+        <TickerItem>
+          <span>Cycle status</span>
+          <InlineBadge
+            $bg="rgba(249, 115, 22, 0.1)"
+            $color="var(--brand)"
+            $border="rgba(249, 115, 22, 0.2)"
+          >
+            <CalendarRange size={13} />
+            {cycleStatusLabel}
+          </InlineBadge>
+        </TickerItem>
+        <TickerItem>
+          <span>Open this cycle</span>
+          <strong>{cycleSummary.openItems}</strong>
+        </TickerItem>
+        <TickerItem>
+          <span>Accounts touched</span>
+          <strong>{cycleSummary.accountsTouched}</strong>
+        </TickerItem>
+        <TickerItem>
+          <span>Agents active</span>
+          <strong>{cycleSummary.agentsActive}</strong>
+        </TickerItem>
+      </TickerBar>
 
-          <CycleStats>
-            <CycleStat>
-              <strong>{cycleSummary.openItems}</strong>
-              <span>Open tracker items in this cycle</span>
-            </CycleStat>
-            <CycleStat>
-              <strong>{cycleSummary.accountsTouched}</strong>
-              <span>Accounts touched this cycle</span>
-            </CycleStat>
-            <CycleStat>
-              <strong>{cycleSummary.agentsActive}</strong>
-              <span>Agents with activity</span>
-            </CycleStat>
-          </CycleStats>
-        </ContextPanel>
+      <QueuePanel>
+        <SectionHeader>
+          <h4>Follow-up Queue</h4>
+          <InlineBadge>{focusQueue.length} active</InlineBadge>
+        </SectionHeader>
 
-        <ContextPanel>
-          <CycleHeader>
-            <h4>Follow-up Queue</h4>
-            <InlineBadge>{focusQueue.length} active</InlineBadge>
-          </CycleHeader>
+        <QueueList>
+          {focusQueue.length === 0 && (
+            <PaginationInfo>No open follow-ups in this view.</PaginationInfo>
+          )}
 
-          <QueueList>
-            {focusQueue.length === 0 && (
-              <PaginationInfo>No open follow-ups in this view.</PaginationInfo>
-            )}
+          {focusQueue.map((item) => {
+            const badgeProps = getStatusBadgeProps(item.statusLabel);
+            return (
+              <QueueItem key={`focus-${item.id}`}>
+                <QueueTop>
+                  <div>
+                    <strong>{item.company || 'Unknown'}</strong>
+                    <span>{formatShortDate(item.date)} · {item.agentLabel}</span>
+                  </div>
+                  <StatusBadge {...badgeProps}>
+                    {badgeProps.icon} {item.statusLabel}
+                  </StatusBadge>
+                </QueueTop>
 
-            {focusQueue.map((item) => {
-              const badgeProps = getStatusBadgeProps(item.statusLabel);
-              return (
-                <QueueItem key={`focus-${item.id}`}>
-                  <QueueTop>
-                    <div>
-                      <strong>{item.company || 'Unknown'}</strong>
-                      <span>{formatShortDate(item.date)} · {item.agentLabel}</span>
-                    </div>
-                    <StatusBadge {...badgeProps}>
-                      {badgeProps.icon} {item.statusLabel}
-                    </StatusBadge>
-                  </QueueTop>
+                <QueueTask>{item.task || 'No task provided'}</QueueTask>
 
-                  <QueueTask>{item.task || 'No task provided'}</QueueTask>
-
-                  <QueueMeta>
-                    <span>{typeof item.agingDays === 'number' ? `${item.agingDays} day${item.agingDays === 1 ? '' : 's'} open` : 'No aging data'}</span>
-                    <span>{item.notes || 'No notes'}</span>
-                  </QueueMeta>
-                </QueueItem>
-              );
-            })}
-          </QueueList>
-        </ContextPanel>
-      </ContextGrid>
+                <QueueMeta>
+                  <span>{typeof item.agingDays === 'number' ? `${item.agingDays} day${item.agingDays === 1 ? '' : 's'} open` : 'No aging data'}</span>
+                  <span>{item.notes || 'No notes'}</span>
+                </QueueMeta>
+              </QueueItem>
+            );
+          })}
+        </QueueList>
+      </QueuePanel>
 
       <TableWrapper>
         <StyledTable>
