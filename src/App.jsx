@@ -332,23 +332,29 @@ const BrandTitle = styled.h1`
   line-height: 1;
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  gap: 1rem;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
   
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    transition: all 0.4s ease;
+  }
+
+  span:last-child {
+    transition: all 0.4s ease;
   }
 
   &:hover {
-    gap: -0.2rem;
-    letter-spacing: 0.1em;
+    gap: 0;
+    letter-spacing: 0.05em;
   }
 
   &:hover ${PulsatingLogo} {
-    transform: translateY(-22px) scale(1.2);
+    transform: translateY(-45px) scale(1.3);
+    filter: drop-shadow(0 20px 20px rgba(255, 122, 26, 0.4));
   }
 `;
 
