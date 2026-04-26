@@ -350,7 +350,8 @@ export default function DebtorsList({
   onOpenCompanyProfile,
   onQuickUpdateBillingCycle,
   onQuickUpdateStatus,
-  onQuickUpdateAmount
+  onQuickUpdateAmount,
+  readOnly = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
@@ -360,6 +361,7 @@ export default function DebtorsList({
   const pageSize = 20;
 
   const commitQuickAmount = (item) => {
+    if (readOnly) return;
     const raw = pendingAmounts[item.id];
     if (raw === undefined) return;
     onQuickUpdateAmount?.(item, raw);
@@ -502,6 +504,7 @@ export default function DebtorsList({
                 <Td>
                   <BillingCycleSelect
                     value={normalizeBillingCycle(item.billingCycle || BILLING_CYCLES.UNSPECIFIED)}
+                    disabled={readOnly}
                     onChange={(e) => onQuickUpdateBillingCycle?.(item, e.target.value)}
                   >
                     {BILLING_CYCLE_OPTIONS.map((cycle) => (
@@ -512,7 +515,12 @@ export default function DebtorsList({
                 <Td>
                   <StatusSelect
                     $tone={item.status}
+<<<<<<< HEAD
                     value={item.status || 'pending'}
+=======
+                    value={item.status}
+                    disabled={readOnly}
+>>>>>>> main
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
                   >
                     <option value="pending">Pending</option>
@@ -524,9 +532,25 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <DueInput
+<<<<<<< HEAD
                     type="date"
                     value={item.dueDate || ''}
                     onChange={(e) => onEdit?.({ ...item, dueDate: e.target.value })}
+=======
+                    type="text"
+                    inputMode="decimal"
+                    disabled={readOnly}
+                    value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
+                    onChange={(e) => !readOnly && setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    onBlur={() => !readOnly && commitQuickAmount(item)}
+                    onKeyDown={(e) => {
+                      if (readOnly) return;
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitQuickAmount(item);
+                      }
+                    }}
+>>>>>>> main
                   />
                 </Td>
                 <Td>
@@ -558,6 +582,7 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+<<<<<<< HEAD
                     <IconActionButton
                       type="button"
                       onClick={() => onEdit?.(item)}
@@ -573,6 +598,27 @@ export default function DebtorsList({
                     >
                       <Trash2 size={14} />
                     </IconActionButton>
+=======
+                    {!readOnly && (
+                      <>
+                        <IconActionButton
+                          type="button"
+                          onClick={() => onEdit(item)}
+                          title="Edit"
+                        >
+                          <Edit2 size={14} />
+                        </IconActionButton>
+                        <IconActionButton
+                          type="button"
+                          $danger
+                          onClick={() => setDeleteDialog({ isOpen: true, item })}
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </IconActionButton>
+                      </>
+                    )}
+>>>>>>> main
                   </div>
                 </Td>
               </Tr>
