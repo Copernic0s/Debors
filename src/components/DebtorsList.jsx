@@ -312,25 +312,6 @@ const EmptyStateButton = styled.button`
   }
 `;
 
-const EmptyStateButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: var(--brand);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-md);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--brand-deep);
-    transform: translateY(-2px);
-  }
-`;
-
 const FooterBar = styled.div`
   margin-top: 0.95rem;
   display: flex;
