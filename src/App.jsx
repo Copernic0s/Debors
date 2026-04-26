@@ -15,7 +15,6 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { resolveAccessProfile, userCanAccessAgent, MANAGER_ROLE } from './constants/accessControl';
 import './index.css';
 
 // Table used for cloud persistence
@@ -112,38 +111,68 @@ const MainContent = styled.main`
 `;
 
 const Topbar = styled.header`
-  min-height: 112px;
-  border-bottom: 1px solid var(--glass-border);
+  margin: 1.5rem 2rem;
+  height: 90px;
+  background: rgba(8, 18, 34, 0.45);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(180, 223, 255, 0.12);
+  border-radius: 24px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 1rem;
   padding: 0 2rem;
-  background: linear-gradient(180deg, rgba(8, 18, 34, 0.78), rgba(8, 18, 34, 0.58));
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  z-index: 100;
+  z-index: 1000;
   position: sticky;
-  top: 0;
+  top: 1.5rem;
+  box-shadow: 
+    0 20px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(8, 18, 34, 0.55);
+    border-color: rgba(180, 223, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.6),
+      0 0 20px rgba(85, 214, 255, 0.05);
+  }
+
+  @media (max-width: 900px) {
+    margin: 1rem;
+    height: auto;
+    padding: 1rem;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    top: 1rem;
+  }
+`;
+
+const PulsatingLogo = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   
   &::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand-blue), var(--brand), transparent);
-    background-size: 300% 100%;
-    animation: borderGlow 8s ease-in-out infinite;
-    opacity: 0.8;
+    width: 60px;
+    height: 60px;
+    background: var(--brand);
+    filter: blur(35px);
+    border-radius: 50%;
+    opacity: 0.15;
+    z-index: -1;
+    animation: pulseGlow 4s ease-in-out infinite;
   }
 
-  @keyframes borderGlow {
-    0% { background-position: -100% 0; }
-    50% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
+  @keyframes pulseGlow {
+    0%, 100% { transform: scale(1); opacity: 0.15; }
+    50% { transform: scale(1.4); opacity: 0.25; }
   }
+`;
 
   @media (max-width: 900px) {
     grid-template-columns: 1fr;
@@ -250,22 +279,26 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2.7rem;
-  font-weight: 800;
+  font-size: 2.2rem;
+  font-weight: 900;
   margin: 0;
   text-transform: uppercase;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  color: var(--brand-ice);
+  font-family: 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
   line-height: 1;
-  text-shadow: 0 0 22px rgba(255, 179, 71, 0.08);
+  display: flex;
+  align-items: center;
 
   span.brand {
-    color: var(--brand-amber);
-    margin-right: 0.02em;
+    background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-right: 0.05em;
   }
 
   @media (max-width: 900px) {
-    font-size: 2.1rem;
+    font-size: 1.8rem;
   }
 `;
 
@@ -273,12 +306,62 @@ const TopbarRight = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 1rem;
+  gap: 1.5rem;
 
   @media (max-width: 900px) {
     width: 100%;
     justify-content: center;
-    flex-wrap: wrap;
+  }
+`;
+
+const SyncButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.6rem 1.2rem;
+  border-radius: 14px;
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--brand-cyan);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+  }
+
+  svg {
+    transition: transform 0.6s ease;
+  }
+
+  &:hover svg {
+    transform: rotate(180deg);
+  }
+`;
+
+const LogoutButton = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+    transform: translateY(-2px);
   }
 `;
 
@@ -295,28 +378,11 @@ const TopbarMeta = styled.div`
   display: flex;
   justify-content: flex-end;
   margin-top: 0.45rem;
-  gap: 0.65rem;
-  flex-wrap: wrap;
 
   span {
     color: var(--text-muted);
     font-size: 0.78rem;
   }
-`;
-
-const AccessBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.14)' : 'rgba(56, 189, 248, 0.14)'};
-  color: ${(props) => props.$role === MANAGER_ROLE ? 'var(--brand)' : 'var(--brand-blue)'};
-  border: 1px solid ${(props) => props.$role === MANAGER_ROLE ? 'rgba(249, 115, 22, 0.28)' : 'rgba(56, 189, 248, 0.28)'};
 `;
 
 const SyncButton = styled.button`
@@ -557,6 +623,7 @@ const aggregateByCompany = (rows) => {
 
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
+    const cycles = Array.from(item.cycleSet);
     
     // Re-calculate auto-overdue based on the FINAL aggregated due date
     let status = item.status;
@@ -623,9 +690,6 @@ function App() {
   const [user, setUser] = useState(null);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
-  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
-  const canManageData = accessProfile.canEditData;
-  const canUseInvoiceEntry = accessProfile.canUseInvoiceEntry;
 
 
   useEffect(() => {
@@ -640,17 +704,6 @@ function App() {
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (accessProfile.canViewAllData) return;
-    const firstScopedAgent = accessProfile.agentScope[0];
-    setSelectedAgent(firstScopedAgent || 'all');
-    setActiveView((prev) => (prev === 'invoice_entry' ? 'overview' : prev));
-  }, [accessProfile]);
-
-  const denyRestrictedAction = useCallback(() => {
-    toast.error('Your access is limited to viewing and follow-up only.');
   }, []);
 
   useEffect(() => {
@@ -847,10 +900,6 @@ function App() {
   }, [loadData]);
 
   const handleSaveDebtor = (debtor) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
@@ -941,10 +990,6 @@ function App() {
   };
 
   const handleResetDebtor = async (id) => {
-    if (!accessProfile.canResetData) {
-      denyRestrictedAction();
-      return;
-    }
     if (!user || !id) return;
     try {
       // 1. Delete from Supabase to effectively remove the override
@@ -976,10 +1021,6 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
-    if (!accessProfile.canDeleteData) {
-      denyRestrictedAction();
-      return;
-    }
     if (String(id).startsWith('CMP-')) {
       const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
 
@@ -1030,10 +1071,6 @@ function App() {
   };
 
   const persistEditedRows = async (rows) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     if (!rows || rows.length === 0 || !user) return;
 
     // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
@@ -1086,10 +1123,6 @@ function App() {
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1117,10 +1150,6 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1148,10 +1177,6 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
-    if (!canManageData) {
-      denyRestrictedAction();
-      return;
-    }
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1182,32 +1207,12 @@ function App() {
 
 
 
-  const accessibleData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return data;
-    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [data, accessProfile]);
-
-  const accessibleClientNames = React.useMemo(
-    () => new Set(accessibleData.map((item) => String(item.company || item.clientName || '').trim().toLowerCase()).filter(Boolean)),
-    [accessibleData]
-  );
-
-  const accessibleTrackerData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return trackerData;
-    return trackerData.filter((item) => accessibleClientNames.has(String(item.company || '').trim().toLowerCase()));
-  }, [trackerData, accessProfile, accessibleClientNames]);
-
-  const accessibleClientsByAgent = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return clientsByAgent;
-    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [clientsByAgent, accessProfile]);
-
-  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
-    return accessibleData.map(row => {
+    return data.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
@@ -1224,7 +1229,7 @@ function App() {
       }
       return { ...row, status, isAutoOverdue };
     });
-  }, [accessibleData, lastTick]);
+  }, [data, lastTick]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1264,7 +1269,7 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
-    const scopedRows = accessibleData.filter((item) => {
+    const scopedRows = data.filter((item) => {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
@@ -1275,6 +1280,7 @@ function App() {
 
     // Deduplicate by week to avoid double-counting placeholders
     const deduplicatedRows = [];
+    const seenWindows = new Set();
     
     // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
     const sortedScoped = [...scopedRows].sort((a, b) => {
@@ -1314,7 +1320,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
+  }, [activeCompany, data, selectedAgent, selectedWeek]);
 
 
 
@@ -1328,16 +1334,13 @@ function App() {
     }}>
       <TopbarMeta>
         <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-        <AccessBadge $role={accessProfile.role}>{accessProfile.role}</AccessBadge>
       </TopbarMeta>
 
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        {canUseInvoiceEntry && (
-          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
-        )}
+        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1348,8 +1351,8 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)} disabled={!accessProfile.canViewAllData}>
-                {accessProfile.canViewAllData && <option value="all">All agents</option>}
+              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
+                <option value="all">All agents</option>
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
@@ -1384,9 +1387,7 @@ function App() {
             onQuickUpdateBillingCycle={quickUpdateBillingCycle}
             onQuickUpdateStatus={quickUpdatePaymentStatus}
             onQuickUpdateAmount={quickUpdateTotalDue}
-            readOnly={!canManageData}
             onEdit={(debtor) => {
-              if (!canManageData) return denyRestrictedAction();
               setCurrentDebtor(debtor);
               setIsModalOpen(true);
             }}
@@ -1407,17 +1408,16 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={accessibleTrackerData} />
+          <SupportTracker data={trackerData} />
         </ContentScroll>
       )}
 
-      {activeView === 'invoice_entry' && canUseInvoiceEntry && (
+      {activeView === 'invoice_entry' && (
         <ContentScroll>
           <InvoiceEntry 
-            clientsByAgent={accessibleClientsByAgent} 
-            existingData={accessibleData} 
+            clientsByAgent={clientsByAgent} 
+            existingData={data} 
             onSaveInvoice={(invoice) => {
-              if (!canUseInvoiceEntry) return denyRestrictedAction();
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
                 // If it's a completely new manual entry, we add it to the array.
@@ -1467,31 +1467,31 @@ function App() {
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
-            <div />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>System Status</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--ok)', boxShadow: '0 0 10px var(--ok)' }} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Connected</span>
+              </div>
+            </div>
           </TopbarLeft>
 
           <BrandLockup>
-            <AlmaFuelLogo size={60} />
+            <PulsatingLogo>
+              <AlmaFuelLogo size={54} />
+            </PulsatingLogo>
             <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
           </BrandLockup>
 
           <TopbarRight>
             <ActionButtons>
-              <SyncButton
-                className="btn btn-secondary"
-                onClick={() => accessProfile.canSyncData ? loadData({ notifyUser: true }) : denyRestrictedAction()}
-                title={accessProfile.canSyncData ? 'Sync (Ctrl+Shift+S)' : 'Managers only'}
-                disabled={!accessProfile.canSyncData}
-              >
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
+              <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
+                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+                <span>Sync</span>
               </SyncButton>
-              <button
-                className="btn btn-outline"
-                onClick={() => supabase.auth.signOut()}
-                style={{ fontSize: '0.82rem', padding: '0.68rem 1rem', borderRadius: '999px' }}
-              >
+              <LogoutButton onClick={() => supabase.auth.signOut()}>
                 Logout
-              </button>
+              </LogoutButton>
             </ActionButtons>
           </TopbarRight>
         </Topbar>
@@ -1508,16 +1508,13 @@ function App() {
         onSave={handleSaveDebtor}
         onReset={handleResetDebtor}
         debtor={currentDebtor}
-        readOnly={!canManageData}
       />
 
       <CompanyProfileModal
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
-        canEditInvoice={accessProfile.canEditInvoiceDetails}
         onEditInvoice={(inv) => {
-          if (!accessProfile.canEditInvoiceDetails) return denyRestrictedAction();
           setActiveCompany(null);
           setCurrentDebtor(inv);
           setIsModalOpen(true);
