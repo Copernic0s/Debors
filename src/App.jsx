@@ -320,17 +320,18 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2.5rem;
-  font-weight: 900;
+  font-size: 1.8rem;
+  font-weight: 800;
   margin: 0;
   text-transform: uppercase;
-  font-family: 'Syne', sans-serif;
-  letter-spacing: 0.15em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: 0.25em;
   color: var(--text-main);
   line-height: 1;
   display: flex;
   align-items: center;
   transition: all 0.3s ease;
+  transform: scaleY(1.1); /* To make it look less 'flat' */
 
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
@@ -732,6 +733,14 @@ function App() {
   const [user, setUser] = useState(null);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 
   useEffect(() => {
@@ -1304,6 +1313,7 @@ function App() {
       snapshotClientsClear: size - inDebt
     };
   }, [agentData]);
+
   const syncTimeLabel = lastSyncAt
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
@@ -1519,8 +1529,8 @@ function App() {
           <TopbarRight>
             <ActionButtons>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.8rem', padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <RefreshCw size={12} color="var(--text-muted)" />
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--brand-ice)' }}>{syncTimeLabel}</span>
+                <Clock size={12} color="var(--brand)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{timeString}</span>
               </div>
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <span>Sync</span>
