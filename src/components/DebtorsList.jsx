@@ -222,8 +222,6 @@ const SourceBadge = styled.span`
   letter-spacing: 0.02em;
 `;
 
-// Removed InvoiceStepper and StepButton as they are no longer needed
-
 const DueInput = styled.input`
   width: 112px;
   background: rgba(255, 255, 255, 0.06);
@@ -340,8 +338,6 @@ const PagerButton = styled.button`
     cursor: not-allowed;
   }
 `;
-
-// Status logic is now handled in App.jsx during data hydration
 
 export default function DebtorsList({
   data,
@@ -515,12 +511,8 @@ export default function DebtorsList({
                 <Td>
                   <StatusSelect
                     $tone={item.status}
-<<<<<<< HEAD
                     value={item.status || 'pending'}
-=======
-                    value={item.status}
                     disabled={readOnly}
->>>>>>> main
                     onChange={(e) => onQuickUpdateStatus?.(item, e.target.value)}
                   >
                     <option value="pending">Pending</option>
@@ -532,25 +524,10 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <DueInput
-<<<<<<< HEAD
                     type="date"
-                    value={item.dueDate || ''}
-                    onChange={(e) => onEdit?.({ ...item, dueDate: e.target.value })}
-=======
-                    type="text"
-                    inputMode="decimal"
                     disabled={readOnly}
-                    value={pendingAmounts[item.id] ?? formatAmountInput(item.amount ?? 0)}
-                    onChange={(e) => !readOnly && setPendingAmounts((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                    onBlur={() => !readOnly && commitQuickAmount(item)}
-                    onKeyDown={(e) => {
-                      if (readOnly) return;
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        commitQuickAmount(item);
-                      }
-                    }}
->>>>>>> main
+                    value={item.dueDate || ''}
+                    onChange={(e) => !readOnly && onEdit?.({ ...item, dueDate: e.target.value })}
                   />
                 </Td>
                 <Td>
@@ -563,6 +540,7 @@ export default function DebtorsList({
                     <span style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.5 }}>$</span>
                     <input
                       type="text"
+                      disabled={readOnly}
                       style={{
                         background: 'rgba(0,0,0,0.2)',
                         border: '1px solid var(--glass-border)',
@@ -574,37 +552,22 @@ export default function DebtorsList({
                         textAlign: 'right'
                       }}
                       value={pendingAmounts[item.id] !== undefined ? pendingAmounts[item.id] : (item.amount || '0.00')}
-                      onChange={(e) => setPendingAmounts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                      onBlur={() => commitQuickAmount(item)}
-                      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                      onChange={(e) => !readOnly && setPendingAmounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                      onBlur={() => !readOnly && commitQuickAmount(item)}
+                      onKeyDown={(e) => {
+                        if (!readOnly && e.key === 'Enter') e.currentTarget.blur();
+                      }}
                     />
                   </div>
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-<<<<<<< HEAD
-                    <IconActionButton
-                      type="button"
-                      onClick={() => onEdit?.(item)}
-                      title="Edit Details"
-                    >
-                      <Edit2 size={14} />
-                    </IconActionButton>
-                    <IconActionButton
-                      type="button"
-                      $danger
-                      onClick={() => setDeleteDialog({ isOpen: true, item })}
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </IconActionButton>
-=======
                     {!readOnly && (
                       <>
                         <IconActionButton
                           type="button"
-                          onClick={() => onEdit(item)}
-                          title="Edit"
+                          onClick={() => onEdit?.(item)}
+                          title="Edit Details"
                         >
                           <Edit2 size={14} />
                         </IconActionButton>
@@ -618,7 +581,6 @@ export default function DebtorsList({
                         </IconActionButton>
                       </>
                     )}
->>>>>>> main
                   </div>
                 </Td>
               </Tr>
