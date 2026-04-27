@@ -18,20 +18,33 @@ import {
 
 const TrackerContainer = styled.div`
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: 1.5rem;
+  border-radius: 28px;
+  padding: 2rem;
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: 1.35rem;
-  animation: fadeIn 0.35s ease-out;
+  gap: 2rem;
+  animation: islandEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+  @keyframes islandEntrance {
+    from { opacity: 0; transform: translateY(30px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    z-index: 1;
   }
 `;
 
@@ -102,30 +115,42 @@ const SummaryGrid = styled.div`
 `;
 
 const SummaryCard = styled.div`
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  padding: 1.25rem;
   display: flex;
-  gap: 0.85rem;
+  gap: 1.15rem;
   align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-4px);
+    box-shadow: 0 15px 30px -10px rgba(0, 0, 0, 0.3);
+  }
 
   svg {
     color: ${(props) => props.$accent || 'var(--brand)'};
+    filter: drop-shadow(0 0 8px ${(props) => props.$accent || 'var(--brand-amber)'}44);
     flex-shrink: 0;
   }
 
   strong {
     display: block;
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.02em;
   }
 
   span {
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-weight: 800;
+    letter-spacing: 0.08em;
   }
 `;
 
@@ -150,34 +175,40 @@ const FieldShell = styled.div`
 
   svg {
     position: absolute;
-    left: 12px;
+    left: 14px;
     color: var(--text-muted);
     pointer-events: none;
+    transition: all 0.3s ease;
   }
 
   input,
   select {
     width: 100%;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.25);
     border: 1px solid var(--glass-border);
     color: var(--text-main);
-    padding: 0.78rem 0.95rem;
-    border-radius: var(--radius-md);
-    font-family: 'Manrope', sans-serif;
+    padding: 0.85rem 1rem;
+    border-radius: 14px;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     font-size: 0.9rem;
     outline: none;
-    transition: all 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   input {
-    padding-left: 2.6rem;
+    padding-left: 2.8rem;
   }
 
   input:focus,
   select:focus {
-    border-color: rgba(249, 115, 22, 0.4);
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
-    background: rgba(0, 0, 0, 0.26);
+    border-color: var(--brand);
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.1);
+  }
+
+  input:focus + svg {
+    color: var(--brand);
+    transform: scale(1.1);
   }
 
   option {
@@ -331,15 +362,46 @@ const TableWrapper = styled.div`
 
 const StyledTable = styled.table`
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 8px;
   white-space: nowrap;
 
   th, td {
-    padding: 1rem 1.05rem;
+    padding: 1.25rem 1.15rem;
     text-align: left;
-    border-bottom: 1px solid var(--glass-border);
     vertical-align: top;
   }
+
+  th {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  tbody tr {
+    background: rgba(255, 255, 255, 0.015);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 12px;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.045);
+      transform: scale(1.002) translateY(-1px);
+    }
+  }
+
+  td:first-child { border-top-left-radius: 16px; border-bottom-left-radius: 16px; }
+  td:last-child { border-top-right-radius: 16px; border-bottom-right-radius: 16px; }
+
+  td {
+    font-size: 0.88rem;
+    color: var(--text-main);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  }
+`;
 
   th {
     background: rgba(255, 255, 255, 0.03);
@@ -403,17 +465,23 @@ const StyledTable = styled.table`
 const StatusBadge = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.06em;
   background: ${(props) => props.$bg};
   color: ${(props) => props.$color};
   border: 1px solid ${(props) => props.$border};
-  box-shadow: 0 0 10px ${(props) => props.$glow || 'transparent'};
+  box-shadow: 0 0 15px ${(props) => props.$glow || 'transparent'};
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: scale(1.05);
+    filter: brightness(1.1);
+  }
 `;
 
 const PaginationRow = styled.div`
@@ -476,12 +544,20 @@ const EmptyState = styled.div`
 
 const DetailPanel = styled.div`
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.03);
-  padding: 1rem 1.05rem;
+  border-radius: 28px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  padding: 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.5rem;
+  box-shadow: var(--shadow-2xl);
+  animation: panelSlide 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  @keyframes panelSlide {
+    from { opacity: 0; transform: scale(0.95) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
 `;
 
 const DetailHeader = styled.div`

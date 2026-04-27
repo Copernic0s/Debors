@@ -4,13 +4,20 @@ import { Search, Save, Check, X } from 'lucide-react';
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Container = styled.div`
-  padding: 2rem;
-  animation: fadeIn 0.6s ease-out;
+  padding: 2.5rem;
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  border-radius: var(--radius-xl);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-radius: 28px;
   border: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-xl);
+  animation: entrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+
+  @keyframes entrance {
+    from { opacity: 0; transform: scale(0.98) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
 `;
 
 const Header = styled.div`
@@ -35,20 +42,34 @@ const GridContainer = styled.div`
 `;
 
 const Card = styled.div`
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  border-radius: 24px;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   box-shadow: var(--shadow-md);
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 70%);
   }
 `;
 
@@ -98,20 +119,24 @@ const InputGroup = styled.div`
 const Input = styled.input`
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
   color: var(--text-main);
   width: 100%;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:focus {
     outline: none;
     border-color: var(--brand);
-    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.15);
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 15px rgba(249, 115, 22, 0.1);
   }
   
   &::placeholder {
     color: var(--text-muted);
-    opacity: 0.5;
+    opacity: 0.4;
   }
 `;
 
@@ -119,24 +144,35 @@ const Button = styled.button`
   background: ${props => props.$color || 'var(--brand)'};
   color: white;
   border: none;
-  border-radius: var(--radius-md);
-  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  padding: 0.85rem 1.25rem;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
   width: 100%;
-  transition: all 0.2s;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px ${props => (props.$color || 'var(--brand)')}33;
 
-  &:hover {
-    filter: brightness(1.2);
+  &:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 12px 24px ${props => (props.$color || 'var(--brand)')}55;
+    filter: brightness(1.1);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(-1px) scale(0.98);
   }
   
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.3;
     cursor: not-allowed;
+    filter: grayscale(1);
   }
 `;
 
