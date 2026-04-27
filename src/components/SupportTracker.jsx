@@ -1466,7 +1466,6 @@ const SupportTracker = ({
             <tr>
               <th>Date</th>
               <th>Company</th>
-              <th>Agent</th>
               <th>Task</th>
               <th>Status</th>
               <th>Notes</th>
@@ -1481,7 +1480,6 @@ const SupportTracker = ({
                 <tr key={item.id}>
                   <td className="col-date">{item.date || 'No date'}</td>
                   <td className="col-company">{item.company || 'Unknown'}</td>
-                  <td className="col-agent">{item.agentLabel}</td>
                   <td className="col-task">{item.task || 'No task provided'}</td>
                   <td>
                     <StatusBadge {...badgeProps}>

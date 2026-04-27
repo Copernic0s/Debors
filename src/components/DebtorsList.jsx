@@ -414,6 +414,9 @@ export default function DebtorsList({
   });
 
   const filteredData = sortedData.filter(item => {
+    const status = String(item.status || 'pending').toLowerCase();
+    if (status !== 'pending' && status !== 'overdue') return false;
+
     const companyName = String(item.company || item.clientName || '').toLowerCase();
     const agentName = String(item.agentId || '').toLowerCase();
     return companyName.includes(searchTerm.toLowerCase()) || agentName.includes(searchTerm.toLowerCase());
