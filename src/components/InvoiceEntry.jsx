@@ -266,56 +266,6 @@ const Badge = styled.span`
   font-weight: 700;
 `;
 
-// Helper to compute actual due date string based on rules and the week label start date
-const calculateDueDate = (weekLabel, cycle, isSecondInvoice = false) => {
-  // Regex to parse things like "Mar 16 - 22" or "Feb 10-16"
-  const match = String(weekLabel || '').match(/^([A-Za-z]+)\s+(\d+)\s*[-\s]*(\d+)$/);
-  if (!match) return '';
-  const [, monthName, startDay] = match;
-  const currentYear = new Date().getFullYear();
-  const weekStart = new Date(`${monthName} ${startDay}, ${currentYear}`);
-  if (Number.isNaN(weekStart.getTime())) return '';
-
-  const getNextWeekday = (date, targetWeekday) => {
-    for (let i = 0; i < 10; i++) {
-      const current = new Date(date);
-      current.setDate(date.getDate() + i);
-      if (current.getDay() === targetWeekday) return current;
-    }
-    return null;
-  };
-
-  const toDateKey = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Option A (Monday -> Sunday) or First Invoice of Twice: Due Tuesday
-  if (cycle === BILLING_CYCLES.MONDAY_SUNDAY || (cycle === BILLING_CYCLES.TWICE && !isSecondInvoice)) {
-    const nextTuesday = getNextWeekday(weekStart, 2);
-    if (nextTuesday) {
-      if (Math.floor((nextTuesday - weekStart) / (1000 * 60 * 60 * 24)) < 7) {
-        nextTuesday.setDate(nextTuesday.getDate() + 7);
-      }
-      return toDateKey(nextTuesday);
-    }
-  }
-
-  // Option B (Thursday -> Wednesday) or Second Invoice of Twice: Due Friday
-  if (cycle === BILLING_CYCLES.THURSDAY_WEDNESDAY || (cycle === BILLING_CYCLES.TWICE && isSecondInvoice)) {
-    const nextFriday = getNextWeekday(weekStart, 5);
-    if (nextFriday) {
-      if (Math.floor((nextFriday - weekStart) / (1000 * 60 * 60 * 24)) < 7) {
-        nextFriday.setDate(nextFriday.getDate() + 7);
-      }
-      return toDateKey(nextFriday);
-    }
-  }
-
-  return '';
-};
 
 export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoice }) {
   const [week, setWeek] = useState(() => {
@@ -327,6 +277,10 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
   });
 
   const expectedSlots = useMemo(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const defaultDueDate = tomorrow.toISOString().split('T')[0];
+
     const slots = [];
     clientsByAgent.forEach(client => {
       const cycle = normalizeBillingCycle(client.billingCycle);
@@ -350,6 +304,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
             weekLabel: week,
             invoiceNumber: existing?.invoiceNumber || '',
             amount: existing?.amount || '',
+            dueDate: existing?.dueDate || defaultDueDate,
             customLabel
           });
         }
@@ -414,17 +369,13 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
   const handleSave = (id) => {
     const entry = entries[id];
     const sendEmail = notifications[id] ?? true; // Default to true
-    if (!entry || !entry.invoiceNumber || !entry.amount) return;
-
-    // Determine if it is the second invoice of a 'Twice' cycle based on slot suffix
-    const isSecondInvoice = id.endsWith('-2');
-    const computedDueDate = calculateDueDate(entry.weekLabel, entry.cycle, isSecondInvoice);
+    if (!entry || !entry.invoiceNumber || !entry.amount || !entry.dueDate) return;
 
     onSaveInvoice({
       ...entry,
       status: 'pending',
       source: 'manual_entry',
-      dueDate: computedDueDate,
+      dueDate: entry.dueDate,
       id: `MAN-${Date.now()}-${entry.company.replace(/[^a-zA-Z0-9]/g, '')}`,
       sendNotification: sendEmail
     });
@@ -476,7 +427,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
                 <GridContainer>
                   {group.slots.map(slot => {
                     const entry = entries[slot.id] || slot;
-                    const isReady = entry.invoiceNumber && entry.amount;
+                    const isReady = entry.invoiceNumber && entry.amount && entry.dueDate;
                     return (
                       <Card key={slot.id} style={{ borderColor: `${agentColor}44` }}>
                         <CardHeader>
@@ -519,7 +470,18 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
                             </div>
                           </InputGroup>
                           
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ marginTop: '0.25rem' }}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '0.35rem', fontWeight: 800, textTransform: 'uppercase' }}>Due Date</div>
+                            <Input 
+                              type="date"
+                              value={entry.dueDate || ''}
+                              onChange={e => handleEntryChange(slot.id, 'dueDate', e.target.value)}
+                              onFocus={(e) => e.target.style.borderColor = agentColor}
+                              onBlur={(e) => e.target.style.borderColor = ''}
+                            />
+                          </div>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
                             <NotificationToggle>
                               <input 
                                 type="checkbox" 
