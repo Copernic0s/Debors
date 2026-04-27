@@ -524,6 +524,14 @@ const normalizeWeekLabel = (label) => {
   return raw.replace(/[^a-z0-9]/g, '');
 };
 
+const normalizeMatchKey = (value) => {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+(llc|inc|corp|co|limited|ltd|transportation|logistics|express)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+};
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = new Map();
   const windowsWithInvoice = new Set();
@@ -533,7 +541,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     merged.set(row.id, { ...row, source: 'debt' });
     
     // Recognize windows that already have actual invoices
-    const normalizedCompany = String(row.company || row.clientName || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedCompany = normalizeMatchKey(row.company || row.clientName);
     const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     if (normalizedCompany && normalizedWeek) {
       windowsWithInvoice.add(`${normalizedWeek}|${normalizedCompany}`);
@@ -546,7 +554,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     const week = String(row.weekLabel || '').trim();
     if (!company) return;
 
-    const normalizedCompany = company.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedCompany = normalizeMatchKey(company);
     const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     const windowKey = `${normalizedWeek}|${normalizedCompany}`;
     const stableId = `CS-${normalizedWeek}-${normalizedCompany}`;
@@ -580,7 +588,8 @@ const aggregateByCompany = (rows) => {
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const key = `${company.toLowerCase()}-${invKey}`;
+    const companyKey = normalizeMatchKey(company);
+    const key = `${companyKey}-${invKey}`;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;

@@ -507,14 +507,53 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
                               </div>
                             )}
                           </div>
-
-                          <Button 
-                            $color={agentColor}
-                            disabled={!isReady}
-                            onClick={() => handleSave(slot.id)}
-                          >
-                            <Save size={16} /> Save & Send
-                          </Button>
+                          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                            <button 
+                              type="button"
+                              style={{ 
+                                flex: 0.8,
+                                background: 'rgba(255, 255, 255, 0.05)', 
+                                border: '1px solid rgba(255,255,255,0.1)', 
+                                color: 'var(--text-muted)', 
+                                padding: '0.75rem', 
+                                borderRadius: '12px', 
+                                fontSize: '0.8rem', 
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--text-main)'; }}
+                              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                              onClick={() => {
+                                onSaveInvoice({
+                                  ...slot,
+                                  status: 'pending',
+                                  source: 'manual_entry',
+                                  dueDate: entry.dueDate || slot.dueDate || new Date().toISOString().split('T')[0],
+                                  amount: 0,
+                                  invoiceNumber: 'Marked as Sent',
+                                  id: `MAN-${Date.now()}-${slot.id}`,
+                                  sendNotification: false
+                                });
+                                setEntries(prev => {
+                                  const next = {...prev};
+                                  delete next[slot.id];
+                                  return next;
+                                });
+                              }}
+                            >
+                              Already Sent
+                            </button>
+                            
+                            <Button 
+                              style={{ flex: 1.2, marginTop: 0 }}
+                              $color={agentColor}
+                              disabled={!isReady}
+                              onClick={() => handleSave(slot.id)}
+                            >
+                              <Save size={16} /> Save & Send
+                            </Button>
+                          </div>
                         </CardFooter>
                       </Card>
                     );
