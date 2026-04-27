@@ -37,6 +37,13 @@ const hasPrivilegedIdentityFallback = (email) => {
   return localPart.includes('andres') || localPart.includes('kevin');
 };
 
+const getSpecialAgentScopeFallback = (email) => {
+  if (email === 'hector.lomeli@theunitedtransports.com') {
+    return ['hector lomeli', 'héctor lomelí'];
+  }
+  return [];
+};
+
 export const resolveAccessProfile = (user) => {
   const email = String(user?.email || '').trim().toLowerCase();
   const operationsEmails = new Set(
@@ -67,7 +74,8 @@ export const resolveAccessProfile = (user) => {
     .filter(Boolean);
 
   const configuredAgentIds = (agentScopeMap.get(email) || []).map(normalizeScopeValue).filter(Boolean);
-  const agentScope = Array.from(new Set([...metadataAgentIds, ...configuredAgentIds]));
+  const fallbackAgentIds = getSpecialAgentScopeFallback(email).map(normalizeScopeValue).filter(Boolean);
+  const agentScope = Array.from(new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds]));
 
   const normalizedRole = metadataRole === 'operations_access' ? MANAGER_ROLE : metadataRole === 'collections_access' ? AGENT_ROLE : metadataRole;
   const isManager = normalizedRole === MANAGER_ROLE || operationsEmails.has(email) || hasPrivilegedIdentityFallback(email);

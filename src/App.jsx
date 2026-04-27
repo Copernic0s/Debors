@@ -15,7 +15,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { resolveAccessProfile } from './constants/accessControl';
+import { resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import './index.css';
 
@@ -942,21 +942,49 @@ function App() {
     };
   }, [loadData]);
 
+  const accessibleData = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return data;
+    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [data, accessProfile]);
+
+  const accessibleClientsByAgent = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return clientsByAgent;
+    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [clientsByAgent, accessProfile]);
+
   useEffect(() => {
     if (selectedAgent === 'all') return;
-    const exists = data.some((item) => String(item.agentId || '').trim() === selectedAgent);
+    const exists = accessibleData.some((item) => String(item.agentId || '').trim() === selectedAgent);
     if (!exists) {
       setSelectedAgent('all');
     }
-  }, [selectedAgent, data]);
+  }, [selectedAgent, accessibleData]);
 
   useEffect(() => {
     if (selectedWeek === 'all') return;
-    const exists = data.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
+    const exists = accessibleData.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
     if (!exists) {
       setSelectedWeek('all');
     }
-  }, [selectedWeek, data]);
+  }, [selectedWeek, accessibleData]);
+
+  useEffect(() => {
+    if (accessProfile.canViewAllData) return;
+
+    const scopedAgents = Array.from(
+      new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))
+    );
+
+    if (scopedAgents.length === 0) return;
+
+    if (!scopedAgents.includes(selectedAgent)) {
+      setSelectedAgent(scopedAgents[0]);
+    }
+
+    if (statusScope !== 'open') {
+      setStatusScope('open');
+    }
+  }, [accessProfile, accessibleData, selectedAgent, statusScope]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1278,12 +1306,12 @@ function App() {
 
 
 
-  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
+  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
-    return data.map(row => {
+    return accessibleData.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
@@ -1300,7 +1328,7 @@ function App() {
       }
       return { ...row, status, isAutoOverdue };
     });
-  }, [data, lastTick]);
+  }, [accessibleData, lastTick]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -1392,7 +1420,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, data, selectedAgent, selectedWeek]);
+  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
 
 
 
@@ -1423,15 +1451,23 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-                <option value="all">All agents</option>
+              <AgentSelect
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                disabled={!accessProfile.canViewAllData}
+              >
+                {accessProfile.canViewAllData && <option value="all">All agents</option>}
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
               </AgentSelect>
 
-              <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
-                <option value="all">All records</option>
+              <AgentSelect
+                value={statusScope}
+                onChange={(e) => setStatusScope(e.target.value)}
+                disabled={!accessProfile.canViewAllData}
+              >
+                {accessProfile.canViewAllData && <option value="all">All records</option>}
                 <option value="open">Open balances only</option>
               </AgentSelect>
 
@@ -1480,8 +1516,8 @@ function App() {
       {activeView === 'invoice_entry' && (
         <ContentScroll>
           <InvoiceEntry 
-            clientsByAgent={clientsByAgent} 
-            existingData={data} 
+            clientsByAgent={accessibleClientsByAgent} 
+            existingData={accessibleData} 
             onSaveInvoice={(invoice) => {
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
