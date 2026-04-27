@@ -9,6 +9,7 @@ import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import SupportTracker from './components/SupportTracker';
+import ActivityLogs from './components/ActivityLogs';
 import InvoiceEntry from './components/InvoiceEntry';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
@@ -17,10 +18,52 @@ import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import { resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
+import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
 import './index.css';
 
 // Table used for cloud persistence
 const TABLE_NAME = 'manual_edits';
+const TRACKED_ACTIVITY_FIELDS = [
+  { key: 'amount', label: 'Total Due' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'dueDate', label: 'Due Date' },
+  { key: 'status', label: 'Status' },
+  { key: 'billingCycle', label: 'Billing Cycle' }
+];
+
+const normalizeActivityValue = (fieldKey, value) => {
+  if (value === null || value === undefined) return '';
+  if (fieldKey === 'amount') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? `$${numeric.toFixed(2)}` : '';
+  }
+  return String(value).trim();
+};
+
+const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
+  TRACKED_ACTIVITY_FIELDS.reduce((entries, field) => {
+    const oldValue = normalizeActivityValue(field.key, previousRow?.[field.key]);
+    const newValue = normalizeActivityValue(field.key, nextRow?.[field.key]);
+
+    if (oldValue === newValue) return entries;
+
+    const companyName = nextRow?.company || nextRow?.clientName || previousRow?.company || previousRow?.clientName || 'Unknown company';
+    entries.push(
+      createActivityEntry({
+        user,
+        actionType: 'EDIT',
+        details: `${user.email} changed ${field.label} for ${companyName} from ${oldValue || 'empty'} to ${newValue || 'empty'}`,
+        entityType: 'debtor',
+        entityId: nextRow?.id || previousRow?.id,
+        company: companyName,
+        fieldName: field.key,
+        oldValue,
+        newValue
+      })
+    );
+
+    return entries;
+  }, []);
 
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
@@ -749,9 +792,11 @@ function App() {
   const [activeCompany, setActiveCompany] = useState(null);
   const [manualEdits, setManualEdits] = useState({});
   const [user, setUser] = useState(null);
+  const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
+  const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -761,6 +806,14 @@ function App() {
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const recordActivityEntries = useCallback(async (entries) => {
+    if (!user || !shouldTrackUserActivity(user) || !entries || entries.length === 0) return;
+    const result = await logActivityEntries(entries);
+    if (result?.success && result.logged > 0) {
+      setActivityLogRefreshKey((prev) => prev + 1);
+    }
+  }, [user]);
+
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
@@ -769,8 +822,18 @@ function App() {
       setUser(session?.user ?? null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
+      if (_event === 'SIGNED_IN' && session?.user) {
+        const sessionKey = `${session.user.id}:${session.access_token?.slice(0, 16) || 'signed-in'}`;
+        if (loggedSessionRef.current !== sessionKey && !canViewActivityLogs(session.user)) {
+          loggedSessionRef.current = sessionKey;
+          const result = await logLoginActivity(session.user);
+          if (result?.success && result.logged > 0) {
+            setActivityLogRefreshKey((prev) => prev + 1);
+          }
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -1006,6 +1069,7 @@ function App() {
         const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
         setData((prev) => {
           const changed = [];
+          const activityEntries = [];
           const next = prev.map((item) => {
             const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
             if (!sameCompany) return item;
@@ -1027,6 +1091,11 @@ function App() {
               notes: debtor.notes
             };
             changed.push(updatedRow);
+            activityEntries.push(...buildFieldChangeActivityEntries({
+              user,
+              previousRow: item,
+              nextRow: updatedRow
+            }));
             return updatedRow;
           });
           
@@ -1040,11 +1109,13 @@ function App() {
               return nextEdits;
             });
             persistEditedRows(changed);
+            recordActivityEntries(activityEntries);
           }
           return next;
         });
       } else {
         setData((prev) => {
+          const previousRow = prev.find((d) => d.id === debtor.id);
           const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
           setManualEdits(prevEdits => {
             const nextEdits = { ...prevEdits, [debtor.id]: debtor };
@@ -1052,6 +1123,11 @@ function App() {
             return nextEdits;
           });
           persistEditedRows([debtor]);
+          recordActivityEntries(buildFieldChangeActivityEntries({
+            user,
+            previousRow,
+            nextRow: debtor
+          }));
           return next;
         });
       }
@@ -1078,6 +1154,16 @@ function App() {
           [newId]: nextEdit
         };
         persistEditedRows([nextEdit]);
+        recordActivityEntries([
+          createActivityEntry({
+            user,
+            actionType: 'EDIT',
+            details: `${user.email} created a new debtor record for ${newDebtor.company || newDebtor.clientName || 'Unknown company'}`,
+            entityType: 'debtor',
+            entityId: newId,
+            company: newDebtor.company || newDebtor.clientName || null
+          })
+        ]);
         return next;
       });
       toast.success('New debtor added', {
@@ -1229,6 +1315,7 @@ function App() {
 
     setData((prev) => {
       const changed = [];
+      const activityEntries = [];
       const next = prev.map((item) => {
         if (item.id !== idToUpdate) return item;
 
@@ -1237,9 +1324,15 @@ function App() {
           billingCycle: normalizedNextCycle
         };
         changed.push(updatedRow);
+        activityEntries.push(...buildFieldChangeActivityEntries({
+          user,
+          previousRow: item,
+          nextRow: updatedRow
+        }));
         return updatedRow;
       });
       persistEditedRows(changed);
+      recordActivityEntries(activityEntries);
       return next;
     });
 
@@ -1256,6 +1349,7 @@ function App() {
 
     setData((prev) => {
       const changed = [];
+      const activityEntries = [];
       const next = prev.map((item) => {
         if (item.id !== idToUpdate) return item;
 
@@ -1264,9 +1358,15 @@ function App() {
           status: normalizedStatus
         };
         changed.push(updatedRow);
+        activityEntries.push(...buildFieldChangeActivityEntries({
+          user,
+          previousRow: item,
+          nextRow: updatedRow
+        }));
         return updatedRow;
       });
       persistEditedRows(changed);
+      recordActivityEntries(activityEntries);
       return next;
     });
 
@@ -1284,6 +1384,7 @@ function App() {
 
     setData((prev) => {
       const changed = [];
+      const activityEntries = [];
       const next = prev.map((item) => {
         if (item.id !== idToUpdate) return item;
 
@@ -1292,9 +1393,15 @@ function App() {
           amount: parsedAmount
         };
         changed.push(updatedRow);
+        activityEntries.push(...buildFieldChangeActivityEntries({
+          user,
+          previousRow: item,
+          nextRow: updatedRow
+        }));
         return updatedRow;
       });
       persistEditedRows(changed);
+      recordActivityEntries(activityEntries);
       return next;
     });
 
@@ -1441,6 +1548,9 @@ function App() {
         {accessProfile.canViewInvoiceEntry && (
           <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
         )}
+        {accessProfile.canViewActivityLogs && (
+          <ViewButton type="button" $active={activeView === 'activity_logs'} onClick={() => setActiveView('activity_logs')}>Activity Logs</ViewButton>
+        )}
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1510,6 +1620,12 @@ function App() {
       {activeView === 'tracker' && (
         <ContentScroll>
           <SupportTracker data={trackerData} />
+        </ContentScroll>
+      )}
+
+      {activeView === 'activity_logs' && accessProfile.canViewActivityLogs && (
+        <ContentScroll>
+          <ActivityLogs refreshSignal={activityLogRefreshKey} />
         </ContentScroll>
       )}
 
