@@ -1508,7 +1508,7 @@ function App() {
       }
     });
 
-    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
+    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-') && item.invoiceNumber !== 'Marked as Sent');
     const totalDebt = deduplicatedRows
       .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
