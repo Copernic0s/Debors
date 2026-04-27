@@ -1069,6 +1069,11 @@ const SupportTracker = ({
     [normalizedData, cycleWindow]
   );
 
+  const previousCycleRows = useMemo(
+    () => normalizedData.filter((item) => isWithinWindow(item.date, cycleWindow.previous)),
+    [normalizedData, cycleWindow]
+  );
+
   const selectedRecord = useMemo(
     () => normalizedData.find((item) => item.id === selectedRecordId) || null,
     [normalizedData, selectedRecordId]
@@ -1160,6 +1165,11 @@ const SupportTracker = ({
           <SecondaryButton type="button" onClick={() => downloadCsv('support-tracker-current-view.csv', filteredData)}>
             <Download size={16} />
             Export current view
+          </SecondaryButton>
+
+          <SecondaryButton type="button" onClick={() => downloadCsv('support-previous-cycle.csv', previousCycleRows)}>
+            <Download size={16} />
+            Export previous cycle
           </SecondaryButton>
 
           <SecondaryButton type="button" onClick={() => downloadCsv('support-cycle-close.csv', currentCycleRows)}>
@@ -1456,7 +1466,6 @@ const SupportTracker = ({
             <tr>
               <th>Date</th>
               <th>Company</th>
-              <th>Agent</th>
               <th>Task</th>
               <th>Status</th>
               <th>Notes</th>
@@ -1471,7 +1480,6 @@ const SupportTracker = ({
                 <tr key={item.id}>
                   <td className="col-date">{item.date || 'No date'}</td>
                   <td className="col-company">{item.company || 'Unknown'}</td>
-                  <td className="col-agent">{item.agentLabel}</td>
                   <td className="col-task">{item.task || 'No task provided'}</td>
                   <td>
                     <StatusBadge {...badgeProps}>
