@@ -84,55 +84,55 @@ const IconWrapper = styled.div`
 `;
 
 const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-    }).format(value);
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(value);
 };
 
 
 export default function Dashboard({ metrics }) {
-    return (
-        <DashboardGrid>
-            <StatCard className="glass-card">
-                <StatInfo>
-                    <StatLabel>Total Pending</StatLabel>
-                    <StatValue>{formatCurrency(metrics.currentBalance)}</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(56, 189, 248, 0.15)" $color="var(--brand-blue)">
-                    <Clock3 size={24} />
-                </IconWrapper>
-            </StatCard>
- 
-            <StatCard className="glass-card">
-                <StatInfo>
-                    <StatLabel>Total Overdue</StatLabel>
-                    <StatValue style={{ color: 'var(--brand)' }}>{formatCurrency(metrics.totalOverdue)}</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(249, 115, 22, 0.2)" $color="var(--brand)">
-                    <AlertCircle size={24} />
-                </IconWrapper>
-            </StatCard>
- 
-            <StatCard className="glass-card">
-                <StatInfo>
-                    <StatLabel>Active Clients</StatLabel>
-                    <StatValue>{metrics.activeClients}</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(99, 102, 241, 0.15)" $color="var(--brand-indigo)">
-                    <Users size={24} />
-                </IconWrapper>
-            </StatCard>
- 
-            <StatCard className="glass-card">
-                <StatInfo>
-                    <StatLabel>Overdue Accounts</StatLabel>
-                    <StatValue style={{ color: 'var(--danger)' }}>{metrics.overdueAccounts}</StatValue>
-                </StatInfo>
-                <IconWrapper $bgColor="rgba(239, 68, 68, 0.15)" $color="var(--danger)">
-                    <ClipboardList size={24} />
-                </IconWrapper>
-            </StatCard>
-        </DashboardGrid>
-    );
+  return (
+    <DashboardGrid>
+      <StatCard className="glass-card">
+        <StatInfo>
+          <StatLabel>Total Pending</StatLabel>
+          <StatValue>{formatCurrency(metrics.currentBalance)}</StatValue>
+        </StatInfo>
+        <IconWrapper $bgColor="rgba(56, 189, 248, 0.15)" $color="var(--brand-blue)">
+          <Clock3 size={24} />
+        </IconWrapper>
+      </StatCard>
+
+      <StatCard className="glass-card">
+        <StatInfo>
+          <StatLabel>Total Overdue</StatLabel>
+          <StatValue style={{ color: 'var(--brand)' }}>{formatCurrency(metrics.totalOverdue)}</StatValue>
+        </StatInfo>
+        <IconWrapper $bgColor="rgba(249, 115, 22, 0.2)" $color="var(--brand)">
+          <AlertCircle size={24} />
+        </IconWrapper>
+      </StatCard>
+
+      <StatCard className="glass-card">
+        <StatInfo>
+          <StatLabel>Active Clients</StatLabel>
+          <StatValue>{metrics.activeClients}</StatValue>
+        </StatInfo>
+        <IconWrapper $bgColor="rgba(99, 102, 241, 0.15)" $color="var(--brand-indigo)">
+          <Users size={24} />
+        </IconWrapper>
+      </StatCard>
+
+      <StatCard className="glass-card">
+        <StatInfo>
+          <StatLabel>Overdue Accounts</StatLabel>
+          <StatValue style={{ color: 'var(--danger)' }}>{metrics.overdueAccounts}</StatValue>
+        </StatInfo>
+        <IconWrapper $bgColor="rgba(239, 68, 68, 0.15)" $color="var(--danger)">
+          <ClipboardList size={24} />
+        </IconWrapper>
+      </StatCard>
+    </DashboardGrid>
+  );
 }

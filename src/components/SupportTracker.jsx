@@ -1069,6 +1069,11 @@ const SupportTracker = ({
     [normalizedData, cycleWindow]
   );
 
+  const previousCycleRows = useMemo(
+    () => normalizedData.filter((item) => isWithinWindow(item.date, cycleWindow.previous)),
+    [normalizedData, cycleWindow]
+  );
+
   const selectedRecord = useMemo(
     () => normalizedData.find((item) => item.id === selectedRecordId) || null,
     [normalizedData, selectedRecordId]
@@ -1160,6 +1165,11 @@ const SupportTracker = ({
           <SecondaryButton type="button" onClick={() => downloadCsv('support-tracker-current-view.csv', filteredData)}>
             <Download size={16} />
             Export current view
+          </SecondaryButton>
+
+          <SecondaryButton type="button" onClick={() => downloadCsv('support-previous-cycle.csv', previousCycleRows)}>
+            <Download size={16} />
+            Export previous cycle
           </SecondaryButton>
 
           <SecondaryButton type="button" onClick={() => downloadCsv('support-cycle-close.csv', currentCycleRows)}>
