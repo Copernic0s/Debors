@@ -86,6 +86,8 @@ export const resolveAccessProfile = (user) => {
     canEditInvoiceDetails: isManager,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
+    canViewSupportTracker: isManager,
+    canViewInvoiceEntry: isManager,
     hasScopedPortfolio: isManager ? true : agentScope.length > 0
   };
 };

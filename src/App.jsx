@@ -15,6 +15,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
+import { resolveAccessProfile } from './constants/accessControl';
 import './index.css';
 
 // Table used for cloud persistence
@@ -738,6 +739,7 @@ function App() {
   const [activeCompany, setActiveCompany] = useState(null);
   const [manualEdits, setManualEdits] = useState({});
   const [user, setUser] = useState(null);
+  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -1394,8 +1396,12 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        {accessProfile.canViewSupportTracker && (
+          <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
+        )}
+        {accessProfile.canViewInvoiceEntry && (
+          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        )}
       </ViewSwitch>
 
       {activeView === 'overview' && (
