@@ -267,6 +267,16 @@ const Badge = styled.span`
 `;
 
 
+const normalizeWeekLabel = (label) => {
+  const raw = String(label || '').trim().toLowerCase();
+  if (!raw) return 'unspecified';
+  const numbers = raw.match(/\d+/g);
+  if (numbers && numbers.length >= 2) {
+    return `W-${numbers[0]}-${numbers[1]}`;
+  }
+  return raw.replace(/[^a-z0-9]/g, '');
+};
+
 export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoice }) {
   const [week, setWeek] = useState(() => {
     // Basic week string generation for UI default
@@ -292,7 +302,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         // Check if we already have an invoice for this in existingData
         const existing = existingData.find(d => 
           String(d.company || '').toLowerCase() === String(company || '').toLowerCase() && 
-          (d.weekLabel === week || (d.id && d.id.includes(slotId)))
+          (normalizeWeekLabel(d.weekLabel) === normalizeWeekLabel(week) || (d.id && d.id.includes(slotId)))
         );
 
         if (!existing || existing.status === 'no_invoice') {
