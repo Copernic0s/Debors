@@ -37,6 +37,11 @@ const hasPrivilegedIdentityFallback = (email) => {
   return localPart.includes('andres') || localPart.includes('kevin');
 };
 
+const canViewActivityLogsFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('andres');
+};
+
 const getSpecialAgentScopeFallback = (email) => {
   if (email === 'hector.lomeli@theunitedtransports.com') {
     return ['hector lomeli', 'héctor lomelí'];
@@ -96,6 +101,7 @@ export const resolveAccessProfile = (user) => {
     canViewAllData: isManager,
     canViewSupportTracker: isManager,
     canViewInvoiceEntry: isManager,
+    canViewActivityLogs: canViewActivityLogsFallback(email),
     hasScopedPortfolio: isManager ? true : agentScope.length > 0
   };
 };
