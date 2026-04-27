@@ -32,11 +32,15 @@ const STATUS_META = {
 
 const AGENT_COLORS = ['#f97316', '#06b6d4', '#22c55e', '#f43f5e', '#8b5cf6', '#facc15', '#38bdf8', '#fb7185'];
 const tooltipStyle = {
-  background: 'rgba(7, 14, 26, 0.96)',
-  border: '1px solid rgba(148, 163, 184, 0.22)',
-  borderRadius: '14px',
-  color: '#d9e3f0',
-  boxShadow: '0 18px 40px rgba(0, 0, 0, 0.35)'
+  background: 'rgba(8, 18, 34, 0.95)',
+  backdropFilter: 'blur(12px)',
+  border: '1px solid rgba(255, 255, 255, 0.12)',
+  borderRadius: '16px',
+  color: '#ffffff',
+  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
+  padding: '12px',
+  fontSize: '0.8rem',
+  fontFamily: "'Plus Jakarta Sans', sans-serif"
 };
 
 const normalizeStatus = (status) => {
@@ -116,28 +120,42 @@ const SummaryStrip = styled.section`
 `;
 
 const SummaryCard = styled.div`
-  min-height: 92px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 16px;
-  padding: 0.95rem 1rem;
-  background: linear-gradient(180deg, rgba(11, 18, 31, 0.95), rgba(11, 18, 31, 0.78));
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-  display: grid;
-  gap: 0.2rem;
+  min-height: 100px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
 `;
 
 const SummaryLabel = styled.span`
   color: var(--text-muted);
-  font-size: 0.73rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 `;
 
 const SummaryValue = styled.strong`
   color: var(--text-main);
-  font-size: 1.25rem;
+  font-size: 1.4rem;
   font-weight: 800;
+  letter-spacing: -0.02em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
 `;
 
 const SummaryMeta = styled.span`
@@ -161,20 +179,22 @@ const UtilityGroup = styled.div`
 `;
 
 const UtilityChip = styled.button`
-  border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.36)' : 'rgba(148, 163, 184, 0.16)')};
-  background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
-  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
-  border-radius: 999px;
-  padding: 0.42rem 0.82rem;
+  border: 1px solid ${(props) => (props.$active ? 'rgba(255, 122, 26, 0.4)' : 'rgba(255, 255, 255, 0.08)')};
+  background: ${(props) => (props.$active ? 'linear-gradient(135deg, rgba(255, 179, 71, 0.15), rgba(255, 122, 26, 0.2))' : 'rgba(255, 255, 255, 0.04)')};
+  color: ${(props) => (props.$active ? 'var(--brand-ice)' : 'var(--text-muted)')};
+  border-radius: 12px;
+  padding: 0.5rem 1rem;
   font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
     color: var(--text-main);
-    transform: translateY(-1px);
+    background: ${(props) => (props.$active ? 'linear-gradient(135deg, rgba(255, 179, 71, 0.2), rgba(255, 122, 26, 0.25))' : 'rgba(255, 255, 255, 0.08)')};
+    transform: translateY(-2px);
   }
 `;
 
@@ -195,19 +215,35 @@ const KPIGrid = styled.section`
 const KpiCard = styled.article`
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
-  padding: 1rem;
-  background: linear-gradient(180deg, rgba(11, 18, 31, 0.95), rgba(11, 18, 31, 0.78));
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-  content-visibility: auto;
-  contain-intrinsic-size: 160px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 
   &:hover {
-    transform: translateY(-2px);
-    border-color: rgba(249, 115, 22, 0.35);
-    box-shadow: 0 26px 58px rgba(0, 0, 0, 0.24);
+    transform: translateY(-5px);
+    border-color: rgba(249, 115, 22, 0.3);
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.4),
+      0 0 20px rgba(249, 115, 22, 0.05);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
   }
 `;
 
@@ -269,15 +305,27 @@ const Column = styled.div`
 `;
 
 const Panel = styled.section`
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(12, 18, 31, 0.94), rgba(12, 18, 31, 0.78));
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  padding: 1rem;
-  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.18);
-  content-visibility: auto;
-  contain-intrinsic-size: 360px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: 28px;
+  padding: 1.75rem;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 150px;
+    height: 150px;
+    background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.03), transparent 70%);
+    pointer-events: none;
+  }
 `;
 
 const PanelHeader = styled.div`
@@ -331,20 +379,21 @@ const FilterRow = styled.div`
 `;
 
 const FilterChip = styled.button`
-  border: 1px solid ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.36)' : 'rgba(148, 163, 184, 0.16)')};
-  background: ${(props) => (props.$active ? 'rgba(249, 115, 22, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
-  color: ${(props) => (props.$active ? 'var(--brand)' : 'var(--text-muted)')};
-  border-radius: 999px;
-  padding: 0.38rem 0.78rem;
-  font-size: 0.72rem;
+  border: 1px solid ${(props) => (props.$active ? 'rgba(255, 122, 26, 0.35)' : 'rgba(255, 255, 255, 0.06)')};
+  background: ${(props) => (props.$active ? 'rgba(255, 122, 26, 0.12)' : 'rgba(255, 255, 255, 0.03)')};
+  color: ${(props) => (props.$active ? 'var(--brand-ice)' : 'var(--text-muted)')};
+  border-radius: 10px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.7rem;
   font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.25s ease;
 
   &:hover {
     color: var(--text-main);
-    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.08);
   }
 `;
 
@@ -505,26 +554,41 @@ const TableState = styled.div`
 
 const Table = styled.table`
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 4px;
 
   th,
   td {
-    padding: 0.72rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 0.82rem;
+    padding: 1rem 0.75rem;
+    font-size: 0.85rem;
     text-align: left;
     vertical-align: middle;
   }
 
   th {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
+    font-weight: 800;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  tbody tr {
+    transition: all 0.2s ease;
   }
 
   tbody tr:hover td {
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  tbody tr:hover td:first-child {
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+  }
+  tbody tr:hover td:last-child {
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
   }
 `;
 
@@ -562,23 +626,52 @@ const EmptyState = styled.div`
 const AreaChartVisual = React.memo(function AreaChartVisual({ data, animate }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={data}>
+      <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="manager-open" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.28} />
-            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+            <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="var(--brand)" stopOpacity={0} />
           </linearGradient>
           <linearGradient id="manager-collected" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#10b981" stopOpacity={0.26} />
-            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+            <stop offset="5%" stopColor="var(--ok)" stopOpacity={0.25} />
+            <stop offset="95%" stopColor="var(--ok)" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="week" tick={{ fill: '#95a4bb', fontSize: 10 }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fill: '#95a4bb', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={formatCompactCurrency} />
+        <CartesianGrid stroke="rgba(255,255,255,0.03)" strokeDasharray="3 3" vertical={false} />
+        <XAxis 
+          dataKey="week" 
+          tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 600 }} 
+          axisLine={false} 
+          tickLine={false} 
+          dy={10}
+        />
+        <YAxis 
+          tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 600 }} 
+          axisLine={false} 
+          tickLine={false} 
+          tickFormatter={formatCompactCurrency} 
+        />
         <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatCurrency(value)} />
-        <Area type="monotone" dataKey="open" name="Open Balance" stroke="#f59e0b" strokeWidth={2.4} fill="url(#manager-open)" isAnimationActive={animate} animationDuration={450} />
-        <Area type="monotone" dataKey="collected" name="Collected" stroke="#10b981" strokeWidth={2.4} fill="url(#manager-collected)" isAnimationActive={animate} animationDuration={450} />
+        <Area 
+          type="monotone" 
+          dataKey="open" 
+          name="Open Balance" 
+          stroke="var(--brand)" 
+          strokeWidth={3} 
+          fill="url(#manager-open)" 
+          isAnimationActive={animate} 
+          animationDuration={800} 
+        />
+        <Area 
+          type="monotone" 
+          dataKey="collected" 
+          name="Collected" 
+          stroke="var(--ok)" 
+          strokeWidth={3} 
+          fill="url(#manager-collected)" 
+          isAnimationActive={animate} 
+          animationDuration={800} 
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
