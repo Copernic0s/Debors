@@ -414,6 +414,8 @@ export default function DebtorsList({
   });
 
   const filteredData = sortedData.filter(item => {
+    if (item.invoiceNumber === 'Marked as Sent') return false;
+
     const status = String(item.status || 'pending').toLowerCase();
     const isPendingOrOverdue = status === 'pending' || status === 'overdue';
 
