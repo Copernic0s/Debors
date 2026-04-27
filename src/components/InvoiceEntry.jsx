@@ -529,6 +529,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
                                   ...slot,
                                   status: 'pending',
                                   source: 'manual_entry',
+                                  billingCycle: slot.cycle,
                                   dueDate: entry.dueDate || slot.dueDate || new Date().toISOString().split('T')[0],
                                   amount: 0,
                                   invoiceNumber: 'Marked as Sent',
