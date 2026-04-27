@@ -376,7 +376,7 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       status: 'pending',
       source: 'manual_entry',
       dueDate: entry.dueDate,
-      id: `MAN-${Date.now()}-${entry.company.replace(/[^a-zA-Z0-9]/g, '')}`,
+      id: `MAN-${Date.now()}-${id}`,
       sendNotification: sendEmail
     });
     
