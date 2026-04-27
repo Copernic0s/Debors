@@ -16,6 +16,7 @@ import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import { resolveAccessProfile } from './constants/accessControl';
+import { emailService } from './services/emailService';
 import './index.css';
 
 // Table used for cloud persistence
@@ -1489,7 +1490,28 @@ function App() {
                 return [...prev, invoice];
               });
               
-              persistEditedRows([invoice]);
+               persistEditedRows([invoice]);
+
+               // Trigger email notification if requested
+               if (invoice.sendNotification) {
+                 emailService.sendInvoiceNotification(invoice).then(res => {
+                   if (res.success) {
+                     toast.success(`Notification sent to ${invoice.company}`, {
+                       icon: '📧',
+                       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+                     });
+                   } else {
+                     toast.error(`Email failed: ${res.error}`, {
+                       style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+                     });
+                   }
+                 });
+               }
+
+               toast.success('Invoice saved and synced', {
+                 icon: '✅',
+                 style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+               });
             }} 
           />
         </ContentScroll>
