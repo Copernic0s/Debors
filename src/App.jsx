@@ -15,6 +15,8 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
+import { resolveAccessProfile } from './constants/accessControl';
+import { emailService } from './services/emailService';
 import './index.css';
 
 // Table used for cloud persistence
@@ -174,6 +176,8 @@ const PulsatingLogo = styled.div`
     50% { transform: scale(1.15); opacity: 0.45; filter: blur(25px); }
     100% { transform: scale(1); opacity: 0.3; filter: blur(20px); }
   }
+
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 `;
 
 const UserAvatar = styled.div`
@@ -330,19 +334,29 @@ const BrandTitle = styled.h1`
   line-height: 1;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  transition: all 0.3s ease;
-  transform: scaleY(1.05);
-
+  gap: 1rem;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  
   span.brand {
     background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    transition: all 0.4s ease;
+  }
+
+  span:last-child {
+    transition: all 0.4s ease;
   }
 
   &:hover {
-    letter-spacing: 0.2em;
-    gap: 0.6rem;
+    gap: 0;
+    letter-spacing: 0.05em;
+  }
+
+  &:hover ${PulsatingLogo} {
+    transform: translateY(-45px) scale(1.3);
+    filter: drop-shadow(0 20px 20px rgba(255, 122, 26, 0.4));
   }
 `;
 
@@ -510,6 +524,14 @@ const normalizeWeekLabel = (label) => {
   return raw.replace(/[^a-z0-9]/g, '');
 };
 
+const normalizeMatchKey = (value) => {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+(llc|inc|corp|co|limited|ltd|transportation|logistics|express)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+};
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = new Map();
   const windowsWithInvoice = new Set();
@@ -519,7 +541,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     merged.set(row.id, { ...row, source: 'debt' });
     
     // Recognize windows that already have actual invoices
-    const normalizedCompany = String(row.company || row.clientName || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedCompany = normalizeMatchKey(row.company || row.clientName);
     const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     if (normalizedCompany && normalizedWeek) {
       windowsWithInvoice.add(`${normalizedWeek}|${normalizedCompany}`);
@@ -532,7 +554,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
     const week = String(row.weekLabel || '').trim();
     if (!company) return;
 
-    const normalizedCompany = company.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const normalizedCompany = normalizeMatchKey(company);
     const normalizedWeek = normalizeWeekLabel(row.weekLabel);
     const windowKey = `${normalizedWeek}|${normalizedCompany}`;
     const stableId = `CS-${normalizedWeek}-${normalizedCompany}`;
@@ -566,7 +588,8 @@ const aggregateByCompany = (rows) => {
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const key = `${company.toLowerCase()}-${invKey}`;
+    const companyKey = normalizeMatchKey(company);
+    const key = `${companyKey}-${invKey}`;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;
@@ -726,6 +749,7 @@ function App() {
   const [activeCompany, setActiveCompany] = useState(null);
   const [manualEdits, setManualEdits] = useState({});
   const [user, setUser] = useState(null);
+  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -784,6 +808,7 @@ function App() {
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
+          email: edit.email || '',
           noUsageCount: (edit.notes || '').match(/\[streak:(\d+)\]/)?.[1] ? Number((edit.notes || '').match(/\[streak:(\d+)\]/)[1]) : (Number(edit.no_usage_count) || 0),
           invoiceNumber: edit.invoice_number,
           notes: (edit.notes || '').replace(/\[streak:\d+\]/, '').trim(),
@@ -1348,7 +1373,7 @@ function App() {
       }
     });
 
-    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
+    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-') && item.invoiceNumber !== 'Marked as Sent');
     const totalDebt = deduplicatedRows
       .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
       .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
@@ -1382,8 +1407,12 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        {accessProfile.canViewSupportTracker && (
+          <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
+        )}
+        {accessProfile.canViewInvoiceEntry && (
+          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        )}
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1470,7 +1499,28 @@ function App() {
                 return [...prev, invoice];
               });
               
-              persistEditedRows([invoice]);
+               persistEditedRows([invoice]);
+
+               // Trigger email notification if requested
+               if (invoice.sendNotification) {
+                 emailService.sendInvoiceNotification(invoice).then(res => {
+                   if (res.success) {
+                     toast.success(`Notification sent to ${invoice.company}`, {
+                       icon: '📧',
+                       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+                     });
+                   } else {
+                     toast.error(`Email failed: ${res.error}`, {
+                       style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+                     });
+                   }
+                 });
+               }
+
+               toast.success('Invoice saved and synced', {
+                 icon: '✅',
+                 style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+               });
             }} 
           />
         </ContentScroll>
@@ -1505,11 +1555,15 @@ function App() {
           <TopbarLeft>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <UserAvatar>
-                <img 
-                  src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
-                  alt="Andres Mendez" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
-                />
+                {user?.email?.toLowerCase().includes('andres') ? (
+                  <img 
+                    src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                    alt="User" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                  />
+                ) : (
+                  user?.email?.split('@')[0].split('.').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'
+                )}
               </UserAvatar>
               <UserInfo>
                 <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
