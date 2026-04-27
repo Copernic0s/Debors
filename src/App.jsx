@@ -798,6 +798,7 @@ function App() {
           billingCycle: edit.billing_cycle,
           lastInvoicedDate: edit.last_invoiced_date,
           lastNoUsageDate: edit.last_no_usage_date,
+          email: edit.email || '',
           noUsageCount: (edit.notes || '').match(/\[streak:(\d+)\]/)?.[1] ? Number((edit.notes || '').match(/\[streak:(\d+)\]/)[1]) : (Number(edit.no_usage_count) || 0),
           invoiceNumber: edit.invoice_number,
           notes: (edit.notes || '').replace(/\[streak:\d+\]/, '').trim(),

@@ -140,6 +140,38 @@ const Input = styled.input`
   }
 `;
 
+const NotificationToggle = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s ease;
+  width: fit-content;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  span {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--brand);
+  }
+`;
+
 const Button = styled.button`
   background: ${props => props.$color || 'var(--brand)'};
   color: white;
@@ -370,8 +402,18 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
     }));
   };
 
+  const [notifications, setNotifications] = useState({});
+
+  const toggleNotification = (id) => {
+    setNotifications(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const handleSave = (id) => {
     const entry = entries[id];
+    const sendEmail = notifications[id] ?? true; // Default to true
     if (!entry || !entry.invoiceNumber || !entry.amount) return;
 
     // Determine if it is the second invoice of a 'Twice' cycle based on slot suffix
@@ -383,7 +425,8 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       status: 'pending',
       source: 'manual_entry',
       dueDate: computedDueDate,
-      id: `MAN-${Date.now()}-${entry.company.replace(/[^a-zA-Z0-9]/g, '')}`
+      id: `MAN-${Date.now()}-${entry.company.replace(/[^a-zA-Z0-9]/g, '')}`,
+      sendNotification: sendEmail
     });
     
     // Clear from local entries so it disappears from 'missing' list
@@ -453,28 +496,52 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
 
                         <CardFooter style={{ borderTopColor: `${agentColor}22` }}>
                           <InputGroup>
-                            <Input 
-                              placeholder="Invoice #" 
-                              value={entry.invoiceNumber}
-                              onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
-                              onFocus={(e) => e.target.style.borderColor = agentColor}
-                              onBlur={(e) => e.target.style.borderColor = ''}
-                            />
-                            <Input 
-                              type="number"
-                              placeholder="Amount ($)" 
-                              value={entry.amount}
-                              onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
-                              onFocus={(e) => e.target.style.borderColor = agentColor}
-                              onBlur={(e) => e.target.style.borderColor = ''}
-                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '0.35rem', fontWeight: 800, textTransform: 'uppercase' }}>Invoice Number</div>
+                              <Input 
+                                placeholder="#" 
+                                value={entry.invoiceNumber}
+                                onChange={e => handleEntryChange(slot.id, 'invoiceNumber', e.target.value)}
+                                onFocus={(e) => e.target.style.borderColor = agentColor}
+                                onBlur={(e) => e.target.style.borderColor = ''}
+                              />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: '0.35rem', fontWeight: 800, textTransform: 'uppercase' }}>Amount ($)</div>
+                              <Input 
+                                type="number"
+                                placeholder="0.00" 
+                                value={entry.amount}
+                                onChange={e => handleEntryChange(slot.id, 'amount', e.target.value)}
+                                onFocus={(e) => e.target.style.borderColor = agentColor}
+                                onBlur={(e) => e.target.style.borderColor = ''}
+                              />
+                            </div>
                           </InputGroup>
+                          
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <NotificationToggle>
+                              <input 
+                                type="checkbox" 
+                                checked={notifications[slot.id] ?? true} 
+                                onChange={() => toggleNotification(slot.id)}
+                              />
+                              <span>Notify Client</span>
+                            </NotificationToggle>
+
+                            {slot.email && (
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', opacity: 0.8 }}>
+                                to: {slot.email}
+                              </div>
+                            )}
+                          </div>
+
                           <Button 
                             $color={agentColor}
                             disabled={!isReady}
                             onClick={() => handleSave(slot.id)}
                           >
-                            <Save size={16} /> Save Invoice
+                            <Save size={16} /> Save & Send
                           </Button>
                         </CardFooter>
                       </Card>
