@@ -403,56 +403,6 @@ const StyledTable = styled.table`
   }
 `;
 
-  th {
-    background: rgba(255, 255, 255, 0.03);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-  }
-
-  tr:last-child td {
-    border-bottom: none;
-  }
-
-  tbody tr {
-    transition: background 0.2s ease;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.02);
-    }
-  }
-
-  td {
-    font-size: 0.9rem;
-    color: var(--text-main);
-  }
-
-  .col-date {
-    color: var(--text-muted);
-    font-weight: 500;
-    min-width: 115px;
-  }
-
-  .col-company {
-    font-weight: 700;
-    color: white;
-    min-width: 220px;
-  }
-
-  .col-agent {
-    min-width: 170px;
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-
-  .col-task {
-    white-space: normal;
-    min-width: 260px;
-    line-height: 1.45;
-  }
-
   .col-notes {
     white-space: normal;
     min-width: 250px;
