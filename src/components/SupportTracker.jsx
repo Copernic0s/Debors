@@ -401,13 +401,36 @@ const StyledTable = styled.table`
     color: var(--text-main);
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
   }
-`;
 
   .col-notes {
     white-space: normal;
     min-width: 250px;
     color: var(--text-muted);
     font-size: 0.85rem;
+    line-height: 1.45;
+  }
+
+  .col-date {
+    color: var(--text-muted);
+    font-weight: 500;
+    min-width: 115px;
+  }
+
+  .col-company {
+    font-weight: 700;
+    color: white;
+    min-width: 220px;
+  }
+
+  .col-agent {
+    min-width: 170px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .col-task {
+    white-space: normal;
+    min-width: 260px;
     line-height: 1.45;
   }
 `;
