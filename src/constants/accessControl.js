@@ -44,7 +44,7 @@ const canViewActivityLogsFallback = (email) => {
 
 const getSpecialAgentScopeFallback = (email) => {
   if (email === 'hector.lomeli@theunitedtransports.com') {
-    return ['hector lomeli', 'héctor lomelí'];
+    return ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
   }
   return [];
 };
@@ -61,9 +61,11 @@ export const resolveAccessProfile = (user) => {
 
   const metadataRole = String(
     user?.app_metadata?.role ||
-    user?.user_metadata?.role ||
-    ''
-  ).trim().toLowerCase();
+      user?.user_metadata?.role ||
+      ''
+  )
+    .trim()
+    .toLowerCase();
 
   const metadataAgentIds = [
     ...parseDelimitedList(user?.app_metadata?.agent_scope),
@@ -78,12 +80,26 @@ export const resolveAccessProfile = (user) => {
     .map(normalizeScopeValue)
     .filter(Boolean);
 
-  const configuredAgentIds = (agentScopeMap.get(email) || []).map(normalizeScopeValue).filter(Boolean);
-  const fallbackAgentIds = getSpecialAgentScopeFallback(email).map(normalizeScopeValue).filter(Boolean);
-  const agentScope = Array.from(new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds]));
+  const configuredAgentIds = (agentScopeMap.get(email) || [])
+    .map(normalizeScopeValue)
+    .filter(Boolean);
+  const fallbackAgentIds = getSpecialAgentScopeFallback(email)
+    .map(normalizeScopeValue)
+    .filter(Boolean);
+  const agentScope = Array.from(
+    new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds])
+  );
 
-  const normalizedRole = metadataRole === 'operations_access' ? MANAGER_ROLE : metadataRole === 'collections_access' ? AGENT_ROLE : metadataRole;
-  const isManager = normalizedRole === MANAGER_ROLE || operationsEmails.has(email) || hasPrivilegedIdentityFallback(email);
+  const normalizedRole =
+    metadataRole === 'operations_access'
+      ? MANAGER_ROLE
+      : metadataRole === 'collections_access'
+        ? AGENT_ROLE
+        : metadataRole;
+  const isManager =
+    normalizedRole === MANAGER_ROLE ||
+    operationsEmails.has(email) ||
+    hasPrivilegedIdentityFallback(email);
   const role = isManager ? MANAGER_ROLE : AGENT_ROLE;
 
   return {

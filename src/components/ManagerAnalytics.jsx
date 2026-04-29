@@ -732,7 +732,8 @@ export default function ManagerAnalytics({
   aggregatedRows,
   selectedAgent,
   onSelectAgent,
-  onOpenCompanyProfile
+  onOpenCompanyProfile,
+  isManager = true
 }) {
   const [quickFilter, setQuickFilter] = useState('all');
   const [drilldown, setDrilldown] = useState({ type: 'all', value: 'all' });
@@ -1009,36 +1010,27 @@ export default function ManagerAnalytics({
           </SummaryCard>
         </SummaryStrip>
 
-        <UtilityBar>
-          <UtilityGroup>
-            <UtilityChip type="button" $active={quickFilter === 'all'} onClick={() => setQuickFilter('all')}>
-              All
-            </UtilityChip>
-            <UtilityChip type="button" $active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}>
-              Overdue only
-            </UtilityChip>
-            <UtilityChip type="button" $active={quickFilter === 'top_balances'} onClick={() => setQuickFilter('top_balances')}>
-              Top balances
-            </UtilityChip>
-            <UtilityChip type="button" $active={quickFilter === 'latest_week'} onClick={() => setQuickFilter('latest_week')}>
-              Latest week
-            </UtilityChip>
-            <UtilityChip type="button" $active={quickFilter === 'high_risk'} onClick={() => setQuickFilter('high_risk')}>
-              High risk
-            </UtilityChip>
-          </UtilityGroup>
-
-          <UtilityGroup>
-            <UtilityChip type="button" $active={drilldown.type === 'all'} onClick={() => setDrilldown({ type: 'all', value: 'all' })}>
-              {analytics.activeFiltersLabel}
-            </UtilityChip>
-            {drilldown.type !== 'all' && (
-              <UtilityChip type="button" $active onClick={() => setDrilldown({ type: 'all', value: 'all' })}>
-                Clear detail
+        {isManager && (
+          <UtilityBar>
+            <UtilityGroup>
+              <UtilityChip type="button" $active={quickFilter === 'all'} onClick={() => setQuickFilter('all')}>
+                All
               </UtilityChip>
-            )}
-          </UtilityGroup>
-        </UtilityBar>
+              <UtilityChip type="button" $active={quickFilter === 'overdue'} onClick={() => setQuickFilter('overdue')}>
+                Overdue only
+              </UtilityChip>
+              <UtilityChip type="button" $active={quickFilter === 'top_balances'} onClick={() => setQuickFilter('top_balances')}>
+                Top balances
+              </UtilityChip>
+              <UtilityChip type="button" $active={quickFilter === 'latest_week'} onClick={() => setQuickFilter('latest_week')}>
+                Latest week
+              </UtilityChip>
+              <UtilityChip type="button" $active={quickFilter === 'high_risk'} onClick={() => setQuickFilter('high_risk')}>
+                High risk
+              </UtilityChip>
+            </UtilityGroup>
+          </UtilityBar>
+        )}
 
         <KPIGrid>
           <KpiCard>
@@ -1099,240 +1091,38 @@ export default function ManagerAnalytics({
             <Panel>
               <PanelHeader>
                 <PanelTitleWrap>
-                  <h3>Agent Exposure Map</h3>
+                  <h3>{isManager ? 'Agent Exposure Map' : 'My Portfolio Snapshot'}</h3>
                 </PanelTitleWrap>
-                <LegendRow>
-                  <LegendPill>
-                    <Dot $color="#f97316" />
-                    Open balance
-                  </LegendPill>
-                </LegendRow>
+                {isManager && (
+                  <LegendRow>
+                    <LegendPill>
+                      <Dot $color="#f97316" />
+                      Open balance
+                    </LegendPill>
+                  </LegendRow>
+                )}
               </PanelHeader>
 
-              <FilterRow>
-                <FilterChip type="button" $active={selectedAgent === 'all'} onClick={() => onSelectAgent?.('all')}>
-                  All agents
-                </FilterChip>
-                {analytics.agentData.slice(0, 5).map((agent) => (
-                  <FilterChip
-                    key={agent.agent}
-                    type="button"
-                    $active={selectedAgent === agent.agent}
-                    onClick={() => onSelectAgent?.(agent.agent)}
-                  >
-                    {agent.agent}
-                  </FilterChip>
-                ))}
-              </FilterRow>
-
-              <AgentBarVisual data={analytics.agentData} animate={analytics.animateCharts} onSelectAgent={onSelectAgent} />
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>Weekly Open vs Collected</h3>
-                </PanelTitleWrap>
-                <LegendRow>
-                  <LegendPill>
-                    <Dot $color="#f59e0b" />
-                    Open
-                  </LegendPill>
-                  <LegendPill>
-                    <Dot $color="#10b981" />
-                    Collected
-                  </LegendPill>
-                </LegendRow>
-              </PanelHeader>
-
-              <AreaChartVisual data={analytics.weekTrendData} animate={analytics.animateCharts} />
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>Priority Accounts</h3>
-                </PanelTitleWrap>
-              </PanelHeader>
-
-              <TableWrap>
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Company</th>
-                      <th>Agent</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'right' }}>Balance</th>
-                      <th style={{ textAlign: 'right' }}>Days late</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.topAccounts.map((item) => {
-                      const status = normalizeStatus(item.status);
-                      const meta = STATUS_META[status];
-                      return (
-                        <tr key={item.id}>
-                          <td>
-                            <CompanyButton type="button" onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}>
-                              {item.company || item.clientName}
-                            </CompanyButton>
-                          </td>
-                          <td>
-                            <AgentMeta>
-                              <UserRound size={14} />
-                              {item.agentId || 'Unassigned'}
-                            </AgentMeta>
-                          </td>
-                          <td>
-                            <SeverityPill
-                              $color={meta.color}
-                              $background={`${meta.color}22`}
-                            >
-                              {meta.label}
-                            </SeverityPill>
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatCurrency(item.amount)}</td>
-                          <td style={{ textAlign: 'right', color: item.daysPastDue > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 700 }}>
-                            {item.daysPastDue > 0 ? item.daysPastDue : '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              </TableWrap>
-            </Panel>
-          </Column>
-
-          <Column>
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>Status Mix</h3>
-                </PanelTitleWrap>
-              </PanelHeader>
-
-              <SplitGrid>
-                <StatusPieVisual data={analytics.statusChartData} animate={analytics.animateCharts} />
-                <StatusList>
-                  {analytics.statusChartData.map((item) => {
-                    const total = analytics.statusChartData.reduce((sum, entry) => sum + entry.value, 0);
-                    const width = total > 0 ? (item.value / total) * 100 : 0;
-                    return (
-                      <StatusRow
-                        key={item.key}
-                        as="button"
+              {isManager ? (
+                <>
+                  <FilterRow>
+                    <FilterChip type="button" $active={selectedAgent === 'all'} onClick={() => onSelectAgent?.('all')}>
+                      All agents
+                    </FilterChip>
+                    {analytics.agentData.slice(0, 5).map((agent) => (
+                      <FilterChip
+                        key={agent.agent}
                         type="button"
-                        onClick={() => setDrilldown({ type: 'status', value: item.key })}
-                        style={{
-                          border: '0',
-                          background: 'transparent',
-                          padding: 0,
-                          cursor: 'pointer'
-                        }}
+                        $active={selectedAgent === agent.agent}
+                        onClick={() => onSelectAgent?.(agent.agent)}
                       >
-                        <StatusLabel>{item.name}</StatusLabel>
-                        <StatusBar>
-                          <StatusFill $width={width} $color={item.color} />
-                        </StatusBar>
-                        <StatusValue>{formatCurrency(item.value)}</StatusValue>
-                      </StatusRow>
-                    );
-                  })}
-                </StatusList>
-              </SplitGrid>
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>Aging Buckets</h3>
-                </PanelTitleWrap>
-              </PanelHeader>
-
-              <AgingGrid>
-                {analytics.agingData.map((bucket) => (
-                  <AgingCard
-                    key={bucket.label}
-                    type="button"
-                    as="button"
-                    $active={drilldown.type === 'aging' && drilldown.value === agingLabelToKey(bucket.label)}
-                    onClick={() => {
-                      setDrilldown({ type: 'aging', value: agingLabelToKey(bucket.label) });
-                    }}
-                  >
-                    <AgingInfo>
-                      <strong>{bucket.label}</strong>
-                      <span>{bucket.count} records</span>
-                    </AgingInfo>
-                    <AgingAmount>{formatCurrency(bucket.amount)}</AgingAmount>
-                  </AgingCard>
-                ))}
-              </AgingGrid>
-            </Panel>
-
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>Agent Workload Snapshot</h3>
-                </PanelTitleWrap>
-              </PanelHeader>
-
-              <TableWrap>
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Agent</th>
-                      <th style={{ textAlign: 'right' }}>Open</th>
-                      <th style={{ textAlign: 'right' }}>Overdue</th>
-                      <th style={{ textAlign: 'right' }}>Risk %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.agentWorkload.map((item) => (
-                      <tr key={item.agent}>
-                        <td>{item.agent}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatCurrency(item.open)}</td>
-                        <td style={{ textAlign: 'right', color: item.overdue > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 800 }}>
-                          {formatCurrency(item.overdue)}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{item.exposureRate.toFixed(0)}%</td>
-                      </tr>
+                        {agent.agent}
+                      </FilterChip>
                     ))}
-                  </tbody>
-                </Table>
-              </TableWrap>
-            </Panel>
+                  </FilterRow>
 
-            <Panel>
-              <PanelHeader>
-                <PanelTitleWrap>
-                  <h3>{drilldown.type === 'all' ? 'Recommended Actions' : 'Focus Queue'}</h3>
-                </PanelTitleWrap>
-              </PanelHeader>
-
-              {drilldown.type === 'all' ? (
-                <ActionList>
-                  {analytics.actionItems.map((item) => {
-                    const severityMeta = item.severity === 'high'
-                      ? { color: '#ef4444', background: 'rgba(239, 68, 68, 0.15)', label: 'High' }
-                      : item.severity === 'medium'
-                        ? { color: '#f59e0b', background: 'rgba(245, 158, 11, 0.15)', label: 'Medium' }
-                        : { color: '#22c55e', background: 'rgba(34, 197, 94, 0.15)', label: 'Low' };
-
-                    return (
-                      <ActionItem key={item.title}>
-                        <ActionTitle>
-                          <strong>{item.title}</strong>
-                          <SeverityPill $color={severityMeta.color} $background={severityMeta.background}>
-                            {severityMeta.label}
-                          </SeverityPill>
-                        </ActionTitle>
-                        <ActionCopy>{item.body}</ActionCopy>
-                      </ActionItem>
-                    );
-                  })}
-                </ActionList>
+                  <AgentBarVisual data={analytics.agentData} animate={analytics.animateCharts} onSelectAgent={onSelectAgent} />
+                </>
               ) : (
                 <TableWrap>
                   <Table>
@@ -1344,7 +1134,7 @@ export default function ManagerAnalytics({
                       </tr>
                     </thead>
                     <tbody>
-                      {analytics.drilldownAccounts.map((item) => {
+                      {analytics.topAccounts.slice(0, 6).map((item) => {
                         const status = normalizeStatus(item.status);
                         const meta = STATUS_META[status];
                         return (
@@ -1365,10 +1155,159 @@ export default function ManagerAnalytics({
                       })}
                     </tbody>
                   </Table>
-                  {analytics.drilldownAccounts.length === 0 && <TableState>No accounts match the selected detail.</TableState>}
+                  {analytics.topAccounts.length === 0 && <TableState>No portfolio balances available in this selection.</TableState>}
                 </TableWrap>
               )}
             </Panel>
+
+            <Panel>
+              <PanelHeader>
+                <PanelTitleWrap>
+                  <h3>Weekly Open vs Collected</h3>
+                </PanelTitleWrap>
+                <LegendRow>
+                  <LegendPill>
+                    <Dot $color="#f59e0b" />
+                    Open
+                  </LegendPill>
+                  <LegendPill>
+                    <Dot $color="#10b981" />
+                    Collected
+                  </LegendPill>
+                </LegendRow>
+              </PanelHeader>
+
+              {analytics.weekTrendData.length > 1 ? (
+                <AreaChartVisual data={analytics.weekTrendData} animate={analytics.animateCharts} />
+              ) : (
+                <TableState>
+                  {analytics.latestWeek
+                    ? `Current week ${analytics.latestWeek}: ${formatCurrency(analytics.totalOpen)} open and ${formatCurrency(analytics.totalCollected)} collected.`
+                    : 'Not enough weekly history yet to draw a trend.'}
+                </TableState>
+              )}
+            </Panel>
+
+            {isManager && (
+              <Panel>
+                <PanelHeader>
+                  <PanelTitleWrap>
+                    <h3>Priority Accounts</h3>
+                  </PanelTitleWrap>
+                </PanelHeader>
+
+                <TableWrap>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Company</th>
+                        <th>Agent</th>
+                        <th>Status</th>
+                        <th style={{ textAlign: 'right' }}>Balance</th>
+                        <th style={{ textAlign: 'right' }}>Days late</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.topAccounts.map((item) => {
+                        const status = normalizeStatus(item.status);
+                        const meta = STATUS_META[status];
+                        return (
+                          <tr key={item.id}>
+                            <td>
+                              <CompanyButton type="button" onClick={() => onOpenCompanyProfile?.(item.company || item.clientName)}>
+                                {item.company || item.clientName}
+                              </CompanyButton>
+                            </td>
+                            <td>
+                              <AgentMeta>
+                                <UserRound size={14} />
+                                {item.agentId || 'Unassigned'}
+                              </AgentMeta>
+                            </td>
+                            <td>
+                              <SeverityPill
+                                $color={meta.color}
+                                $background={`${meta.color}22`}
+                              >
+                                {meta.label}
+                              </SeverityPill>
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatCurrency(item.amount)}</td>
+                            <td style={{ textAlign: 'right', color: item.daysPastDue > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 700 }}>
+                              {item.daysPastDue > 0 ? item.daysPastDue : '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </TableWrap>
+              </Panel>
+            )}
+          </Column>
+
+          <Column>
+            <Panel>
+              <PanelHeader>
+                <PanelTitleWrap>
+                  <h3>Status Mix</h3>
+                </PanelTitleWrap>
+              </PanelHeader>
+
+              <SplitGrid>
+                <StatusPieVisual data={analytics.statusChartData} animate={analytics.animateCharts} />
+                <StatusList>
+                  {analytics.statusChartData.map((item) => {
+                    const total = analytics.statusChartData.reduce((sum, entry) => sum + entry.value, 0);
+                    const width = total > 0 ? (item.value / total) * 100 : 0;
+                    return (
+                      <StatusRow key={item.key}>
+                        <StatusLabel>{item.name}</StatusLabel>
+                        <StatusBar>
+                          <StatusFill $width={width} $color={item.color} />
+                        </StatusBar>
+                        <StatusValue>{formatCurrency(item.value)}</StatusValue>
+                      </StatusRow>
+                    );
+                  })}
+                </StatusList>
+              </SplitGrid>
+            </Panel>
+
+            {isManager && (
+              <Panel>
+                <PanelHeader>
+                  <PanelTitleWrap>
+                    <h3>Agent Workload Snapshot</h3>
+                  </PanelTitleWrap>
+                </PanelHeader>
+
+                <TableWrap>
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Agent</th>
+                        <th style={{ textAlign: 'right' }}>Open</th>
+                        <th style={{ textAlign: 'right' }}>Overdue</th>
+                        <th style={{ textAlign: 'right' }}>Risk %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.agentWorkload.map((item) => (
+                        <tr key={item.agent}>
+                          <td>{item.agent}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatCurrency(item.open)}</td>
+                          <td style={{ textAlign: 'right', color: item.overdue > 0 ? 'var(--danger)' : 'var(--text-muted)', fontWeight: 800 }}>
+                            {formatCurrency(item.overdue)}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{item.exposureRate.toFixed(0)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </TableWrap>
+              </Panel>
+            )}
           </Column>
         </MainGrid>
       </AnalyticsShell>
