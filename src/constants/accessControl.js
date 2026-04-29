@@ -99,7 +99,7 @@ export const resolveAccessProfile = (user) => {
     canEditInvoiceDetails: isManager,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
-    canViewSupportTracker: isManager,
+    canViewSupportTracker: true,
     canViewInvoiceEntry: isManager,
     canViewActivityLogs: canViewActivityLogsFallback(email),
     hasScopedPortfolio: isManager ? true : agentScope.length > 0

@@ -65,6 +65,94 @@ const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
     return entries;
   }, []);
 
+const TRACKER_FOLLOW_UP_STORAGE_KEY = 'debors-support-followups-v1';
+
+const normalizeTrackerKeyPart = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+
+const buildTrackerRowId = (row, index = 0) => {
+  if (row?.id) return String(row.id);
+
+  const parts = [
+    row?.date,
+    row?.company || row?.customer || row?.clientName,
+    row?.task,
+    row?.agent || row?.agentId
+  ]
+    .map(normalizeTrackerKeyPart)
+    .filter(Boolean);
+
+  return parts.length > 0 ? `tracker-${parts.join('-')}` : `tracker-row-${index}`;
+};
+
+const getUserAvatarSrc = (email) => {
+  const normalizedEmail = String(email || '').toLowerCase();
+
+  if (normalizedEmail.includes('andres')) return '/avatar.png';
+  if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+
+  return null;
+};
+
+const sanitizeTrackerComments = (comments) =>
+  Array.isArray(comments)
+    ? comments
+        .filter(Boolean)
+        .map((comment, index) => ({
+          id: comment?.id || `comment-${index}`,
+          author: String(comment?.author || 'Internal user').trim(),
+          text: String(comment?.text || '').trim(),
+          createdAt: comment?.createdAt || new Date().toISOString()
+        }))
+        .filter((comment) => comment.text)
+    : [];
+
+const normalizeTrackerRows = (rows, followUpsById = {}) =>
+  (Array.isArray(rows) ? rows : []).map((row, index) => {
+    const id = buildTrackerRowId(row, index);
+    const followUp = followUpsById[id] || null;
+    const comments = sanitizeTrackerComments(followUp?.comments ?? row?.comments);
+
+    return {
+      ...row,
+      id,
+      status: followUp?.status || row?.status || 'Follow-up',
+      owner: String(followUp?.owner ?? row?.owner ?? '').trim(),
+      nextAction: String(followUp?.nextAction ?? row?.nextAction ?? '').trim(),
+      followUpDue: String(followUp?.followUpDue ?? row?.followUpDue ?? '').trim(),
+      comments,
+      lastComment: comments.length > 0 ? comments[comments.length - 1] : row?.lastComment || null
+    };
+  });
+
+const readTrackerFollowUps = () => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(TRACKER_FOLLOW_UP_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.error('[Support Tracker] Failed to restore saved follow-ups:', error);
+    return {};
+  }
+};
+
+const writeTrackerFollowUps = (followUpsById) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(TRACKER_FOLLOW_UP_STORAGE_KEY, JSON.stringify(followUpsById));
+  } catch (error) {
+    console.error('[Support Tracker] Failed to persist follow-ups:', error);
+  }
+};
+
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
@@ -791,17 +879,25 @@ function App() {
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
   const [manualEdits, setManualEdits] = useState({});
+  const [, setTrackerFollowUps] = useState({});
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
+  const trackerFollowUpsRef = useRef({});
   const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const savedFollowUps = readTrackerFollowUps();
+    setTrackerFollowUps(savedFollowUps);
+    trackerFollowUpsRef.current = savedFollowUps;
   }, []);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -824,13 +920,26 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
-      if (_event === 'SIGNED_IN' && session?.user) {
+
+      if (_event === 'SIGNED_OUT' || !session?.user) {
+        loggedSessionRef.current = '';
+        setActiveView('overview');
+        setCurrentDebtor(null);
+        setActiveCompany(null);
+        return;
+      }
+
+      if (_event === 'SIGNED_IN') {
         const sessionKey = `${session.user.id}:${session.access_token?.slice(0, 16) || 'signed-in'}`;
         if (loggedSessionRef.current !== sessionKey && !canViewActivityLogs(session.user)) {
           loggedSessionRef.current = sessionKey;
-          const result = await logLoginActivity(session.user);
-          if (result?.success && result.logged > 0) {
-            setActivityLogRefreshKey((prev) => prev + 1);
+          try {
+            const result = await logLoginActivity(session.user);
+            if (result?.success && result.logged > 0) {
+              setActivityLogRefreshKey((prev) => prev + 1);
+            }
+          } catch (error) {
+            console.error('[Activity Logs] Login logging failed:', error);
           }
         }
       }
@@ -946,7 +1055,7 @@ function App() {
       setClientsByAgent(csData || []);
 
       if (trackerLogs) {
-        setTrackerData(trackerLogs);
+        setTrackerData(normalizeTrackerRows(trackerLogs, trackerFollowUpsRef.current));
       }
 
       if (mergedData && mergedData.length > 0) {
@@ -1015,6 +1124,11 @@ function App() {
     return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
   }, [clientsByAgent, accessProfile]);
 
+  const accessibleTrackerData = React.useMemo(() => {
+    if (accessProfile.canViewAllData) return trackerData;
+    return trackerData.filter((item) => userCanAccessAgent(accessProfile, item.agent || item.agentId));
+  }, [trackerData, accessProfile]);
+
   useEffect(() => {
     if (selectedAgent === 'all') return;
     const exists = accessibleData.some((item) => String(item.agentId || '').trim() === selectedAgent);
@@ -1048,6 +1162,60 @@ function App() {
       setStatusScope('open');
     }
   }, [accessProfile, accessibleData, selectedAgent, statusScope]);
+
+  const handleSaveFollowUp = useCallback(async (payload) => {
+    if (!payload?.id) return;
+
+    const normalizedComments = sanitizeTrackerComments(payload.comments);
+    const normalizedFollowUp = {
+      id: String(payload.id),
+      status: String(payload.status || 'Follow-up').trim(),
+      owner: String(payload.owner || '').trim(),
+      nextAction: String(payload.nextAction || '').trim(),
+      followUpDue: String(payload.followUpDue || '').trim(),
+      comments: normalizedComments,
+      lastComment: normalizedComments.length > 0 ? normalizedComments[normalizedComments.length - 1] : null
+    };
+
+    setTrackerFollowUps((prev) => {
+      const next = {
+        ...prev,
+        [normalizedFollowUp.id]: normalizedFollowUp
+      };
+      trackerFollowUpsRef.current = next;
+      writeTrackerFollowUps(next);
+      return next;
+    });
+
+    setTrackerData((prev) =>
+      normalizeTrackerRows(
+        prev.map((item) =>
+          item.id === normalizedFollowUp.id
+            ? {
+                ...item,
+                ...normalizedFollowUp
+              }
+            : item
+        ),
+        trackerFollowUpsRef.current
+      )
+    );
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    loggedSessionRef.current = '';
+    setActiveView('overview');
+    setCurrentDebtor(null);
+    setActiveCompany(null);
+
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error(error.message || 'Failed to log out');
+      return;
+    }
+
+    setUser(null);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1476,7 +1644,7 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
-    const scopedRows = data.filter((item) => {
+    const scopedRows = accessibleData.filter((item) => {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
@@ -1619,7 +1787,13 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={trackerData} />
+          <SupportTracker
+            data={accessibleTrackerData}
+            canManageEntries={accessProfile.canEditData}
+            canComment={Boolean(user)}
+            currentUserEmail={user?.email || ''}
+            onSaveFollowUp={handleSaveFollowUp}
+          />
         </ContentScroll>
       )}
 
@@ -1707,9 +1881,9 @@ function App() {
           <TopbarLeft>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <UserAvatar>
-                {user?.email?.toLowerCase().includes('andres') ? (
+                {getUserAvatarSrc(user?.email) ? (
                   <img 
-                    src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                    src={getUserAvatarSrc(user?.email)}
                     alt="User" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
                   />
@@ -1743,7 +1917,7 @@ function App() {
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <span>Sync</span>
               </SyncButton>
-              <LogoutButton onClick={() => supabase.auth.signOut()}>
+              <LogoutButton onClick={handleLogout}>
                 Logout
               </LogoutButton>
             </ActionButtons>
