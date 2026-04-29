@@ -1221,10 +1221,11 @@ function App() {
         const next = { ...prev };
         const changed = [];
         rowsToDelete.forEach((d) => {
-          const edit = { ...(next[d.id] || {}), id: d.id, __deleted: true };
+          const edit = { ...(next[d.id] || {}), ...d, id: d.id, __deleted: true };
           next[d.id] = edit;
           changed.push(edit);
         });
+        manualEditsRef.current = next;
         persistEditedRows(changed);
         return next;
       });
@@ -1240,6 +1241,7 @@ function App() {
           ...prev,
           [id]: edit
         };
+        manualEditsRef.current = next;
         persistEditedRows([edit]);
         return next;
       });
@@ -1273,6 +1275,8 @@ function App() {
         last_no_usage_date: row.lastNoUsageDate || null,
         billing_cycle: row.billingCycle || null,
         invoice_number: row.invoiceNumber || null,
+        is_new: Boolean(row.__isNew),
+        is_deleted: Boolean(row.__deleted),
         updated_at: new Date().toISOString(),
         notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
       }));
