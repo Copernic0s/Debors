@@ -416,19 +416,12 @@ export default function DebtorsList({
   const filteredData = sortedData.filter(item => {
     if (item.invoiceNumber === 'Marked as Sent') return false;
 
-    const status = String(item.status || 'pending').toLowerCase();
-    const isPendingOrOverdue = status === 'pending' || status === 'overdue';
-
     const companyName = String(item.company || item.clientName || '').toLowerCase();
     const agentName = String(item.agentId || '').toLowerCase();
     
     const matchesSearch = companyName.includes(searchTerm.toLowerCase()) || agentName.includes(searchTerm.toLowerCase());
 
-    if (searchTerm.trim() !== '') {
-      return matchesSearch;
-    }
-
-    return isPendingOrOverdue;
+    return searchTerm.trim() !== '' ? matchesSearch : true;
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
