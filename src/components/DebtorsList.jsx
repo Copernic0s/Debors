@@ -627,7 +627,7 @@ export default function DebtorsList({
         onCancel={() => setDeleteDialog({ isOpen: false, item: null })}
         onConfirm={() => {
           if (deleteDialog.item) {
-            onDelete(deleteDialog.item.id);
+            onDelete(deleteDialog.item);
           }
           setDeleteDialog({ isOpen: false, item: null });
         }}
