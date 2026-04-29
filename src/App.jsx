@@ -655,6 +655,12 @@ const normalizeWeekLabel = (label) => {
   return raw.replace(/[^a-z0-9]/g, '');
 };
 
+const toComparableDate = (value) => {
+  if (!value) return null;
+  const parsed = new Date(String(value).includes('T') ? value : `${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const normalizeMatchKey = (value) => {
   return String(value ?? '')
     .toLowerCase()
@@ -1373,16 +1379,30 @@ function App() {
     }
   };
 
-  const handleDeleteDebtor = (id) => {
-    if (String(id).startsWith('CMP-')) {
-      const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
+  const handleDeleteDebtor = (target) => {
+    const targetRecord = target && typeof target === 'object' ? target : null;
+    const targetId = targetRecord?.latestId || targetRecord?.id || target;
+    const targetInvKey = String(
+      targetRecord?.invoiceNumber || targetRecord?.weekLabel || targetId || ''
+    )
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
 
-      const rowsToDelete = data.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
-      );
+    if (String(targetRecord?.id || targetId).startsWith('CMP-')) {
+      const targetCompany = String(targetRecord?.company || targetRecord?.clientName || '').trim().toLowerCase();
+
+      const rowsToDelete = data.filter((d) => {
+        const sameCompany = String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany;
+        const rowInvKey = String(d.invoiceNumber || d.weekLabel || d.id || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '');
+        return sameCompany && rowInvKey === targetInvKey;
+      });
 
       setData((prev) => prev.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
+        !rowsToDelete.some((row) => row.id === d.id)
       ));
 
       setManualEdits((prev) => {
@@ -1398,16 +1418,16 @@ function App() {
         return next;
       });
     } else {
-      setData((prev) => prev.filter((d) => d.id !== id));
+      setData((prev) => prev.filter((d) => d.id !== targetId));
       setManualEdits((prev) => {
         const edit = {
-          ...(prev[id] || {}),
-          id,
+          ...(prev[targetId] || targetRecord || {}),
+          id: targetId,
           __deleted: true
         };
         const next = {
           ...prev,
-          [id]: edit
+          [targetId]: edit
         };
         manualEditsRef.current = next;
         persistEditedRows([edit]);
@@ -1609,14 +1629,43 @@ function App() {
     });
   }, [accessibleData, lastTick]);
 
+  const currentCycleWeekLabel = React.useMemo(() => {
+    const latestByWeek = new Map();
+
+    hydratedWithSmartStatus.forEach((row) => {
+      const status = String(row.status || '').toLowerCase();
+      const hasInvoice = Boolean(String(row.invoiceNumber || '').trim()) && row.invoiceNumber !== 'Marked as Sent';
+      const weekLabel = String(row.weekLabel || '').trim();
+      if (!weekLabel || !hasInvoice || !['pending', 'overdue', 'paid'].includes(status)) return;
+
+      const candidateDate =
+        toComparableDate(row.dueDate) ||
+        toComparableDate(row.lastInvoicedDate) ||
+        toComparableDate(row.updated_at);
+
+      const current = latestByWeek.get(weekLabel);
+      if (!current || (candidateDate && candidateDate > current)) {
+        latestByWeek.set(weekLabel, candidateDate || new Date(0));
+      }
+    });
+
+    const sortedWeeks = Array.from(latestByWeek.entries()).sort((a, b) => b[1] - a[1]);
+    return sortedWeeks[0]?.[0] || '';
+  }, [hydratedWithSmartStatus]);
+
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+    const weekLabel = String(item.weekLabel || '').trim();
+    const matchesWeek = selectedWeek === 'all'
+      ? (statusScope === 'all' ? (!currentCycleWeekLabel || weekLabel === currentCycleWeekLabel) : true)
+      : weekLabel === selectedWeek;
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
-    const matchesStatus = statusScope === 'all' || isOpen;
+    const matchesStatus = statusScope === 'all'
+      ? ['pending', 'overdue', 'paid'].includes(status)
+      : isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope]);
+  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
