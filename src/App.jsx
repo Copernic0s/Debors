@@ -16,7 +16,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
 import './index.css';
@@ -889,6 +889,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
+  const matchesSelectedAgent = useCallback(
+    (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
+    [selectedAgent]
+  );
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
   const trackerFollowUpsRef = useRef({});
@@ -1137,11 +1141,11 @@ function App() {
 
   useEffect(() => {
     if (selectedAgent === 'all') return;
-    const exists = accessibleData.some((item) => String(item.agentId || '').trim() === selectedAgent);
+    const exists = accessibleData.some((item) => matchesSelectedAgent(item.agentId));
     if (!exists) {
       setSelectedAgent('all');
     }
-  }, [selectedAgent, accessibleData]);
+  }, [selectedAgent, accessibleData, matchesSelectedAgent]);
 
   useEffect(() => {
     if (selectedWeek === 'all') return;
@@ -1160,7 +1164,7 @@ function App() {
 
     if (scopedAgents.length === 0) return;
 
-    if (!scopedAgents.includes(selectedAgent)) {
+    if (!scopedAgents.some((agentName) => agentMatchesScopeValue(agentName, selectedAgent))) {
       setSelectedAgent(scopedAgents[0]);
     }
 
@@ -1213,14 +1217,12 @@ function App() {
     setActiveView('overview');
     setCurrentDebtor(null);
     setActiveCompany(null);
+    setUser(null);
 
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) {
       toast.error(error.message || 'Failed to log out');
-      return;
     }
-
-    setUser(null);
   }, []);
 
   useEffect(() => {
@@ -1248,7 +1250,7 @@ function App() {
             const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
             if (!sameCompany) return item;
 
-            const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+            const inAgentScope = matchesSelectedAgent(item.agentId);
             const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
             if (!inAgentScope || !inWeekScope) return item;
 
@@ -1630,12 +1632,12 @@ function App() {
   }, [accessibleData, lastTick]);
 
   const analyticsInvoiceRows = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesAgent = matchesSelectedAgent(item.agentId);
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
     const status = String(item.status || '').toLowerCase();
     const hasInvoice = Boolean(String(item.invoiceNumber || '').trim()) && item.invoiceNumber !== 'Marked as Sent';
     return matchesAgent && matchesWeek && hasInvoice && ['pending', 'overdue', 'paid'].includes(status);
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek]);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek]);
 
   const analyticsAggregatedRows = React.useMemo(() => aggregateByCompany(analyticsInvoiceRows), [analyticsInvoiceRows]);
   const currentCycleWeekLabel = React.useMemo(() => {
@@ -1663,7 +1665,7 @@ function App() {
   }, [hydratedWithSmartStatus]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesAgent = matchesSelectedAgent(item.agentId);
     const weekLabel = String(item.weekLabel || '').trim();
     const matchesWeek = selectedWeek === 'all'
       ? (statusScope === 'all' ? (!currentCycleWeekLabel || weekLabel === currentCycleWeekLabel) : true)
@@ -1674,7 +1676,7 @@ function App() {
       ? ['pending', 'overdue', 'paid'].includes(status)
       : isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
@@ -1710,7 +1712,7 @@ function App() {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
-      const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      const byAgent = matchesSelectedAgent(item.agentId);
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
       return byAgent && byWeek;
     });
@@ -1757,7 +1759,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
+  }, [activeCompany, accessibleData, matchesSelectedAgent, selectedWeek]);
 
 
 
