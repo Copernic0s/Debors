@@ -1596,6 +1596,16 @@ function App() {
     });
   }, [accessibleData, lastTick]);
 
+  const analyticsInvoiceRows = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
+    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+    const status = String(item.status || '').toLowerCase();
+    const hasInvoice = Boolean(String(item.invoiceNumber || '').trim()) && item.invoiceNumber !== 'Marked as Sent';
+    return matchesAgent && matchesWeek && hasInvoice && ['pending', 'overdue', 'paid'].includes(status);
+  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek]);
+
+  const analyticsAggregatedRows = React.useMemo(() => aggregateByCompany(analyticsInvoiceRows), [analyticsInvoiceRows]);
+
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
     const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
@@ -1768,11 +1778,12 @@ function App() {
 
       {activeView === 'analytics' && (
         <ManagerAnalytics
-          invoiceRows={scopedInvoiceData}
-          aggregatedRows={agentData}
+          invoiceRows={analyticsInvoiceRows}
+          aggregatedRows={analyticsAggregatedRows}
           selectedAgent={selectedAgent}
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
+          isManager={accessProfile.canViewAllData}
         />
       )}
 
