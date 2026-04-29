@@ -30,13 +30,7 @@ const parseAgentScopeMap = (rawValue) => {
   return map;
 };
 
-const normalizeScopeValue = (value) =>
-  String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, ' ')
-    .trim()
-    .toLowerCase();
+const normalizeScopeValue = (value) => String(value || '').trim().toLowerCase();
 
 const hasPrivilegedIdentityFallback = (email) => {
   const localPart = String(email || '').split('@')[0] || '';
@@ -130,17 +124,7 @@ export const resolveAccessProfile = (user) => {
 
 export const userCanAccessAgent = (accessProfile, agentId) => {
   if (accessProfile?.canViewAllData) return true;
-  const normalizedAgentId = normalizeScopeValue(agentId);
-  if (!normalizedAgentId) return false;
-
-  return accessProfile?.agentScope?.some((scopeValue) => {
-    const normalizedScope = normalizeScopeValue(scopeValue);
-    return (
-      normalizedScope === normalizedAgentId ||
-      normalizedAgentId.includes(normalizedScope) ||
-      normalizedScope.includes(normalizedAgentId)
-    );
-  });
+  return accessProfile?.agentScope?.includes(normalizeScopeValue(agentId));
 };
 
 export { MANAGER_ROLE, AGENT_ROLE };
