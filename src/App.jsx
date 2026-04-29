@@ -90,6 +90,15 @@ const buildTrackerRowId = (row, index = 0) => {
   return parts.length > 0 ? `tracker-${parts.join('-')}` : `tracker-row-${index}`;
 };
 
+const getUserAvatarSrc = (email) => {
+  const normalizedEmail = String(email || '').toLowerCase();
+
+  if (normalizedEmail.includes('andres')) return '/avatar.png';
+  if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+
+  return null;
+};
+
 const sanitizeTrackerComments = (comments) =>
   Array.isArray(comments)
     ? comments
@@ -1872,9 +1881,9 @@ function App() {
           <TopbarLeft>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <UserAvatar>
-                {user?.email?.toLowerCase().includes('andres') ? (
+                {getUserAvatarSrc(user?.email) ? (
                   <img 
-                    src="https://raw.githubusercontent.com/Copernic0s/Debors/main/public/avatar.png" 
+                    src={getUserAvatarSrc(user?.email)}
                     alt="User" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
                   />
