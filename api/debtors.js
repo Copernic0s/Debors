@@ -23,7 +23,7 @@ const normalizeText = (value, fallback = '') => {
 const normalizeMatchKey = (value) =>
   String(value ?? '')
     .toLowerCase()
-    .replace(/\s+(llc|inc|corp|co|limited|ltd|transportation|logistics|express)\b/g, '')
+    .replace(/\b(llc|inc|corp|co|limited|ltd)\b/g, '')
     .replace(/[^a-z0-9]/g, '')
     .trim();
 
