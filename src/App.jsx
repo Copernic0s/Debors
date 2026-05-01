@@ -11,6 +11,7 @@ import Login from './components/Login';
 import SupportTracker from './components/SupportTracker';
 import ActivityLogs from './components/ActivityLogs';
 import InvoiceEntry from './components/InvoiceEntry';
+import PortfolioCompanies from './components/PortfolioCompanies';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
@@ -1774,6 +1775,9 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+        {!accessProfile.canViewAllData && (
+          <ViewButton type="button" $active={activeView === 'portfolio'} onClick={() => setActiveView('portfolio')}>Portfolio Companies</ViewButton>
+        )}
         {accessProfile.canViewSupportTracker && (
           <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
         )}
@@ -1847,6 +1851,14 @@ function App() {
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
           isManager={accessProfile.canViewAllData}
+        />
+      )}
+
+      {activeView === 'portfolio' && !accessProfile.canViewAllData && (
+        <PortfolioCompanies
+          companies={accessibleClientsByAgent}
+          debtRows={accessibleData}
+          currentUserEmail={user?.email || ''}
         />
       )}
 
