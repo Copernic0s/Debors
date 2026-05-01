@@ -381,7 +381,7 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
     const merged = mergePortfolioRows(baseCompanies, overrides);
     return merged.map((item) => {
       const relatedDebtRows = (Array.isArray(debtRows) ? debtRows : []).filter(
-        (row) => normalizeCompanyKey(row.company || row.clientName) === normalizeCompanyKey(item.company)
+        (row) => normalizeCompanyKey(row.company || row.clientName) === normalizeCompanyKey(item.company) && row.invoiceNumber !== 'Marked as Sent'
       );
 
       const strongestStatus = relatedDebtRows.length > 0 ? getStrongestStatus(relatedDebtRows) : 'no_invoice';
