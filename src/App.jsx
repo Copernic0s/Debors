@@ -1161,14 +1161,10 @@ function App() {
 
     if (scopedAgents.length === 0) return;
 
-    if (!scopedAgents.includes(selectedAgent)) {
+    if (!scopedAgents.includes(selectedAgent) && selectedAgent !== 'all') {
       setSelectedAgent(scopedAgents[0]);
     }
-
-    if (statusScope !== 'open') {
-      setStatusScope('open');
-    }
-  }, [accessProfile, accessibleData, selectedAgent, statusScope]);
+  }, [accessProfile, accessibleData, selectedAgent]);
 
   const handleSaveFollowUp = useCallback(async (payload) => {
     if (!payload?.id) return;
@@ -1670,7 +1666,22 @@ function App() {
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
-  const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
+  const metrics = React.useMemo(() => {
+    const baseMetrics = calculateMetrics(agentData);
+    
+    const clients = new Set();
+    accessibleData.forEach(item => {
+      const agentMatch = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (agentMatch && (item.company || item.clientName)) {
+        clients.add(String(item.company || item.clientName).trim().toLowerCase());
+      }
+    });
+
+    return {
+      ...baseMetrics,
+      activeClients: clients.size
+    };
+  }, [agentData, accessibleData, selectedAgent]);
 
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
@@ -1789,9 +1800,8 @@ function App() {
               <AgentSelect
                 value={selectedAgent}
                 onChange={(e) => setSelectedAgent(e.target.value)}
-                disabled={!accessProfile.canViewAllData}
               >
-                {accessProfile.canViewAllData && <option value="all">All agents</option>}
+                <option value="all">All agents</option>
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
@@ -1800,20 +1810,12 @@ function App() {
               <AgentSelect
                 value={statusScope}
                 onChange={(e) => setStatusScope(e.target.value)}
-                disabled={!accessProfile.canViewAllData}
               >
-                {accessProfile.canViewAllData && <option value="all">All records</option>}
+                <option value="all">All records</option>
                 <option value="open">Open balances only</option>
               </AgentSelect>
 
             </FiltersRow>
-
-            <AgentSnapshot>
-              <Users size={16} color="var(--brand)" />
-              <div>
-                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-              </div>
-            </AgentSnapshot>
           </AgentToolbar>
 
           <Dashboard metrics={metrics} />
