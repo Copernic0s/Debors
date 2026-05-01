@@ -1673,7 +1673,7 @@ function App() {
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all'
-      ? ['pending', 'overdue', 'paid'].includes(status)
+      ? ['pending', 'overdue', 'paid', 'no_invoice'].includes(status)
       : isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
   }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
