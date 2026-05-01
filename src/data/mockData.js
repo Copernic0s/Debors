@@ -108,6 +108,7 @@ export const calculateMetrics = (data) => {
   const activeClients = new Set();
 
   data.forEach((item) => {
+    if (item.invoiceNumber === 'Marked as Sent') return;
     const amount = normalizeAmount(item.amount);
     const status = String(item.status || 'pending').toLowerCase();
 

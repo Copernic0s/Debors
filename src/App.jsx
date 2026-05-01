@@ -1683,7 +1683,7 @@ function App() {
     const clients = new Set();
     accessibleData.forEach(item => {
       const agentMatch = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      if (agentMatch && (item.company || item.clientName)) {
+      if (agentMatch && (item.company || item.clientName) && item.invoiceNumber !== 'Marked as Sent') {
         clients.add(String(item.company || item.clientName).trim().toLowerCase());
       }
     });
