@@ -357,6 +357,13 @@ export default function DebtorsList({
   const [pendingAmounts, setPendingAmounts] = useState({});
   const [page, setPage] = useState(1);
   const pageSize = 20;
+  const statusPriority = {
+    overdue: 0,
+    pending: 1,
+    paid: 2,
+    no_invoice: 3,
+    inactive: 4
+  };
 
   const commitQuickAmount = (item) => {
     if (readOnly) return;
@@ -378,13 +385,23 @@ export default function DebtorsList({
     }
     setSortConfig({ key, direction });
   };
+  const compareStatusPriority = (a, b) => {
+    const aPriority = statusPriority[String(a.status || '').toLowerCase()] ?? 99;
+    const bPriority = statusPriority[String(b.status || '').toLowerCase()] ?? 99;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return String(a.company || a.clientName || '').localeCompare(String(b.company || b.clientName || ''));
+  };
 
   const sortedData = [...data].sort((a, b) => {
+    const statusPriorityOrder = compareStatusPriority(a, b);
+    if (statusPriorityOrder !== 0 && sortConfig.key !== 'status') {
+      return statusPriorityOrder;
+    }
+
     if (sortConfig.key === 'status') {
-      const aStatus = String(a.status || '');
-      const bStatus = String(b.status || '');
-      if (aStatus < bStatus) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aStatus > bStatus) return sortConfig.direction === 'asc' ? 1 : -1;
+      if (statusPriorityOrder !== 0) {
+        return sortConfig.direction === 'asc' ? statusPriorityOrder : statusPriorityOrder * -1;
+      }
       return 0;
     }
 
@@ -524,7 +541,7 @@ export default function DebtorsList({
                     <option value="pending">Pending</option>
                     <option value="paid">Paid</option>
                     <option value="overdue">Overdue</option>
-                    <option value="no_invoice">No Invoice</option>
+                    <option value="no_invoice">Awaiting invoice</option>
                     <option value="inactive">Inactive</option>
                   </StatusSelect>
                 </Td>
