@@ -508,9 +508,6 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
               <Th>Company</Th>
               <Th>Sales Rep</Th>
               <Th>Billing Cycle</Th>
-              <Th>Roster Status</Th>
-              <Th>Latest Week</Th>
-              <Th>Source</Th>
               <Th></Th>
             </tr>
           </thead>
@@ -527,9 +524,6 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
                   </Td>
                   <Td>{item.agentId || 'Unassigned'}</Td>
                   <Td>{normalizeBillingCycle(item.billingCycle)}</Td>
-                  <Td><StatusPill $bg={meta.bg} $color={meta.color}>{meta.label}</StatusPill></Td>
-                  <Td>{item.latestWeek || '--'}</Td>
-                  <Td><SourcePill $manual={item.source === 'manual'}>{item.source === 'manual' ? 'Manual' : 'Zoho'}</SourcePill></Td>
                   <Td>
                     <EditButton type="button" onClick={() => openEdit(item)} title="Edit company">
                       <Pencil size={14} />
@@ -539,7 +533,7 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
               );
             }) : (
               <tr>
-                <td colSpan="7">
+                <td colSpan="4">
                   <EmptyState>
                     <Building2 size={56} />
                     <h3 style={{ color: 'var(--text-main)' }}>No companies found</h3>
