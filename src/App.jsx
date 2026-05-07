@@ -96,6 +96,7 @@ const getUserAvatarSrc = (email) => {
 
   if (normalizedEmail.includes('andres')) return '/avatar.png';
   if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+  if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
 
   return null;
 };
