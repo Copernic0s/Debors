@@ -1137,14 +1137,6 @@ function App() {
   }, [trackerData, accessProfile]);
 
   useEffect(() => {
-    if (selectedAgent === 'all') return;
-    const exists = accessibleData.some((item) => String(item.agentId || '').trim() === selectedAgent);
-    if (!exists) {
-      setSelectedAgent('all');
-    }
-  }, [selectedAgent, accessibleData]);
-
-  useEffect(() => {
     if (selectedWeek === 'all') return;
     const exists = accessibleData.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
     if (!exists) {
@@ -1607,7 +1599,33 @@ function App() {
 
 
   const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => {
+    const rosterAgents = Array.from(
+      new Set(
+        accessibleClientsByAgent
+          .map((item) => String(item.agentId || '').trim())
+          .filter(Boolean)
+      )
+    ).sort();
+
+    if (rosterAgents.length > 0) return rosterAgents;
+
+    return Array.from(
+      new Set(
+        accessibleData
+          .map((item) => String(item.agentId || '').trim())
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [accessibleClientsByAgent, accessibleData]);
+
+  useEffect(() => {
+    if (selectedAgent === 'all') return;
+    const exists = agentOptions.includes(selectedAgent);
+    if (!exists) {
+      setSelectedAgent(accessProfile.canViewAllData ? 'all' : (agentOptions[0] || 'all'));
+    }
+  }, [selectedAgent, agentOptions, accessProfile]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
