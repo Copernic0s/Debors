@@ -97,14 +97,8 @@ const TitleBlock = styled.div`
   h2 {
     font-size: 1.875rem;
     font-weight: 800;
-    margin: 0 0 0.35rem;
-    color: var(--text-main);
-  }
-
-  p {
     margin: 0;
-    color: var(--text-muted);
-    font-size: 0.92rem;
+    color: var(--text-main);
   }
 `;
 
@@ -280,6 +274,41 @@ const EmptyState = styled.div`
   color: var(--text-muted);
 `;
 
+const FooterBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  gap: 1rem;
+`;
+
+const Pager = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+`;
+
+const PagerButton = styled.button`
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--text-main);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
 const Overlay = styled.div`
   position: fixed;
   inset: 0;
@@ -355,6 +384,8 @@ const GhostButton = styled.button`
 
 export default function PortfolioCompanies({ companies, debtRows, currentUserEmail }) {
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
   const [overrides, setOverrides] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -381,7 +412,7 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
     const merged = mergePortfolioRows(baseCompanies, overrides);
     return merged.map((item) => {
       const relatedDebtRows = (Array.isArray(debtRows) ? debtRows : []).filter(
-        (row) => normalizeCompanyKey(row.company || row.clientName) === normalizeCompanyKey(item.company)
+        (row) => normalizeCompanyKey(row.company || row.clientName) === normalizeCompanyKey(item.company) && row.invoiceNumber !== 'Marked as Sent'
       );
 
       const strongestStatus = relatedDebtRows.length > 0 ? getStrongestStatus(relatedDebtRows) : 'no_invoice';
@@ -417,6 +448,10 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
       paid: rows.filter((item) => item.rosterStatus === 'paid').length
     };
   }, [rows]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePage = Math.min(page, totalPages) || 1;
+  const paginatedRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const openCreate = () => {
     setDraft({
@@ -475,7 +510,6 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
       <Header>
         <TitleBlock>
           <h2>Portfolio Companies</h2>
-          <p>Base roster for validating assigned companies beyond active invoices.</p>
         </TitleBlock>
         <HeaderActions>
           <SearchBox>
@@ -483,7 +517,10 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
             <input
               type="text"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search company or cycle..."
             />
           </SearchBox>
@@ -508,14 +545,11 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
               <Th>Company</Th>
               <Th>Sales Rep</Th>
               <Th>Billing Cycle</Th>
-              <Th>Roster Status</Th>
-              <Th>Latest Week</Th>
-              <Th>Source</Th>
               <Th></Th>
             </tr>
           </thead>
           <tbody>
-            {filteredRows.length > 0 ? filteredRows.map((item) => {
+            {paginatedRows.length > 0 ? paginatedRows.map((item) => {
               const meta = getStatusMeta(item.rosterStatus);
               return (
                 <tr key={item.id}>
@@ -527,9 +561,6 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
                   </Td>
                   <Td>{item.agentId || 'Unassigned'}</Td>
                   <Td>{normalizeBillingCycle(item.billingCycle)}</Td>
-                  <Td><StatusPill $bg={meta.bg} $color={meta.color}>{meta.label}</StatusPill></Td>
-                  <Td>{item.latestWeek || '--'}</Td>
-                  <Td><SourcePill $manual={item.source === 'manual'}>{item.source === 'manual' ? 'Manual' : 'Zoho'}</SourcePill></Td>
                   <Td>
                     <EditButton type="button" onClick={() => openEdit(item)} title="Edit company">
                       <Pencil size={14} />
@@ -539,7 +570,7 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
               );
             }) : (
               <tr>
-                <td colSpan="7">
+                <td colSpan="4">
                   <EmptyState>
                     <Building2 size={56} />
                     <h3 style={{ color: 'var(--text-main)' }}>No companies found</h3>
@@ -549,6 +580,16 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
             )}
           </tbody>
         </Table>
+        <FooterBar>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+            Showing {(safePage - 1) * pageSize + (paginatedRows.length ? 1 : 0)}-{(safePage - 1) * pageSize + paginatedRows.length} of {filteredRows.length}
+          </span>
+          <Pager>
+            <PagerButton type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</PagerButton>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>Page {safePage} / {totalPages}</span>
+            <PagerButton type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</PagerButton>
+          </Pager>
+        </FooterBar>
       </TableWrap>
 
       {isModalOpen && draft && (

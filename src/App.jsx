@@ -17,7 +17,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
 import './index.css';
@@ -665,7 +665,7 @@ const toComparableDate = (value) => {
 const normalizeMatchKey = (value) => {
   return String(value ?? '')
     .toLowerCase()
-    .replace(/\s+(llc|inc|corp|co|limited|ltd|transportation|logistics|express)\b/g, '')
+    .replace(/\b(llc|inc|corp|co|limited|ltd)\b/g, '')
     .replace(/[^a-z0-9]/g, '')
     .trim();
 };
@@ -890,6 +890,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
   const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
+  const matchesSelectedAgent = useCallback(
+    (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
+    [selectedAgent]
+  );
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
   const trackerFollowUpsRef = useRef({});
@@ -1153,14 +1157,10 @@ function App() {
 
     if (scopedAgents.length === 0) return;
 
-    if (!scopedAgents.includes(selectedAgent)) {
+    if (!scopedAgents.some((agentName) => agentMatchesScopeValue(agentName, selectedAgent)) && selectedAgent !== 'all') {
       setSelectedAgent(scopedAgents[0]);
     }
-
-    if (statusScope !== 'open') {
-      setStatusScope('open');
-    }
-  }, [accessProfile, accessibleData, selectedAgent, statusScope]);
+  }, [accessProfile, accessibleData, selectedAgent]);
 
   const handleSaveFollowUp = useCallback(async (payload) => {
     if (!payload?.id) return;
@@ -1206,14 +1206,12 @@ function App() {
     setActiveView('overview');
     setCurrentDebtor(null);
     setActiveCompany(null);
+    setUser(null);
 
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) {
       toast.error(error.message || 'Failed to log out');
-      return;
     }
-
-    setUser(null);
   }, []);
 
   useEffect(() => {
@@ -1241,7 +1239,7 @@ function App() {
             const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
             if (!sameCompany) return item;
 
-            const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+            const inAgentScope = matchesSelectedAgent(item.agentId);
             const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
             if (!inAgentScope || !inWeekScope) return item;
 
@@ -1648,6 +1646,15 @@ function App() {
     });
   }, [accessibleData, lastTick]);
 
+  const analyticsInvoiceRows = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
+    const matchesAgent = matchesSelectedAgent(item.agentId);
+    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+    const status = String(item.status || '').toLowerCase();
+    const hasInvoice = Boolean(String(item.invoiceNumber || '').trim()) && item.invoiceNumber !== 'Marked as Sent';
+    return matchesAgent && matchesWeek && hasInvoice && ['pending', 'overdue', 'paid'].includes(status);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek]);
+
+  const analyticsAggregatedRows = React.useMemo(() => aggregateByCompany(analyticsInvoiceRows), [analyticsInvoiceRows]);
   const currentCycleWeekLabel = React.useMemo(() => {
     const latestByWeek = new Map();
 
@@ -1673,7 +1680,7 @@ function App() {
   }, [hydratedWithSmartStatus]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesAgent = matchesSelectedAgent(item.agentId);
     const weekLabel = String(item.weekLabel || '').trim();
     const matchesWeek = selectedWeek === 'all'
       ? (statusScope === 'all' ? (!currentCycleWeekLabel || weekLabel === currentCycleWeekLabel) : true)
@@ -1681,14 +1688,29 @@ function App() {
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all'
-      ? ['pending', 'overdue', 'paid'].includes(status)
+      ? ['pending', 'overdue', 'paid', 'no_invoice'].includes(status)
       : isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
-  const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
+  const metrics = React.useMemo(() => {
+    const baseMetrics = calculateMetrics(agentData);
+    
+    const clients = new Set();
+    accessibleData.forEach(item => {
+      const agentMatch = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (agentMatch && (item.company || item.clientName) && item.invoiceNumber !== 'Marked as Sent') {
+        clients.add(String(item.company || item.clientName).trim().toLowerCase());
+      }
+    });
+
+    return {
+      ...baseMetrics,
+      activeClients: clients.size
+    };
+  }, [agentData, accessibleData, selectedAgent]);
 
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
@@ -1720,7 +1742,7 @@ function App() {
       const company = String(item.company || item.clientName || '').trim().toLowerCase();
       const byCompany = company === activeCompany.trim().toLowerCase();
       if (!byCompany) return false;
-      const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      const byAgent = matchesSelectedAgent(item.agentId);
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
       return byAgent && byWeek;
     });
@@ -1767,7 +1789,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, accessibleData, selectedAgent, selectedWeek]);
+  }, [activeCompany, accessibleData, matchesSelectedAgent, selectedWeek]);
 
 
 
@@ -1818,20 +1840,12 @@ function App() {
               <AgentSelect
                 value={statusScope}
                 onChange={(e) => setStatusScope(e.target.value)}
-                disabled={!accessProfile.canViewAllData}
               >
-                {accessProfile.canViewAllData && <option value="all">All records</option>}
+                <option value="all">All records</option>
                 <option value="open">Open balances only</option>
               </AgentSelect>
 
             </FiltersRow>
-
-            <AgentSnapshot>
-              <Users size={16} color="var(--brand)" />
-              <div>
-                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-              </div>
-            </AgentSnapshot>
           </AgentToolbar>
 
           <Dashboard metrics={metrics} />
@@ -1852,11 +1866,12 @@ function App() {
 
       {activeView === 'analytics' && (
         <ManagerAnalytics
-          invoiceRows={scopedInvoiceData}
-          aggregatedRows={agentData}
+          invoiceRows={analyticsInvoiceRows}
+          aggregatedRows={analyticsAggregatedRows}
           selectedAgent={selectedAgent}
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
+          isManager={accessProfile.canViewAllData}
         />
       )}
 
