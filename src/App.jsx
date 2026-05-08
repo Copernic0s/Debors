@@ -17,7 +17,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
-import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
 import './index.css';
@@ -67,6 +67,7 @@ const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
   }, []);
 
 const TRACKER_FOLLOW_UP_STORAGE_KEY = 'debors-support-followups-v1';
+const ACCESS_FEATURE_OVERRIDE_STORAGE_KEY = 'debors-access-feature-overrides-v1';
 
 const normalizeTrackerKeyPart = (value) =>
   String(value || '')
@@ -152,6 +153,29 @@ const writeTrackerFollowUps = (followUpsById) => {
     window.localStorage.setItem(TRACKER_FOLLOW_UP_STORAGE_KEY, JSON.stringify(followUpsById));
   } catch (error) {
     console.error('[Support Tracker] Failed to persist follow-ups:', error);
+  }
+};
+
+const readAccessFeatureOverrides = () => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(ACCESS_FEATURE_OVERRIDE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (error) {
+    console.error('[Access Controls] Failed to restore feature overrides:', error);
+    return {};
+  }
+};
+
+const writeAccessFeatureOverrides = (overrides) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(ACCESS_FEATURE_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
+  } catch (error) {
+    console.error('[Access Controls] Failed to persist feature overrides:', error);
   }
 };
 
@@ -261,6 +285,88 @@ const MainContent = styled.main`
   display: flex;
   flex-direction: column;
   background: transparent;
+`;
+
+const AccessControlPanel = styled.section`
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem 1.4rem;
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const AccessControlHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+
+  p {
+    margin: 0.28rem 0 0 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+`;
+
+const AccessToggleGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+`;
+
+const AccessToggleCard = styled.div`
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+
+  strong {
+    color: var(--text-main);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.92rem;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+`;
+
+const ToggleSwitch = styled.button`
+  border: 1px solid ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.35)' : 'var(--glass-border)')};
+  background: ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
+  color: ${(props) => (props.$active ? '#d1fae5' : 'var(--text-muted)')};
+  min-width: 88px;
+  padding: 0.62rem 0.9rem;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.48)' : 'rgba(249, 115, 22, 0.35)')};
+    color: var(--text-main);
+  }
 `;
 
 const Topbar = styled.header`
@@ -955,7 +1061,8 @@ function App() {
   const [, setTrackerFollowUps] = useState({});
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
-  const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
+  const [accessFeatureOverrides, setAccessFeatureOverrides] = useState({});
+  const accessProfile = useMemo(() => resolveAccessProfile(user, accessFeatureOverrides), [user, accessFeatureOverrides]);
   const matchesSelectedAgent = useCallback(
     (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
     [selectedAgent]
@@ -965,6 +1072,10 @@ function App() {
   const trackerFollowUpsRef = useRef({});
   const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    setAccessFeatureOverrides(readAccessFeatureOverrides());
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -1228,6 +1339,16 @@ function App() {
     }
   }, [accessProfile, accessibleData, selectedAgent]);
 
+  useEffect(() => {
+    if (activeView === 'tracker' && !accessProfile.canViewSupportTracker) {
+      setActiveView('overview');
+    }
+
+    if (activeView === 'invoice_entry' && !accessProfile.canViewInvoiceEntry) {
+      setActiveView('overview');
+    }
+  }, [activeView, accessProfile]);
+
   const handleSaveFollowUp = useCallback(async (payload) => {
     if (!payload?.id) return;
 
@@ -1265,6 +1386,20 @@ function App() {
         trackerFollowUpsRef.current
       )
     );
+  }, []);
+
+  const updateFeatureAccessOverride = useCallback((subjectKey, patch) => {
+    setAccessFeatureOverrides((prev) => {
+      const next = {
+        ...prev,
+        [subjectKey]: {
+          ...(prev?.[subjectKey] || {}),
+          ...patch
+        }
+      };
+      writeAccessFeatureOverrides(next);
+      return next;
+    });
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -1801,6 +1936,13 @@ function App() {
     ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
     : '--:--';
 
+  const isKevinProfile = isManagedKevinIdentity(user?.email || '');
+  const kevinAccessSettings = accessFeatureOverrides.kevin || {};
+  const kevinSectionAccess = {
+    canViewInvoiceEntry: Boolean(kevinAccessSettings.canViewInvoiceEntry ?? false),
+    canViewSupportTracker: Boolean(kevinAccessSettings.canViewSupportTracker ?? false)
+  };
+
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
@@ -1963,6 +2105,59 @@ function App() {
 
       {activeView === 'activity_logs' && accessProfile.canViewActivityLogs && (
         <ContentScroll>
+          {accessProfile.canManageAccessOverrides && (
+            <AccessControlPanel>
+              <AccessControlHeader>
+                <div>
+                  <h3>Kevin Section Access</h3>
+                  <p>
+                    Control when Kevin can open `Invoice Entry` and `Support Tracker` without changing his broader operations access.
+                  </p>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  {isKevinProfile ? 'You are viewing the restricted profile logic live.' : 'Managed from Andres profile.'}
+                </div>
+              </AccessControlHeader>
+
+              <AccessToggleGrid>
+                <AccessToggleCard>
+                  <div>
+                    <strong>Invoice Entry</strong>
+                    <span>Currently {kevinSectionAccess.canViewInvoiceEntry ? 'enabled' : 'disabled'} for Kevin.</span>
+                  </div>
+                  <ToggleSwitch
+                    type="button"
+                    $active={kevinSectionAccess.canViewInvoiceEntry}
+                    onClick={() =>
+                      updateFeatureAccessOverride('kevin', {
+                        canViewInvoiceEntry: !kevinSectionAccess.canViewInvoiceEntry
+                      })
+                    }
+                  >
+                    {kevinSectionAccess.canViewInvoiceEntry ? 'Enabled' : 'Disabled'}
+                  </ToggleSwitch>
+                </AccessToggleCard>
+
+                <AccessToggleCard>
+                  <div>
+                    <strong>Support Tracker</strong>
+                    <span>Currently {kevinSectionAccess.canViewSupportTracker ? 'enabled' : 'disabled'} for Kevin.</span>
+                  </div>
+                  <ToggleSwitch
+                    type="button"
+                    $active={kevinSectionAccess.canViewSupportTracker}
+                    onClick={() =>
+                      updateFeatureAccessOverride('kevin', {
+                        canViewSupportTracker: !kevinSectionAccess.canViewSupportTracker
+                      })
+                    }
+                  >
+                    {kevinSectionAccess.canViewSupportTracker ? 'Enabled' : 'Disabled'}
+                  </ToggleSwitch>
+                </AccessToggleCard>
+              </AccessToggleGrid>
+            </AccessControlPanel>
+          )}
           <ActivityLogs refreshSignal={activityLogRefreshKey} />
         </ContentScroll>
       )}
