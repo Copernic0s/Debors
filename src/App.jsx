@@ -11,6 +11,7 @@ import Login from './components/Login';
 import SupportTracker from './components/SupportTracker';
 import ActivityLogs from './components/ActivityLogs';
 import InvoiceEntry from './components/InvoiceEntry';
+import PortfolioCompanies from './components/PortfolioCompanies';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
@@ -96,6 +97,7 @@ const getUserAvatarSrc = (email) => {
 
   if (normalizedEmail.includes('andres')) return '/avatar.png';
   if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+  if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
 
   return null;
 };
@@ -177,17 +179,35 @@ const writeAccessFeatureOverrides = (overrides) => {
   }
 };
 
+const SHEET_AUTHORITY_FIELDS = [
+  'company',
+  'clientName',
+  'agentId',
+  'billingCycle',
+  'weekLabel',
+  'invoiceNumber',
+  'source',
+  'sourceType'
+];
+
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
-      // Merge all edits, prioritizing manual overrides
-      return {
+      const mergedRow = {
         ...row,
         ...patch
       };
+
+      SHEET_AUTHORITY_FIELDS.forEach((field) => {
+        if (row[field] !== undefined) {
+          mergedRow[field] = row[field];
+        }
+      });
+
+      return mergedRow;
     });
 
   const existingIds = new Set(merged.map((r) => r.id));
@@ -775,13 +795,60 @@ const normalizeMatchKey = (value) => {
     .trim();
 };
 
+const buildBillingCycleLookups = (csRows = []) => {
+  const byCompanyAgent = new Map();
+  const byCompany = new Map();
+
+  (csRows || []).forEach((row) => {
+    const companyKey = normalizeMatchKey(row.company || row.clientName);
+    const agentKey = normalizeMatchKey(row.agentId);
+    const cycle = normalizeBillingCycle(row.billingCycle);
+
+    if (!companyKey || cycle === BILLING_CYCLES.UNSPECIFIED) return;
+
+    if (agentKey) {
+      byCompanyAgent.set(`${companyKey}|${agentKey}`, cycle);
+    }
+
+    const currentCompanyCycle = byCompany.get(companyKey);
+    if (!currentCompanyCycle) {
+      byCompany.set(companyKey, cycle);
+    } else if (currentCompanyCycle !== cycle) {
+      byCompany.set(companyKey, null);
+    }
+  });
+
+  return { byCompanyAgent, byCompany };
+};
+
+const resolveRosterBillingCycle = (row, lookups) => {
+  const directCycle = normalizeBillingCycle(row?.billingCycle);
+  const companyKey = normalizeMatchKey(row?.company || row?.clientName);
+  const agentKey = normalizeMatchKey(row?.agentId);
+
+  if (!companyKey) return directCycle;
+
+  const exactCycle = agentKey ? lookups.byCompanyAgent.get(`${companyKey}|${agentKey}`) : null;
+  if (exactCycle) return exactCycle;
+
+  const companyCycle = lookups.byCompany.get(companyKey);
+  if (companyCycle) return companyCycle;
+
+  return directCycle;
+};
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = new Map();
   const windowsWithInvoice = new Set();
+  const billingCycleLookups = buildBillingCycleLookups(csRows);
 
   // 1. Process Debt Rows (Invoices)
   debtRows.forEach((row) => {
-    merged.set(row.id, { ...row, source: 'debt' });
+    merged.set(row.id, {
+      ...row,
+      billingCycle: resolveRosterBillingCycle(row, billingCycleLookups),
+      source: 'debt'
+    });
     
     // Recognize windows that already have actual invoices
     const normalizedCompany = normalizeMatchKey(row.company || row.clientName);
@@ -810,7 +877,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
         clientName: company,
         agentId: String(row.agentId || 'Unassigned').trim(),
         amount: Number(row.amount) || 0,
-        billingCycle: normalizeBillingCycle(row.billingCycle),
+        billingCycle: resolveRosterBillingCycle(row, billingCycleLookups),
         status: String(row.status || 'pending').toLowerCase() === 'paid' ? 'paid' : 'no_invoice',
         dueDate: row.dueDate || '',
         weekLabel: week,
@@ -903,8 +970,8 @@ const aggregateByCompany = (rows) => {
         current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
         current.status = row.status || current.status;
         current.notes = row.notes || current.notes;
-        if (!current.isSheetCycle) {
-          current.billingCycle = row.billingCycle || current.billingCycle;
+        if (!current.isSheetCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
+          current.billingCycle = normalizedRowCycle;
         }
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
@@ -1251,14 +1318,6 @@ function App() {
   }, [trackerData, accessProfile]);
 
   useEffect(() => {
-    if (selectedAgent === 'all') return;
-    const exists = accessibleData.some((item) => matchesSelectedAgent(item.agentId));
-    if (!exists) {
-      setSelectedAgent('all');
-    }
-  }, [selectedAgent, accessibleData, matchesSelectedAgent]);
-
-  useEffect(() => {
     if (selectedWeek === 'all') return;
     const exists = accessibleData.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
     if (!exists) {
@@ -1275,14 +1334,10 @@ function App() {
 
     if (scopedAgents.length === 0) return;
 
-    if (!scopedAgents.some((agentName) => agentMatchesScopeValue(agentName, selectedAgent))) {
+    if (!scopedAgents.some((agentName) => agentMatchesScopeValue(agentName, selectedAgent)) && selectedAgent !== 'all') {
       setSelectedAgent(scopedAgents[0]);
     }
-
-    if (statusScope !== 'open') {
-      setStatusScope('open');
-    }
-  }, [accessProfile, accessibleData, selectedAgent, statusScope]);
+  }, [accessProfile, accessibleData, selectedAgent]);
 
   useEffect(() => {
     if (activeView === 'tracker' && !accessProfile.canViewSupportTracker) {
@@ -1743,7 +1798,33 @@ function App() {
 
 
   const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => {
+    const rosterAgents = Array.from(
+      new Set(
+        accessibleClientsByAgent
+          .map((item) => String(item.agentId || '').trim())
+          .filter(Boolean)
+      )
+    ).sort();
+
+    if (rosterAgents.length > 0) return rosterAgents;
+
+    return Array.from(
+      new Set(
+        accessibleData
+          .map((item) => String(item.agentId || '').trim())
+          .filter(Boolean)
+      )
+    ).sort();
+  }, [accessibleClientsByAgent, accessibleData]);
+
+  useEffect(() => {
+    if (selectedAgent === 'all') return;
+    const exists = agentOptions.includes(selectedAgent);
+    if (!exists) {
+      setSelectedAgent(accessProfile.canViewAllData ? 'all' : (agentOptions[0] || 'all'));
+    }
+  }, [selectedAgent, agentOptions, accessProfile]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
@@ -1815,7 +1896,22 @@ function App() {
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
-  const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
+  const metrics = React.useMemo(() => {
+    const baseMetrics = calculateMetrics(agentData);
+    
+    const clients = new Set();
+    accessibleData.forEach(item => {
+      const agentMatch = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      if (agentMatch && (item.company || item.clientName) && item.invoiceNumber !== 'Marked as Sent') {
+        clients.add(String(item.company || item.clientName).trim().toLowerCase());
+      }
+    });
+
+    return {
+      ...baseMetrics,
+      activeClients: clients.size
+    };
+  }, [agentData, accessibleData, selectedAgent]);
 
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
@@ -1916,6 +2012,9 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+        {!accessProfile.canViewAllData && (
+          <ViewButton type="button" $active={activeView === 'portfolio'} onClick={() => setActiveView('portfolio')}>Portfolio Companies</ViewButton>
+        )}
         {accessProfile.canViewSupportTracker && (
           <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
         )}
@@ -1949,20 +2048,12 @@ function App() {
               <AgentSelect
                 value={statusScope}
                 onChange={(e) => setStatusScope(e.target.value)}
-                disabled={!accessProfile.canViewAllData}
               >
-                {accessProfile.canViewAllData && <option value="all">All records</option>}
+                <option value="all">All records</option>
                 <option value="open">Open balances only</option>
               </AgentSelect>
 
             </FiltersRow>
-
-            <AgentSnapshot>
-              <Users size={16} color="var(--brand)" />
-              <div>
-                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-              </div>
-            </AgentSnapshot>
           </AgentToolbar>
 
           <Dashboard metrics={metrics} />
@@ -1989,6 +2080,14 @@ function App() {
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
           isManager={accessProfile.canViewAllData}
+        />
+      )}
+
+      {activeView === 'portfolio' && !accessProfile.canViewAllData && (
+        <PortfolioCompanies
+          companies={accessibleClientsByAgent}
+          debtRows={accessibleData}
+          currentUserEmail={user?.email || ''}
         />
       )}
 
