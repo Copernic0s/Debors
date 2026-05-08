@@ -20,6 +20,7 @@ import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles
 import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
+import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
 import './index.css';
 
 // Table used for cloud persistence
@@ -1088,6 +1089,40 @@ function App() {
     trackerFollowUpsRef.current = savedFollowUps;
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    let isActive = true;
+
+    const hydrateSharedState = async () => {
+      const remoteOverrides = await loadSharedState(
+        SHARED_APP_STATE_KEYS.featureAccessOverrides,
+        readAccessFeatureOverrides()
+      );
+      if (isActive && remoteOverrides && typeof remoteOverrides === 'object') {
+        setAccessFeatureOverrides(remoteOverrides);
+        writeAccessFeatureOverrides(remoteOverrides);
+      }
+
+      const remoteFollowUps = await loadSharedState(
+        SHARED_APP_STATE_KEYS.trackerFollowUps,
+        readTrackerFollowUps()
+      );
+      if (isActive && remoteFollowUps && typeof remoteFollowUps === 'object') {
+        setTrackerFollowUps(remoteFollowUps);
+        trackerFollowUpsRef.current = remoteFollowUps;
+        writeTrackerFollowUps(remoteFollowUps);
+        setTrackerData((prev) => normalizeTrackerRows(prev, remoteFollowUps));
+      }
+    };
+
+    hydrateSharedState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
+
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const recordActivityEntries = useCallback(async (entries) => {
@@ -1370,6 +1405,7 @@ function App() {
       };
       trackerFollowUpsRef.current = next;
       writeTrackerFollowUps(next);
+      saveSharedState(SHARED_APP_STATE_KEYS.trackerFollowUps, next, user?.email || null);
       return next;
     });
 
@@ -1386,7 +1422,7 @@ function App() {
         trackerFollowUpsRef.current
       )
     );
-  }, []);
+  }, [user]);
 
   const updateFeatureAccessOverride = useCallback((subjectKey, patch) => {
     setAccessFeatureOverrides((prev) => {
@@ -1398,9 +1434,10 @@ function App() {
         }
       };
       writeAccessFeatureOverrides(next);
+      saveSharedState(SHARED_APP_STATE_KEYS.featureAccessOverrides, next, user?.email || null);
       return next;
     });
-  }, []);
+  }, [user]);
 
   const handleLogout = useCallback(async () => {
     loggedSessionRef.current = '';

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { Building2, CirclePlus, Pencil, Search } from 'lucide-react';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
+import { getPortfolioOverridesStateKey, loadSharedState, saveSharedState } from '../services/sharedAppState';
 
 const STORAGE_KEY = 'debors-portfolio-company-overrides-v1';
 
@@ -394,6 +395,31 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
     setOverrides(readOverrides(currentUserEmail));
   }, [currentUserEmail]);
 
+  useEffect(() => {
+    if (!currentUserEmail) return;
+
+    let isActive = true;
+
+    const hydrateOverrides = async () => {
+      const fallbackRows = readOverrides(currentUserEmail);
+      const sharedRows = await loadSharedState(
+        getPortfolioOverridesStateKey(currentUserEmail),
+        fallbackRows
+      );
+
+      if (isActive && Array.isArray(sharedRows)) {
+        setOverrides(sharedRows);
+        writeOverrides(currentUserEmail, sharedRows);
+      }
+    };
+
+    hydrateOverrides();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentUserEmail]);
+
   const baseCompanies = useMemo(
     () =>
       (Array.isArray(companies) ? companies : [])
@@ -502,6 +528,7 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
 
     setOverrides(next);
     writeOverrides(currentUserEmail, next);
+    saveSharedState(getPortfolioOverridesStateKey(currentUserEmail), next, currentUserEmail || null);
     closeModal();
   };
 
