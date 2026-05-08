@@ -671,13 +671,60 @@ const normalizeMatchKey = (value) => {
     .trim();
 };
 
+const buildBillingCycleLookups = (csRows = []) => {
+  const byCompanyAgent = new Map();
+  const byCompany = new Map();
+
+  (csRows || []).forEach((row) => {
+    const companyKey = normalizeMatchKey(row.company || row.clientName);
+    const agentKey = normalizeMatchKey(row.agentId);
+    const cycle = normalizeBillingCycle(row.billingCycle);
+
+    if (!companyKey || cycle === BILLING_CYCLES.UNSPECIFIED) return;
+
+    if (agentKey) {
+      byCompanyAgent.set(`${companyKey}|${agentKey}`, cycle);
+    }
+
+    const currentCompanyCycle = byCompany.get(companyKey);
+    if (!currentCompanyCycle) {
+      byCompany.set(companyKey, cycle);
+    } else if (currentCompanyCycle !== cycle) {
+      byCompany.set(companyKey, null);
+    }
+  });
+
+  return { byCompanyAgent, byCompany };
+};
+
+const resolveRosterBillingCycle = (row, lookups) => {
+  const directCycle = normalizeBillingCycle(row?.billingCycle);
+  const companyKey = normalizeMatchKey(row?.company || row?.clientName);
+  const agentKey = normalizeMatchKey(row?.agentId);
+
+  if (!companyKey) return directCycle;
+
+  const exactCycle = agentKey ? lookups.byCompanyAgent.get(`${companyKey}|${agentKey}`) : null;
+  if (exactCycle) return exactCycle;
+
+  const companyCycle = lookups.byCompany.get(companyKey);
+  if (companyCycle) return companyCycle;
+
+  return directCycle;
+};
+
 const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
   const merged = new Map();
   const windowsWithInvoice = new Set();
+  const billingCycleLookups = buildBillingCycleLookups(csRows);
 
   // 1. Process Debt Rows (Invoices)
   debtRows.forEach((row) => {
-    merged.set(row.id, { ...row, source: 'debt' });
+    merged.set(row.id, {
+      ...row,
+      billingCycle: resolveRosterBillingCycle(row, billingCycleLookups),
+      source: 'debt'
+    });
     
     // Recognize windows that already have actual invoices
     const normalizedCompany = normalizeMatchKey(row.company || row.clientName);
@@ -706,7 +753,7 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
         clientName: company,
         agentId: String(row.agentId || 'Unassigned').trim(),
         amount: Number(row.amount) || 0,
-        billingCycle: normalizeBillingCycle(row.billingCycle),
+        billingCycle: resolveRosterBillingCycle(row, billingCycleLookups),
         status: String(row.status || 'pending').toLowerCase() === 'paid' ? 'paid' : 'no_invoice',
         dueDate: row.dueDate || '',
         weekLabel: week,
@@ -799,8 +846,8 @@ const aggregateByCompany = (rows) => {
         current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
         current.status = row.status || current.status;
         current.notes = row.notes || current.notes;
-        if (!current.isSheetCycle) {
-          current.billingCycle = row.billingCycle || current.billingCycle;
+        if (!current.isSheetCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
+          current.billingCycle = normalizedRowCycle;
         }
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
