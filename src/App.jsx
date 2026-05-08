@@ -155,17 +155,35 @@ const writeTrackerFollowUps = (followUpsById) => {
   }
 };
 
+const SHEET_AUTHORITY_FIELDS = [
+  'company',
+  'clientName',
+  'agentId',
+  'billingCycle',
+  'weekLabel',
+  'invoiceNumber',
+  'source',
+  'sourceType'
+];
+
 const mergeManualEdits = (rows, editsById) => {
   const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
     .map((row) => {
       const patch = editsById[row.id];
       if (!patch) return row;
-      // Merge all edits, prioritizing manual overrides
-      return {
+      const mergedRow = {
         ...row,
         ...patch
       };
+
+      SHEET_AUTHORITY_FIELDS.forEach((field) => {
+        if (row[field] !== undefined) {
+          mergedRow[field] = row[field];
+        }
+      });
+
+      return mergedRow;
     });
 
   const existingIds = new Set(merged.map((r) => r.id));
