@@ -49,6 +49,11 @@ const canViewActivityLogsFallback = (email) => {
   return localPart.includes('andres');
 };
 
+const isManagedKevinIdentity = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('kevin');
+};
+
 const getSpecialAgentScopeFallback = (email) => {
   if (email === 'hector.lomeli@theunitedtransports.com') {
     return ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
@@ -56,7 +61,7 @@ const getSpecialAgentScopeFallback = (email) => {
   return [];
 };
 
-export const resolveAccessProfile = (user) => {
+export const resolveAccessProfile = (user, featureAccessOverrides = {}) => {
   const email = String(user?.email || '').trim().toLowerCase();
   const operationsEmails = new Set(
     [
@@ -108,6 +113,16 @@ export const resolveAccessProfile = (user) => {
     operationsEmails.has(email) ||
     hasPrivilegedIdentityFallback(email);
   const role = isManager ? MANAGER_ROLE : AGENT_ROLE;
+  const overrideKey = isManagedKevinIdentity(email) ? 'kevin' : email;
+  const userFeatureOverrides = featureAccessOverrides?.[overrideKey] || featureAccessOverrides?.[email] || {};
+  const defaultManagerViewSupportTracker = isManager && !isManagedKevinIdentity(email);
+  const defaultManagerViewInvoiceEntry = isManager && !isManagedKevinIdentity(email);
+  const canViewSupportTracker = Boolean(
+    userFeatureOverrides.canViewSupportTracker ?? defaultManagerViewSupportTracker
+  );
+  const canViewInvoiceEntry = Boolean(
+    userFeatureOverrides.canViewInvoiceEntry ?? defaultManagerViewInvoiceEntry
+  );
 
   return {
     role,
@@ -118,13 +133,14 @@ export const resolveAccessProfile = (user) => {
     canDeleteData: isManager,
     canResetData: isManager,
     canSyncData: isManager,
-    canUseInvoiceEntry: isManager,
+    canUseInvoiceEntry: canViewInvoiceEntry,
     canEditInvoiceDetails: isManager,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
-    canViewSupportTracker: isManager,
-    canViewInvoiceEntry: isManager,
+    canViewSupportTracker,
+    canViewInvoiceEntry: canViewInvoiceEntry,
     canViewActivityLogs: canViewActivityLogsFallback(email),
+    canManageAccessOverrides: canViewActivityLogsFallback(email),
     hasScopedPortfolio: isManager ? true : agentScope.length > 0
   };
 };
@@ -151,4 +167,4 @@ export const userCanAccessAgent = (accessProfile, agentId) => {
   });
 };
 
-export { MANAGER_ROLE, AGENT_ROLE, normalizeScopeValue };
+export { MANAGER_ROLE, AGENT_ROLE, normalizeScopeValue, isManagedKevinIdentity };
