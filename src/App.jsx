@@ -14,18 +14,18 @@ import InvoiceEntry from './components/InvoiceEntry';
 import PortfolioCompanies from './components/PortfolioCompanies';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { hasSupabaseConfig } from './lib/supabase';
-import { calculateMetrics } from './data/mockData';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES } from './constants/billingCycles';
-import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { createActivityEntry } from './services/activityLogger';
-import { aggregateByCompany, mergeDebtorsWithClientSheet, mergeManualEdits, toComparableDate } from './services/debtorDataReconciliation';
+import { mergeDebtorsWithClientSheet, mergeManualEdits } from './services/debtorDataReconciliation';
 import { useAppSharedState } from './hooks/useAppSharedState';
 import { useManualEditsState } from './hooks/useManualEditsState';
 import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
 import { useAppSession } from './hooks/useAppSession';
 import { useOverviewActions } from './hooks/useOverviewActions';
+import { useDerivedDebtorViews } from './hooks/useDerivedDebtorViews';
 import './index.css';
 
 const TRACKED_ACTIVITY_FIELDS = [
@@ -722,20 +722,28 @@ function App() {
     };
   }, [loadData]);
 
-  const accessibleData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return data;
-    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [data, accessProfile]);
-
-  const accessibleClientsByAgent = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return clientsByAgent;
-    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
-  }, [clientsByAgent, accessProfile]);
-
-  const accessibleTrackerData = React.useMemo(() => {
-    if (accessProfile.canViewAllData) return trackerData;
-    return trackerData.filter((item) => userCanAccessAgent(accessProfile, item.agent || item.agentId));
-  }, [trackerData, accessProfile]);
+  const {
+    accessibleClientsByAgent,
+    accessibleData,
+    accessibleTrackerData,
+    agentData,
+    agentOptions,
+    analyticsAggregatedRows,
+    analyticsInvoiceRows,
+    companyProfile,
+    metrics
+  } = useDerivedDebtorViews({
+    accessProfile,
+    activeCompany,
+    clientsByAgent,
+    data,
+    lastTick,
+    matchesSelectedAgent,
+    selectedAgent,
+    selectedWeek,
+    statusScope,
+    trackerData
+  });
 
   useEffect(() => {
     if (selectedWeek === 'all') return;
@@ -785,26 +793,6 @@ function App() {
 
 
 
-  const agentOptions = React.useMemo(() => {
-    const rosterAgents = Array.from(
-      new Set(
-        accessibleClientsByAgent
-          .map((item) => String(item.agentId || '').trim())
-          .filter(Boolean)
-      )
-    ).sort();
-
-    if (rosterAgents.length > 0) return rosterAgents;
-
-    return Array.from(
-      new Set(
-        accessibleData
-          .map((item) => String(item.agentId || '').trim())
-          .filter(Boolean)
-      )
-    ).sort();
-  }, [accessibleClientsByAgent, accessibleData]);
-
   useEffect(() => {
     if (selectedAgent === 'all') return;
     const exists = agentOptions.includes(selectedAgent);
@@ -812,93 +800,6 @@ function App() {
       setSelectedAgent(accessProfile.canViewAllData ? 'all' : (agentOptions[0] || 'all'));
     }
   }, [selectedAgent, agentOptions, accessProfile]);
-
-  const hydratedWithSmartStatus = React.useMemo(() => {
-    const today = new Date(lastTick);
-    return accessibleData.map(row => {
-      let status = row.status || 'pending';
-      let isAutoOverdue = false;
-
-      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
-      if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        // According to user instructions: Due Date 5 p.m. Eastern time
-        // We use T17:00:00 to match the 5pm cutoff (relative to local time)
-        const dateStr = row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T17:00:00`;
-        const parsedDue = new Date(dateStr);
-        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
-          status = 'overdue';
-          isAutoOverdue = true;
-        }
-      }
-      return { ...row, status, isAutoOverdue };
-    });
-  }, [accessibleData, lastTick]);
-
-  const analyticsInvoiceRows = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = matchesSelectedAgent(item.agentId);
-    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-    const status = String(item.status || '').toLowerCase();
-    const hasInvoice = Boolean(String(item.invoiceNumber || '').trim()) && item.invoiceNumber !== 'Marked as Sent';
-    return matchesAgent && matchesWeek && hasInvoice && ['pending', 'overdue', 'paid'].includes(status);
-  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek]);
-
-  const analyticsAggregatedRows = React.useMemo(() => aggregateByCompany(analyticsInvoiceRows), [analyticsInvoiceRows]);
-  const currentCycleWeekLabel = React.useMemo(() => {
-    const latestByWeek = new Map();
-
-    hydratedWithSmartStatus.forEach((row) => {
-      const status = String(row.status || '').toLowerCase();
-      const hasInvoice = Boolean(String(row.invoiceNumber || '').trim()) && row.invoiceNumber !== 'Marked as Sent';
-      const weekLabel = String(row.weekLabel || '').trim();
-      if (!weekLabel || !hasInvoice || !['pending', 'overdue', 'paid'].includes(status)) return;
-
-      const candidateDate =
-        toComparableDate(row.dueDate) ||
-        toComparableDate(row.lastInvoicedDate) ||
-        toComparableDate(row.updated_at);
-
-      const current = latestByWeek.get(weekLabel);
-      if (!current || (candidateDate && candidateDate > current)) {
-        latestByWeek.set(weekLabel, candidateDate || new Date(0));
-      }
-    });
-
-    const sortedWeeks = Array.from(latestByWeek.entries()).sort((a, b) => b[1] - a[1]);
-    return sortedWeeks[0]?.[0] || '';
-  }, [hydratedWithSmartStatus]);
-
-  const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = matchesSelectedAgent(item.agentId);
-    const weekLabel = String(item.weekLabel || '').trim();
-    const matchesWeek = selectedWeek === 'all'
-      ? (statusScope === 'all' ? (!currentCycleWeekLabel || weekLabel === currentCycleWeekLabel) : true)
-      : weekLabel === selectedWeek;
-    const status = String(item.status || '').toLowerCase();
-    const isOpen = status === 'pending' || status === 'overdue';
-    const matchesStatus = statusScope === 'all'
-      ? ['pending', 'overdue', 'paid', 'no_invoice'].includes(status)
-      : isOpen;
-    return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek, statusScope, currentCycleWeekLabel]);
-
-  const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
-  const agentData = aggregatedData;
-  const metrics = React.useMemo(() => {
-    const baseMetrics = calculateMetrics(agentData);
-    
-    const clients = new Set();
-    accessibleData.forEach(item => {
-      const agentMatch = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      if (agentMatch && (item.company || item.clientName) && item.invoiceNumber !== 'Marked as Sent') {
-        clients.add(String(item.company || item.clientName).trim().toLowerCase());
-      }
-    });
-
-    return {
-      ...baseMetrics,
-      activeClients: clients.size
-    };
-  }, [agentData, accessibleData, selectedAgent]);
 
   const isKevinProfile = isManagedKevinIdentity(user?.email || '');
   const kevinAccessSettings = accessFeatureOverrides.kevin || {};
@@ -933,63 +834,6 @@ function App() {
     setManualEdits,
     user
   });
-
-  const companyProfile = React.useMemo(() => {
-    if (!activeCompany) return null;
-
-    const scopedRows = accessibleData.filter((item) => {
-      const company = String(item.company || item.clientName || '').trim().toLowerCase();
-      const byCompany = company === activeCompany.trim().toLowerCase();
-      if (!byCompany) return false;
-      const byAgent = matchesSelectedAgent(item.agentId);
-      const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-      return byAgent && byWeek;
-    });
-
-    // Deduplicate by week to avoid double-counting placeholders
-    const deduplicatedRows = [];
-    
-    // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
-    const sortedScoped = [...scopedRows].sort((a, b) => {
-      if (a.source === 'debt' && b.source !== 'debt') return -1;
-      if (a.source !== 'debt' && b.source === 'debt') return 1;
-      return 0;
-    });
-
-    const seenIds = new Set();
-    const seenInvoices = new Set();
-    
-    sortedScoped.forEach(row => {
-      const invKey = String(row.invoiceNumber || row.id).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (!seenIds.has(row.id) && !seenInvoices.has(invKey)) {
-        deduplicatedRows.push(row);
-        seenIds.add(row.id);
-        if (row.invoiceNumber) seenInvoices.add(invKey);
-      }
-    });
-
-    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-') && item.invoiceNumber !== 'Marked as Sent');
-    const totalDebt = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalOverdue = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() === 'overdue')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-    return {
-      company: activeCompany,
-      totalDebt,
-      totalOverdue,
-      invoiceCount: invoiceRows.length,
-      agents: Array.from(new Set(deduplicatedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
-      contacts: Array.from(new Set(deduplicatedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
-      invoices: invoiceRows.sort((a, b) => 
-        String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
-      )
-    };
-  }, [activeCompany, accessibleData, matchesSelectedAgent, selectedWeek]);
-
-
 
   const overviewContent = (
     <div style={{ 
