@@ -1,5 +1,4 @@
 import { format, subDays, addDays } from 'date-fns';
-import { getDueDateStatus } from '../utils/dateUtils';
 
 const today = new Date();
 

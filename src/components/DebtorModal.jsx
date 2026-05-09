@@ -218,7 +218,7 @@ export default function DebtorModal({ isOpen, onClose, onSave, onReset, debtor, 
         setFormData(prev => ({ ...prev, dueDate: suggestedDue })); // eslint-disable-line react-hooks/set-state-in-effect
       }
     }
-  }, [formData.billingCycle]);
+  }, [formData.billingCycle, formData.dueDate]);
 
   if (!isOpen) return null;
 

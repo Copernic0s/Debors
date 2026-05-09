@@ -40,15 +40,6 @@ const writeOverrides = (email, rows) => {
   }
 };
 
-const getStatusMeta = (status) => {
-  const tone = String(status || '').toLowerCase();
-  if (tone === 'overdue') return { label: 'Overdue', color: 'var(--danger)', bg: 'rgba(248, 113, 113, 0.12)' };
-  if (tone === 'pending') return { label: 'Pending', color: 'var(--warn)', bg: 'rgba(245, 158, 11, 0.12)' };
-  if (tone === 'paid') return { label: 'Paid', color: 'var(--ok)', bg: 'rgba(16, 185, 129, 0.12)' };
-  if (tone === 'inactive') return { label: 'Inactive', color: 'var(--bronze)', bg: 'rgba(217, 119, 6, 0.12)' };
-  return { label: 'Awaiting invoice', color: 'var(--violet)', bg: 'rgba(167, 139, 250, 0.12)' };
-};
-
 const getStrongestStatus = (rows) => {
   const priorities = ['overdue', 'pending', 'paid', 'inactive', 'no_invoice'];
   const normalized = rows.map((row) => String(row.status || '').toLowerCase());
@@ -577,7 +568,6 @@ export default function PortfolioCompanies({ companies, debtRows, currentUserEma
           </thead>
           <tbody>
             {paginatedRows.length > 0 ? paginatedRows.map((item) => {
-              const meta = getStatusMeta(item.rosterStatus);
               return (
                 <tr key={item.id}>
                   <Td>
