@@ -19,13 +19,14 @@ import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
-import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
+import { createActivityEntry } from './services/activityLogger';
 import { aggregateByCompany, mergeDebtorsWithClientSheet, mergeManualEdits, roundMoney, toComparableDate } from './services/debtorDataReconciliation';
 import { useAppSharedState } from './hooks/useAppSharedState';
+import { useManualEditsState } from './hooks/useManualEditsState';
+import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
+import { useAppSession } from './hooks/useAppSession';
 import './index.css';
 
-// Table used for cloud persistence
-const TABLE_NAME = 'manual_edits';
 const TRACKED_ACTIVITY_FIELDS = [
   { key: 'amount', label: 'Total Due' },
   { key: 'notes', label: 'Notes' },
@@ -593,23 +594,37 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [manualEdits, setManualEdits] = useState({});
-  const [user, setUser] = useState(null);
-  const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
+  const {
+    activityLogRefreshKey,
+    handleLogout,
+    recordActivityEntries,
+    setAuthenticatedUser,
+    user
+  } = useAppSession({
+    onSignedOut: () => {
+      setActiveView('overview');
+      setCurrentDebtor(null);
+      setActiveCompany(null);
+    }
+  });
   const {
     accessFeatureOverrides,
     handleSaveFollowUp,
     normalizeIncomingTrackerRows,
     updateFeatureAccessOverride
   } = useAppSharedState({ user, setTrackerData });
+  const {
+    manualEdits,
+    manualEditsRef,
+    persistEditedRows,
+    setManualEdits
+  } = useManualEditsState({ user, loading });
   const accessProfile = useMemo(() => resolveAccessProfile(user, accessFeatureOverrides), [user, accessFeatureOverrides]);
   const matchesSelectedAgent = useCallback(
     (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
     [selectedAgent]
   );
   const syncInFlightRef = useRef(false);
-  const manualEditsRef = useRef({});
-  const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -618,52 +633,6 @@ function App() {
   }, []);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const recordActivityEntries = useCallback(async (entries) => {
-    if (!user || !shouldTrackUserActivity(user) || !entries || entries.length === 0) return;
-    const result = await logActivityEntries(entries);
-    if (result?.success && result.logged > 0) {
-      setActivityLogRefreshKey((prev) => prev + 1);
-    }
-  }, [user]);
-
-
-  useEffect(() => {
-    if (!hasSupabaseConfig || !supabase) return;
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-
-      if (_event === 'SIGNED_OUT' || !session?.user) {
-        loggedSessionRef.current = '';
-        setActiveView('overview');
-        setCurrentDebtor(null);
-        setActiveCompany(null);
-        return;
-      }
-
-      if (_event === 'SIGNED_IN') {
-        const sessionKey = `${session.user.id}:${session.access_token?.slice(0, 16) || 'signed-in'}`;
-        if (loggedSessionRef.current !== sessionKey && !canViewActivityLogs(session.user)) {
-          loggedSessionRef.current = sessionKey;
-          try {
-            const result = await logLoginActivity(session.user);
-            if (result?.success && result.logged > 0) {
-              setActivityLogRefreshKey((prev) => prev + 1);
-            }
-          } catch (error) {
-            console.error('[Activity Logs] Login logging failed:', error);
-          }
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -675,78 +644,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-
-  const fetchManualEdits = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data: edits, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*');
-
-      if (error) throw error;
-
-      const editsById = {};
-      edits.forEach(edit => {
-        editsById[edit.id] = {
-          ...edit,
-          // Map DB snake_case to App camelCase
-          company: edit.company,
-          clientName: edit.company,
-          agentId: edit.agent_id,
-          dueDate: edit.due_date,
-          billingCycle: edit.billing_cycle,
-          lastInvoicedDate: edit.last_invoiced_date,
-          lastNoUsageDate: edit.last_no_usage_date,
-          email: edit.email || '',
-          noUsageCount: (edit.notes || '').match(/\[streak:(\d+)\]/)?.[1] ? Number((edit.notes || '').match(/\[streak:(\d+)\]/)[1]) : (Number(edit.no_usage_count) || 0),
-          invoiceNumber: edit.invoice_number,
-          notes: (edit.notes || '').replace(/\[streak:\d+\]/, '').trim(),
-          __isNew: edit.is_new,
-          __deleted: edit.is_deleted
-        };
-      });
-
-      setManualEdits(editsById);
-      manualEditsRef.current = editsById;
-    } catch (error) {
-      console.error('Error fetching manual edits:', error.message);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (user) {
-      fetchManualEdits();
-    }
-  }, [user, fetchManualEdits]);
-
-  // Data Repair: If we have confirm records (lastInvoicedDate) but no dueDate,
-  // calculate it and persist it. This fixes records from before this patch.
-  useEffect(() => {
-    if (loading || !manualEdits || Object.keys(manualEdits).length === 0) return;
-
-    const toFix = Object.values(manualEdits).filter(edit => 
-      edit.lastInvoicedDate && (!edit.dueDate || String(edit.dueDate).trim() === '')
-    );
-
-    if (toFix.length > 0) {
-      console.log(`[Repair] Found ${toFix.length} records missing dueDate. Patching...`);
-      const fixed = toFix.map(item => {
-        const invDate = new Date(item.lastInvoicedDate + 'T00:00:00');
-        invDate.setDate(invDate.getDate() + 1);
-        const due = invDate.toISOString().split('T')[0];
-        return { ...item, dueDate: due };
-      });
-
-      // Update local state and persist to DB
-      setManualEdits(prev => {
-        const next = { ...prev };
-        fixed.forEach(f => { next[f.id] = f; });
-        manualEditsRef.current = next;
-        return next;
-      });
-      persistEditedRows(fixed);
-    }
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally narrow to avoid re-saving while repairing legacy manual edits.
 
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
   useEffect(() => {
@@ -870,19 +767,6 @@ function App() {
       setActiveView('overview');
     }
   }, [activeView, accessProfile]);
-
-  const handleLogout = useCallback(async () => {
-    loggedSessionRef.current = '';
-    setActiveView('overview');
-    setCurrentDebtor(null);
-    setActiveCompany(null);
-    setUser(null);
-
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) {
-      toast.error(error.message || 'Failed to log out');
-    }
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1014,7 +898,7 @@ function App() {
     try {
       // 1. Delete from Supabase to effectively remove the override
       const { error } = await supabase
-        .from(TABLE_NAME)
+        .from(MANUAL_EDITS_TABLE)
         .delete()
         .eq('id', String(id));
 
@@ -1104,60 +988,6 @@ function App() {
   const openCompanyProfile = (companyName) => {
     if (!companyName) return;
     setActiveCompany(companyName);
-  };
-
-  const persistEditedRows = async (rows) => {
-    if (!rows || rows.length === 0 || !user) return;
-
-    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
-    // We also filter out any null or undefined IDs.
-    const upserts = rows
-      .filter(row => row.id)
-      .map(row => ({
-        id: String(row.id),
-        company: row.company || row.clientName || null,
-        agent_id: row.agentId || null,
-        amount: Number(row.amount) || 0,
-        status: String(row.status || 'pending'),
-        due_date: row.dueDate || null,
-        last_invoiced_date: row.lastInvoicedDate || null,
-        last_no_usage_date: row.lastNoUsageDate || null,
-        billing_cycle: row.billingCycle || null,
-        invoice_number: row.invoiceNumber || null,
-        is_new: Boolean(row.__isNew),
-        is_deleted: Boolean(row.__deleted),
-        updated_at: new Date().toISOString(),
-        notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
-      }));
-
-    if (upserts.length === 0) return;
-
-    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
-
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert(upserts);
-
-      if (error) {
-        console.error('[Persistence] Supabase Error:', error);
-        throw error;
-      }
-
-      // Update local ref after successful DB update
-      setManualEdits(prev => {
-        const next = { ...prev };
-        rows.forEach(row => {
-          next[row.id] = { ...row };
-        });
-        manualEditsRef.current = next;
-        return next;
-      });
-    } catch (error) {
-      const msg = error?.message || 'Unknown network error';
-      toast.error(`Cloud Sync Failed: ${msg}`, { duration: 5000 });
-      console.error('[Persistence] Detailed Error:', error);
-    }
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
@@ -1671,7 +1501,7 @@ function App() {
   if (!user) {
     return (
       <AppContainer>
-        <Login onLogin={setUser} />
+        <Login onLogin={setAuthenticatedUser} />
         <Toaster position="bottom-right" />
       </AppContainer>
     );
