@@ -1,17 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
 import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
-import DebtorModal from './components/DebtorModal';
-import CompanyProfileModal from './components/CompanyProfileModal';
-import ManagerAnalytics from './components/ManagerAnalytics';
-import Login from './components/Login';
-import SupportTracker from './components/SupportTracker';
-import ActivityLogs from './components/ActivityLogs';
 import InvoiceEntry from './components/InvoiceEntry';
-import PortfolioCompanies from './components/PortfolioCompanies';
+import Login from './components/Login';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { hasSupabaseConfig } from './lib/supabase';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
@@ -27,6 +21,13 @@ import { useAppSession } from './hooks/useAppSession';
 import { useOverviewActions } from './hooks/useOverviewActions';
 import { useDerivedDebtorViews } from './hooks/useDerivedDebtorViews';
 import './index.css';
+
+const DebtorModal = lazy(() => import('./components/DebtorModal'));
+const CompanyProfileModal = lazy(() => import('./components/CompanyProfileModal'));
+const ManagerAnalytics = lazy(() => import('./components/ManagerAnalytics'));
+const SupportTracker = lazy(() => import('./components/SupportTracker'));
+const ActivityLogs = lazy(() => import('./components/ActivityLogs'));
+const PortfolioCompanies = lazy(() => import('./components/PortfolioCompanies'));
 
 const TRACKED_ACTIVITY_FIELDS = [
   { key: 'amount', label: 'Total Due' },
@@ -69,6 +70,8 @@ const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
 
     return entries;
   }, []);
+
+const sectionLoader = <SectionLoadingState>Loading section...</SectionLoadingState>;
 
 const getUserAvatarSrc = (email) => {
   const normalizedEmail = String(email || '').toLowerCase();
@@ -581,6 +584,16 @@ const ViewButton = styled.button`
   }
 `;
 
+const SectionLoadingState = styled.div`
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+`;
+
 function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
@@ -907,33 +920,39 @@ function App() {
       )}
 
       {activeView === 'analytics' && (
-        <ManagerAnalytics
-          invoiceRows={analyticsInvoiceRows}
-          aggregatedRows={analyticsAggregatedRows}
-          selectedAgent={selectedAgent}
-          onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
-          onOpenCompanyProfile={openCompanyProfile}
-          isManager={accessProfile.canViewAllData}
-        />
+        <Suspense fallback={sectionLoader}>
+          <ManagerAnalytics
+            invoiceRows={analyticsInvoiceRows}
+            aggregatedRows={analyticsAggregatedRows}
+            selectedAgent={selectedAgent}
+            onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+            onOpenCompanyProfile={openCompanyProfile}
+            isManager={accessProfile.canViewAllData}
+          />
+        </Suspense>
       )}
 
       {activeView === 'portfolio' && !accessProfile.canViewAllData && (
-        <PortfolioCompanies
-          companies={accessibleClientsByAgent}
-          debtRows={accessibleData}
-          currentUserEmail={user?.email || ''}
-        />
+        <Suspense fallback={sectionLoader}>
+          <PortfolioCompanies
+            companies={accessibleClientsByAgent}
+            debtRows={accessibleData}
+            currentUserEmail={user?.email || ''}
+          />
+        </Suspense>
       )}
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker
-            data={accessibleTrackerData}
-            canManageEntries={accessProfile.canEditData}
-            canComment={Boolean(user)}
-            currentUserEmail={user?.email || ''}
-            onSaveFollowUp={handleSaveFollowUp}
-          />
+          <Suspense fallback={sectionLoader}>
+            <SupportTracker
+              data={accessibleTrackerData}
+              canManageEntries={accessProfile.canEditData}
+              canComment={Boolean(user)}
+              currentUserEmail={user?.email || ''}
+              onSaveFollowUp={handleSaveFollowUp}
+            />
+          </Suspense>
         </ContentScroll>
       )}
 
@@ -992,16 +1011,18 @@ function App() {
               </AccessToggleGrid>
             </AccessControlPanel>
           )}
-          <ActivityLogs refreshSignal={activityLogRefreshKey} />
+          <Suspense fallback={sectionLoader}>
+            <ActivityLogs refreshSignal={activityLogRefreshKey} />
+          </Suspense>
         </ContentScroll>
       )}
 
       {activeView === 'invoice_entry' && (
         <ContentScroll>
-          <InvoiceEntry 
-            clientsByAgent={accessibleClientsByAgent} 
-            existingData={accessibleData} 
-            onSaveInvoice={(invoice) => {
+            <InvoiceEntry 
+              clientsByAgent={accessibleClientsByAgent} 
+              existingData={accessibleData} 
+              onSaveInvoice={(invoice) => {
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
                 // If it's a completely new manual entry, we add it to the array.
@@ -1122,25 +1143,27 @@ function App() {
         </ContentScroll>
       </MainContent>
 
-      <DebtorModal
-        key={`${currentDebtor?.id || 'new'}-${isModalOpen ? 'open' : 'closed'}`}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveDebtor}
-        onReset={handleResetDebtor}
-        debtor={currentDebtor}
-      />
+      <Suspense fallback={null}>
+        <DebtorModal
+          key={`${currentDebtor?.id || 'new'}-${isModalOpen ? 'open' : 'closed'}`}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSaveDebtor}
+          onReset={handleResetDebtor}
+          debtor={currentDebtor}
+        />
 
-      <CompanyProfileModal
-        isOpen={Boolean(activeCompany)}
-        onClose={() => setActiveCompany(null)}
-        profile={companyProfile}
-        onEditInvoice={(inv) => {
-          setActiveCompany(null);
-          setCurrentDebtor(inv);
-          setIsModalOpen(true);
-        }}
-      />
+        <CompanyProfileModal
+          isOpen={Boolean(activeCompany)}
+          onClose={() => setActiveCompany(null)}
+          profile={companyProfile}
+          onEditInvoice={(inv) => {
+            setActiveCompany(null);
+            setCurrentDebtor(inv);
+            setIsModalOpen(true);
+          }}
+        />
+      </Suspense>
 
 
       <Toaster position="bottom-right" />
@@ -1153,4 +1176,6 @@ function App() {
 }
 
 export default App;
+
+
 
