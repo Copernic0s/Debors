@@ -20,8 +20,8 @@ import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles
 import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
-import { aggregateByCompany, mergeDebtorsWithClientSheet, mergeManualEdits, toComparableDate } from './services/debtorDataReconciliation';
-import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
+import { aggregateByCompany, mergeDebtorsWithClientSheet, mergeManualEdits, roundMoney, toComparableDate } from './services/debtorDataReconciliation';
+import { useAppSharedState } from './hooks/useAppSharedState';
 import './index.css';
 
 // Table used for cloud persistence
@@ -68,32 +68,6 @@ const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
     return entries;
   }, []);
 
-const TRACKER_FOLLOW_UP_STORAGE_KEY = 'debors-support-followups-v1';
-const ACCESS_FEATURE_OVERRIDE_STORAGE_KEY = 'debors-access-feature-overrides-v1';
-
-const normalizeTrackerKeyPart = (value) =>
-  String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
-
-const buildTrackerRowId = (row, index = 0) => {
-  if (row?.id) return String(row.id);
-
-  const parts = [
-    row?.date,
-    row?.company || row?.customer || row?.clientName,
-    row?.task,
-    row?.agent || row?.agentId
-  ]
-    .map(normalizeTrackerKeyPart)
-    .filter(Boolean);
-
-  return parts.length > 0 ? `tracker-${parts.join('-')}` : `tracker-row-${index}`;
-};
-
 const getUserAvatarSrc = (email) => {
   const normalizedEmail = String(email || '').toLowerCase();
 
@@ -102,126 +76,6 @@ const getUserAvatarSrc = (email) => {
   if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
 
   return null;
-};
-
-const sanitizeTrackerComments = (comments) =>
-  Array.isArray(comments)
-    ? comments
-        .filter(Boolean)
-        .map((comment, index) => ({
-          id: comment?.id || `comment-${index}`,
-          author: String(comment?.author || 'Internal user').trim(),
-          text: String(comment?.text || '').trim(),
-          createdAt: comment?.createdAt || new Date().toISOString()
-        }))
-        .filter((comment) => comment.text)
-    : [];
-
-const normalizeTrackerRows = (rows, followUpsById = {}) =>
-  (Array.isArray(rows) ? rows : []).map((row, index) => {
-    const id = buildTrackerRowId(row, index);
-    const followUp = followUpsById[id] || null;
-    const comments = sanitizeTrackerComments(followUp?.comments ?? row?.comments);
-
-    return {
-      ...row,
-      id,
-      status: followUp?.status || row?.status || 'Follow-up',
-      owner: String(followUp?.owner ?? row?.owner ?? '').trim(),
-      nextAction: String(followUp?.nextAction ?? row?.nextAction ?? '').trim(),
-      followUpDue: String(followUp?.followUpDue ?? row?.followUpDue ?? '').trim(),
-      comments,
-      lastComment: comments.length > 0 ? comments[comments.length - 1] : row?.lastComment || null
-    };
-  });
-
-const readTrackerFollowUps = () => {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const raw = window.localStorage.getItem(TRACKER_FOLLOW_UP_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (error) {
-    console.error('[Support Tracker] Failed to restore saved follow-ups:', error);
-    return {};
-  }
-};
-
-const writeTrackerFollowUps = (followUpsById) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(TRACKER_FOLLOW_UP_STORAGE_KEY, JSON.stringify(followUpsById));
-  } catch (error) {
-    console.error('[Support Tracker] Failed to persist follow-ups:', error);
-  }
-};
-
-const readAccessFeatureOverrides = () => {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    const raw = window.localStorage.getItem(ACCESS_FEATURE_OVERRIDE_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch (error) {
-    console.error('[Access Controls] Failed to restore feature overrides:', error);
-    return {};
-  }
-};
-
-const writeAccessFeatureOverrides = (overrides) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(ACCESS_FEATURE_OVERRIDE_STORAGE_KEY, JSON.stringify(overrides));
-  } catch (error) {
-    console.error('[Access Controls] Failed to persist feature overrides:', error);
-  }
-};
-
-const parseMoneyValue = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-
-  let raw = String(value ?? '').trim();
-  if (!raw) return Number.NaN;
-
-  raw = raw
-    .replace(/[$€£]/g, '')
-    .replace(/[\s\u00A0\u202F]/g, '')
-    .replace(/[^0-9,.-]/g, '');
-
-  if (!raw) return Number.NaN;
-
-  const lastComma = raw.lastIndexOf(',');
-  const lastDot = raw.lastIndexOf('.');
-  const sepIndex = Math.max(lastComma, lastDot);
-
-  if (sepIndex === -1) {
-    const parsed = Number.parseFloat(raw);
-    return Number.isFinite(parsed) ? parsed : Number.NaN;
-  }
-
-  const hasBoth = lastComma !== -1 && lastDot !== -1;
-  const decPart = raw.slice(sepIndex + 1);
-  const intPart = raw.slice(0, sepIndex);
-
-  let normalized;
-  if (!hasBoth && decPart.length === 3) {
-    normalized = raw.replace(/[.,]/g, '');
-  } else {
-    const cleanInt = intPart.replace(/[.,]/g, '');
-    normalized = `${cleanInt}.${decPart.replace(/[.,]/g, '')}`;
-  }
-
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-};
-
-const roundMoney = (value) => {
-  const parsed = parseMoneyValue(value);
-  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : Number.NaN;
 };
 
 const AppContainer = styled.div`
@@ -740,10 +594,14 @@ function App() {
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
   const [manualEdits, setManualEdits] = useState({});
-  const [, setTrackerFollowUps] = useState({});
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
-  const [accessFeatureOverrides, setAccessFeatureOverrides] = useState({});
+  const {
+    accessFeatureOverrides,
+    handleSaveFollowUp,
+    normalizeIncomingTrackerRows,
+    updateFeatureAccessOverride
+  } = useAppSharedState({ user, setTrackerData });
   const accessProfile = useMemo(() => resolveAccessProfile(user, accessFeatureOverrides), [user, accessFeatureOverrides]);
   const matchesSelectedAgent = useCallback(
     (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
@@ -751,58 +609,13 @@ function App() {
   );
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
-  const trackerFollowUpsRef = useRef({});
   const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    setAccessFeatureOverrides(readAccessFeatureOverrides());
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    const savedFollowUps = readTrackerFollowUps();
-    setTrackerFollowUps(savedFollowUps);
-    trackerFollowUpsRef.current = savedFollowUps;
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-
-    let isActive = true;
-
-    const hydrateSharedState = async () => {
-      const remoteOverrides = await loadSharedState(
-        SHARED_APP_STATE_KEYS.featureAccessOverrides,
-        readAccessFeatureOverrides()
-      );
-      if (isActive && remoteOverrides && typeof remoteOverrides === 'object') {
-        setAccessFeatureOverrides(remoteOverrides);
-        writeAccessFeatureOverrides(remoteOverrides);
-      }
-
-      const remoteFollowUps = await loadSharedState(
-        SHARED_APP_STATE_KEYS.trackerFollowUps,
-        readTrackerFollowUps()
-      );
-      if (isActive && remoteFollowUps && typeof remoteFollowUps === 'object') {
-        setTrackerFollowUps(remoteFollowUps);
-        trackerFollowUpsRef.current = remoteFollowUps;
-        writeTrackerFollowUps(remoteFollowUps);
-        setTrackerData((prev) => normalizeTrackerRows(prev, remoteFollowUps));
-      }
-    };
-
-    hydrateSharedState();
-
-    return () => {
-      isActive = false;
-    };
-  }, [user]);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -957,7 +770,7 @@ function App() {
       setClientsByAgent(csData || []);
 
       if (trackerLogs) {
-        setTrackerData(normalizeTrackerRows(trackerLogs, trackerFollowUpsRef.current));
+        setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
       }
 
       if (mergedData && mergedData.length > 0) {
@@ -990,7 +803,7 @@ function App() {
       }
       syncInFlightRef.current = false;
     }
-  }, []);
+  }, [normalizeIncomingTrackerRows]);
 
   useEffect(() => {
     loadData();
@@ -1057,61 +870,6 @@ function App() {
       setActiveView('overview');
     }
   }, [activeView, accessProfile]);
-
-  const handleSaveFollowUp = useCallback(async (payload) => {
-    if (!payload?.id) return;
-
-    const normalizedComments = sanitizeTrackerComments(payload.comments);
-    const normalizedFollowUp = {
-      id: String(payload.id),
-      status: String(payload.status || 'Follow-up').trim(),
-      owner: String(payload.owner || '').trim(),
-      nextAction: String(payload.nextAction || '').trim(),
-      followUpDue: String(payload.followUpDue || '').trim(),
-      comments: normalizedComments,
-      lastComment: normalizedComments.length > 0 ? normalizedComments[normalizedComments.length - 1] : null
-    };
-
-    setTrackerFollowUps((prev) => {
-      const next = {
-        ...prev,
-        [normalizedFollowUp.id]: normalizedFollowUp
-      };
-      trackerFollowUpsRef.current = next;
-      writeTrackerFollowUps(next);
-      saveSharedState(SHARED_APP_STATE_KEYS.trackerFollowUps, next, user?.email || null);
-      return next;
-    });
-
-    setTrackerData((prev) =>
-      normalizeTrackerRows(
-        prev.map((item) =>
-          item.id === normalizedFollowUp.id
-            ? {
-                ...item,
-                ...normalizedFollowUp
-              }
-            : item
-        ),
-        trackerFollowUpsRef.current
-      )
-    );
-  }, [user]);
-
-  const updateFeatureAccessOverride = useCallback((subjectKey, patch) => {
-    setAccessFeatureOverrides((prev) => {
-      const next = {
-        ...prev,
-        [subjectKey]: {
-          ...(prev?.[subjectKey] || {}),
-          ...patch
-        }
-      };
-      writeAccessFeatureOverrides(next);
-      saveSharedState(SHARED_APP_STATE_KEYS.featureAccessOverrides, next, user?.email || null);
-      return next;
-    });
-  }, [user]);
 
   const handleLogout = useCallback(async () => {
     loggedSessionRef.current = '';
