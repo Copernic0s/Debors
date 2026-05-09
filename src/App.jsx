@@ -19,11 +19,12 @@ import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
 import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
 import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
-import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
+import { createActivityEntry } from './services/activityLogger';
 import { aggregateByCompany, mergeDebtorsWithClientSheet, mergeManualEdits, roundMoney, toComparableDate } from './services/debtorDataReconciliation';
 import { useAppSharedState } from './hooks/useAppSharedState';
 import { useManualEditsState } from './hooks/useManualEditsState';
 import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
+import { useAppSession } from './hooks/useAppSession';
 import './index.css';
 
 const TRACKED_ACTIVITY_FIELDS = [
@@ -593,8 +594,19 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [user, setUser] = useState(null);
-  const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
+  const {
+    activityLogRefreshKey,
+    handleLogout,
+    recordActivityEntries,
+    setAuthenticatedUser,
+    user
+  } = useAppSession({
+    onSignedOut: () => {
+      setActiveView('overview');
+      setCurrentDebtor(null);
+      setActiveCompany(null);
+    }
+  });
   const {
     accessFeatureOverrides,
     handleSaveFollowUp,
@@ -613,7 +625,6 @@ function App() {
     [selectedAgent]
   );
   const syncInFlightRef = useRef(false);
-  const loggedSessionRef = useRef('');
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -622,52 +633,6 @@ function App() {
   }, []);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  const recordActivityEntries = useCallback(async (entries) => {
-    if (!user || !shouldTrackUserActivity(user) || !entries || entries.length === 0) return;
-    const result = await logActivityEntries(entries);
-    if (result?.success && result.logged > 0) {
-      setActivityLogRefreshKey((prev) => prev + 1);
-    }
-  }, [user]);
-
-
-  useEffect(() => {
-    if (!hasSupabaseConfig || !supabase) return;
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-
-      if (_event === 'SIGNED_OUT' || !session?.user) {
-        loggedSessionRef.current = '';
-        setActiveView('overview');
-        setCurrentDebtor(null);
-        setActiveCompany(null);
-        return;
-      }
-
-      if (_event === 'SIGNED_IN') {
-        const sessionKey = `${session.user.id}:${session.access_token?.slice(0, 16) || 'signed-in'}`;
-        if (loggedSessionRef.current !== sessionKey && !canViewActivityLogs(session.user)) {
-          loggedSessionRef.current = sessionKey;
-          try {
-            const result = await logLoginActivity(session.user);
-            if (result?.success && result.logged > 0) {
-              setActivityLogRefreshKey((prev) => prev + 1);
-            }
-          } catch (error) {
-            console.error('[Activity Logs] Login logging failed:', error);
-          }
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -802,19 +767,6 @@ function App() {
       setActiveView('overview');
     }
   }, [activeView, accessProfile]);
-
-  const handleLogout = useCallback(async () => {
-    loggedSessionRef.current = '';
-    setActiveView('overview');
-    setCurrentDebtor(null);
-    setActiveCompany(null);
-    setUser(null);
-
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) {
-      toast.error(error.message || 'Failed to log out');
-    }
-  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -1549,7 +1501,7 @@ function App() {
   if (!user) {
     return (
       <AppContainer>
-        <Login onLogin={setUser} />
+        <Login onLogin={setAuthenticatedUser} />
         <Toaster position="bottom-right" />
       </AppContainer>
     );
