@@ -71,8 +71,6 @@ const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
     return entries;
   }, []);
 
-const sectionLoader = <SectionLoadingState>Loading section...</SectionLoadingState>;
-
 const getUserAvatarSrc = (email) => {
   const normalizedEmail = String(email || '').toLowerCase();
 
@@ -593,6 +591,8 @@ const SectionLoadingState = styled.div`
   font-weight: 600;
   letter-spacing: 0.02em;
 `;
+
+const sectionLoader = <SectionLoadingState>Loading section...</SectionLoadingState>;
 
 function App() {
   const [data, setData] = useState([]);
