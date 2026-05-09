@@ -20,6 +20,7 @@ import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles
 import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { canViewActivityLogs, createActivityEntry, logActivityEntries, logLoginActivity, shouldTrackUserActivity } from './services/activityLogger';
+import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
 import './index.css';
 
 // Table used for cloud persistence
@@ -994,7 +995,6 @@ const aggregateByCompany = (rows) => {
 
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
-    const cycles = Array.from(item.cycleSet);
     
     // Re-calculate auto-overdue based on the FINAL aggregated due date
     let status = item.status;
@@ -1047,9 +1047,6 @@ function App() {
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
-  const [lastSyncAt, setLastSyncAt] = useState(null);
   const [lastTick, setLastTick] = useState(Date.now());
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
@@ -1087,6 +1084,40 @@ function App() {
     setTrackerFollowUps(savedFollowUps);
     trackerFollowUpsRef.current = savedFollowUps;
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let isActive = true;
+
+    const hydrateSharedState = async () => {
+      const remoteOverrides = await loadSharedState(
+        SHARED_APP_STATE_KEYS.featureAccessOverrides,
+        readAccessFeatureOverrides()
+      );
+      if (isActive && remoteOverrides && typeof remoteOverrides === 'object') {
+        setAccessFeatureOverrides(remoteOverrides);
+        writeAccessFeatureOverrides(remoteOverrides);
+      }
+
+      const remoteFollowUps = await loadSharedState(
+        SHARED_APP_STATE_KEYS.trackerFollowUps,
+        readTrackerFollowUps()
+      );
+      if (isActive && remoteFollowUps && typeof remoteFollowUps === 'object') {
+        setTrackerFollowUps(remoteFollowUps);
+        trackerFollowUpsRef.current = remoteFollowUps;
+        writeTrackerFollowUps(remoteFollowUps);
+        setTrackerData((prev) => normalizeTrackerRows(prev, remoteFollowUps));
+      }
+    };
+
+    hydrateSharedState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -1217,7 +1248,7 @@ function App() {
       });
       persistEditedRows(fixed);
     }
-  }, [loading]);
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally narrow to avoid re-saving while repairing legacy manual edits.
 
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
   useEffect(() => {
@@ -1235,8 +1266,6 @@ function App() {
     if (!silent) {
       setLoading(true);
     }
-    setIsSyncing(true);
-
     try {
       const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
@@ -1248,7 +1277,6 @@ function App() {
 
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
-        setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -1256,7 +1284,6 @@ function App() {
         }
       } else {
         setRawZohoData([]);
-        setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.error('Zoho returned no rows.', {
             icon: 'ℹ️',
@@ -1267,18 +1294,15 @@ function App() {
     } catch (err) {
       console.error('[Sync] Load data failed:', err);
       // No data wiping
-      setSyncSourceLabel('Offline Data');
       if (notifyUser) {
         toast.error('Unable to connect to Zoho. Using offline data.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
         });
       }
     } finally {
-      setLastSyncAt(new Date());
       if (!silent) {
         setLoading(false);
       }
-      setIsSyncing(false);
       syncInFlightRef.current = false;
     }
   }, []);
@@ -1370,6 +1394,7 @@ function App() {
       };
       trackerFollowUpsRef.current = next;
       writeTrackerFollowUps(next);
+      saveSharedState(SHARED_APP_STATE_KEYS.trackerFollowUps, next, user?.email || null);
       return next;
     });
 
@@ -1386,7 +1411,7 @@ function App() {
         trackerFollowUpsRef.current
       )
     );
-  }, []);
+  }, [user]);
 
   const updateFeatureAccessOverride = useCallback((subjectKey, patch) => {
     setAccessFeatureOverrides((prev) => {
@@ -1398,9 +1423,10 @@ function App() {
         }
       };
       writeAccessFeatureOverrides(next);
+      saveSharedState(SHARED_APP_STATE_KEYS.featureAccessOverrides, next, user?.email || null);
       return next;
     });
-  }, []);
+  }, [user]);
 
   const handleLogout = useCallback(async () => {
     loggedSessionRef.current = '';
@@ -1797,7 +1823,6 @@ function App() {
 
 
 
-  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
   const agentOptions = React.useMemo(() => {
     const rosterAgents = Array.from(
       new Set(
@@ -1827,7 +1852,7 @@ function App() {
   }, [selectedAgent, agentOptions, accessProfile]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
-    const today = new Date();
+    const today = new Date(lastTick);
     return accessibleData.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
@@ -1913,29 +1938,6 @@ function App() {
     };
   }, [agentData, accessibleData, selectedAgent]);
 
-  const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
-    const map = new Map();
-    agentData.forEach((item) => {
-      const key = String(item.company || item.clientName || '').trim().toLowerCase();
-      if (!key) return;
-      const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
-      const previous = map.get(key) || false;
-      map.set(key, previous || isInDebt);
-    });
-
-    const size = map.size;
-    const inDebt = Array.from(map.values()).filter(Boolean).length;
-    return {
-      snapshotClients: size,
-      snapshotClientsInDebt: inDebt,
-      snapshotClientsClear: size - inDebt
-    };
-  }, [agentData]);
-
-  const syncTimeLabel = lastSyncAt
-    ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
-    : '--:--';
-
   const isKevinProfile = isManagedKevinIdentity(user?.email || '');
   const kevinAccessSettings = accessFeatureOverrides.kevin || {};
   const kevinSectionAccess = {
@@ -1957,7 +1959,6 @@ function App() {
 
     // Deduplicate by week to avoid double-counting placeholders
     const deduplicatedRows = [];
-    const seenWindows = new Set();
     
     // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
     const sortedScoped = [...scopedRows].sort((a, b) => {

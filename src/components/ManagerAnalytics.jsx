@@ -85,13 +85,6 @@ const getAgingBucket = (daysPastDue) => {
   return '15+';
 };
 
-const agingLabelToKey = (label) => {
-  if (label === 'Current') return 'current';
-  if (label === '1-7 days') return '1-7';
-  if (label === '8-14 days') return '8-14';
-  return '15+';
-};
-
 const RechartsVisualFix = createGlobalStyle`
   .recharts-wrapper:focus,
   .recharts-wrapper *:focus,
@@ -736,7 +729,7 @@ export default function ManagerAnalytics({
   isManager = true
 }) {
   const [quickFilter, setQuickFilter] = useState('all');
-  const [drilldown, setDrilldown] = useState({ type: 'all', value: 'all' });
+  const [drilldown] = useState({ type: 'all', value: 'all' });
 
   const analytics = useMemo(() => {
     const baseInvoiceRows = invoiceRows || [];

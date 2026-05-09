@@ -161,16 +161,6 @@ const Tr = styled.tr`
   }
 `;
 
-const formatAmountInput = (value) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '0.00';
-  return new Intl.NumberFormat('en-US', {
-    useGrouping: true,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(numeric);
-};
-
 const BillingCycleSelect = styled.select`
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
