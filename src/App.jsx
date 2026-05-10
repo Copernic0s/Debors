@@ -626,6 +626,7 @@ function App() {
   const {
     activityLogRefreshKey,
     handleLogout,
+    isLoggingOut,
     recordActivityEntries,
     setAuthenticatedUser,
     user
@@ -1183,8 +1184,8 @@ function App() {
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <span>Sync</span>
               </SyncButton>
-              <LogoutButton onClick={handleLogout}>
-                Logout
+              <LogoutButton onClick={handleLogout} disabled={isLoggingOut}>
+                {isLoggingOut ? 'Closing...' : 'Logout'}
               </LogoutButton>
             </ActionButtons>
           </TopbarRight>
