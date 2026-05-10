@@ -452,7 +452,9 @@ def save_debug_screenshot(driver: WebDriver, prefix: str) -> None:
 
 
 def perform_login(driver: WebDriver) -> None:
-    safe_get(driver, BASE_URL)
+    attached_mode = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
+    if not attached_mode:
+        safe_get(driver, BASE_URL)
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
 
     email = os.getenv("CMP_EMAIL", "").strip()
@@ -460,6 +462,10 @@ def perform_login(driver: WebDriver) -> None:
     if not email or not password:
         logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated CMP session...")
         wait.until(lambda current: "/auth" not in current.current_url)
+        return
+
+    if attached_mode and "/auth" not in driver.current_url:
+        logging.info("Attached mode already authenticated. Skipping credential login.")
         return
 
     email_input = wait_for_any(driver, SELECTORS.email_inputs)
