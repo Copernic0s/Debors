@@ -5,6 +5,7 @@ export const SHARED_APP_STATE_TABLE = 'app_shared_state';
 export const SHARED_APP_STATE_KEYS = {
   trackerFollowUps: 'tracker_followups',
   featureAccessOverrides: 'feature_access_overrides',
+  latestZohoDebtorSnapshot: 'latest_zoho_debtor_snapshot',
   portfolioCompanyOverridesPrefix: 'portfolio_company_overrides'
 };
 

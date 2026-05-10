@@ -20,6 +20,7 @@ import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
 import { useAppSession } from './hooks/useAppSession';
 import { useOverviewActions } from './hooks/useOverviewActions';
 import { useDerivedDebtorViews } from './hooks/useDerivedDebtorViews';
+import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
 import './index.css';
 
 const DebtorModal = lazy(() => import('./components/DebtorModal'));
@@ -689,6 +690,19 @@ function App() {
     setData(hydrated);
   }, [rawZohoData, manualEdits]);
 
+  useEffect(() => {
+    if (!hasMeaningfulInvoiceRows(rawZohoData)) return;
+
+    saveSharedState(
+      SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot,
+      {
+        debtors: rawZohoData.filter((row) => row?.source !== 'cs' && row?.id && !String(row.id).startsWith('CS-')),
+        savedAt: new Date().toISOString()
+      },
+      user?.email || null
+    );
+  }, [rawZohoData, user]);
+
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
     if (syncInFlightRef.current) return;
     syncInFlightRef.current = true;
@@ -720,6 +734,31 @@ function App() {
         return;
       }
 
+      if (!incomingHasInvoices) {
+        const fallbackSnapshot = await loadSharedState(SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot, null);
+        const fallbackDebtors = Array.isArray(fallbackSnapshot?.debtors) ? fallbackSnapshot.debtors : [];
+        const fallbackHasInvoices = hasMeaningfulInvoiceRows(fallbackDebtors);
+
+        if (fallbackHasInvoices) {
+          const recoveredRows = mergeDebtorsWithClientSheet(fallbackDebtors, csData);
+          console.warn('[Sync] Workbook has no debtor sheets. Restoring from last shared debtor snapshot.');
+          setClientsByAgent(csData);
+          if (trackerLogs.length > 0) {
+            setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
+          }
+          setRawZohoData(recoveredRows);
+          hasRetriedEmptyScopedLoadRef.current = false;
+
+          if (notifyUser) {
+            toast.error('Zoho workbook has no invoice tabs right now. Restored the last shared debt snapshot.', {
+              duration: 5000,
+              style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+            });
+          }
+          return;
+        }
+      }
+
       setClientsByAgent(csData);
 
       if (trackerLogs.length > 0) {
@@ -729,6 +768,16 @@ function App() {
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
         hasRetriedEmptyScopedLoadRef.current = false;
+        if (incomingHasInvoices) {
+          saveSharedState(
+            SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot,
+            {
+              debtors: sheetData,
+              savedAt: new Date().toISOString()
+            },
+            user?.email || null
+          );
+        }
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -756,7 +805,7 @@ function App() {
       }
       syncInFlightRef.current = false;
     }
-  }, [normalizeIncomingTrackerRows]);
+  }, [normalizeIncomingTrackerRows, user?.email]);
 
   useEffect(() => {
     loadData();
