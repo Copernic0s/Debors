@@ -287,6 +287,10 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     if profile_dir:
         options.add_argument(f"--profile-directory={profile_dir}")
 
+    debugger_address = os.getenv("CMP_DEBUGGER_ADDRESS", "").strip()
+    if debugger_address:
+        options.debugger_address = debugger_address
+
     return options
 
 
@@ -364,6 +368,11 @@ def create_driver() -> WebDriver:
         driver = webdriver.Chrome(service=service, options=options)
         driver.implicitly_wait(0)
         return driver
+
+    debugger_address = os.getenv("CMP_DEBUGGER_ADDRESS", "").strip()
+    if debugger_address:
+        logging.info("Attaching Selenium to existing Chrome debugger at %s", debugger_address)
+        return launch(build_chrome_options())
 
     if user_data_dir and profile_dir and clone_profile:
         try:
