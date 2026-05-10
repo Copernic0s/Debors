@@ -42,7 +42,7 @@ export const useAppSession = ({ onSignedOut }) => {
         return;
       }
 
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         const sessionKey = `${session.user.id}:${session.access_token?.slice(0, 16) || 'signed-in'}`;
         if (loggedSessionRef.current !== sessionKey && !canViewActivityLogs(session.user)) {
           loggedSessionRef.current = sessionKey;
@@ -81,6 +81,9 @@ export const useAppSession = ({ onSignedOut }) => {
 
       onSignedOut?.();
       setUser(null);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 120);
     } catch (error) {
       console.error('[Auth] Logout failed:', error);
       onSignedOut?.();
@@ -88,6 +91,9 @@ export const useAppSession = ({ onSignedOut }) => {
       toast.error('Session closed locally. Refresh if needed.', {
         duration: 3500
       });
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 120);
     } finally {
       setIsLoggingOut(false);
     }
