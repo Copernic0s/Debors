@@ -838,10 +838,12 @@ export default function ManagerAnalytics({
     const riskShare = totalOpen > 0 ? (totalOverdue / totalOpen) * 100 : 0;
 
     const agentData = Array.from(agentMap.values())
+      .filter((row) => row.open > 0 || row.overdue > 0 || row.paid > 0)
       .sort((a, b) => b.open - a.open)
       .map((row, index) => ({ ...row, color: AGENT_COLORS[index % AGENT_COLORS.length] }));
+    const visibleAgentData = agentData.slice(0, 6);
 
-    const busiestAgent = agentData[0] || null;
+    const busiestAgent = visibleAgentData[0] || null;
     const mostAtRiskAgent = [...agentData].sort((a, b) => b.overdue - a.overdue)[0] || null;
 
     const weekTrendData = Array.from(weekMap.values()).sort((a, b) => a.week.localeCompare(b.week));
@@ -862,7 +864,7 @@ export default function ManagerAnalytics({
         daysPastDue: normalizeStatus(row.status) === 'overdue' ? getDaysPastDue(row.dueDate) : 0
       }));
 
-    const agentWorkload = agentData.slice(0, 6).map((row) => {
+    const agentWorkload = visibleAgentData.map((row) => {
       const exposureRate = row.open > 0 ? (row.overdue / row.open) * 100 : 0;
       return {
         ...row,
@@ -948,7 +950,7 @@ export default function ManagerAnalytics({
       agentWorkload,
       agingData,
       actionItems: actionItems.slice(0, 4),
-      agentData,
+      agentData: visibleAgentData,
       activeFiltersLabel: {
         all: 'All records',
         overdue: 'Overdue only',
