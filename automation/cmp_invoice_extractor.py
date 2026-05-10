@@ -4,9 +4,11 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import tempfile
 import time
+import unicodedata
 from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
@@ -39,6 +41,8 @@ OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
 TEMP_PROFILE_PREFIX = "cmp_chrome_profile_"
+CLONED_PROFILE_PREFIX = "cmp_chrome_clone_"
+TEMP_DIRECTORIES_TO_CLEAN: list[str] = []
 
 
 @dataclass(frozen=True)
@@ -93,7 +97,10 @@ def configure_logging() -> None:
 
 
 def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+    text = str(value or "").strip()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(character for character in text if not unicodedata.combining(character))
+    return re.sub(r"\s+", " ", text).lower()
 
 
 def normalize_company_name(value: str) -> str:
@@ -241,15 +248,62 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     return options
 
 
+def clone_chrome_profile(user_data_dir: str, profile_dir: str) -> tuple[str, str]:
+    source_root = Path(user_data_dir)
+    source_profile = source_root / profile_dir
+    if not source_profile.exists():
+        raise FileNotFoundError(f"Chrome profile not found: {source_profile}")
+
+    clone_root = Path(tempfile.mkdtemp(prefix=CLONED_PROFILE_PREFIX))
+    target_profile = clone_root / profile_dir
+    TEMP_DIRECTORIES_TO_CLEAN.append(str(clone_root))
+
+    local_state = source_root / "Local State"
+    if local_state.exists():
+        shutil.copy2(local_state, clone_root / "Local State")
+
+    def ignore_profile_files(_directory: str, names: list[str]) -> set[str]:
+        ignored = {
+            "lockfile",
+            "singletoncookie",
+            "singletonlock",
+            "singletonsocket",
+            "Crashpad",
+            "ShaderCache",
+            "Code Cache",
+            "GrShaderCache",
+            "GraphiteDawnCache",
+            "DawnGraphiteCache",
+        }
+        return {name for name in names if name in ignored}
+
+    shutil.copytree(source_profile, target_profile, dirs_exist_ok=True, ignore=ignore_profile_files)
+    logging.info("Cloned Chrome profile '%s' into temporary workspace '%s'", profile_dir, clone_root)
+    return str(clone_root), profile_dir
+
+
 def create_driver() -> WebDriver:
     user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
     profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
+    clone_profile = os.getenv("CMP_CLONE_PROFILE", "true").strip().lower() != "false"
     service = ChromeService(ChromeDriverManager().install())
 
     def launch(options: ChromeOptions) -> WebDriver:
         driver = webdriver.Chrome(service=service, options=options)
         driver.implicitly_wait(0)
         return driver
+
+    if user_data_dir and profile_dir and clone_profile:
+        try:
+            cloned_user_data_dir, cloned_profile_dir = clone_chrome_profile(user_data_dir, profile_dir)
+            return launch(
+                build_chrome_options(
+                    user_data_dir=cloned_user_data_dir,
+                    profile_dir=cloned_profile_dir,
+                )
+            )
+        except Exception as error:
+            logging.warning("Failed to clone Chrome profile '%s': %s", profile_dir, error)
 
     try:
         return launch(build_chrome_options(user_data_dir=user_data_dir, profile_dir=profile_dir))
@@ -356,30 +410,60 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     search_input.send_keys(Keys.ENTER)
 
     normalized_target = normalize_company_name(client_name)
+    target_tokens = set(normalized_target.split())
 
-    def candidate_rows():
-        links = driver.find_elements(By.XPATH, "//table//tr//a | //table//tr//button | //table//tr//td")
-        return [item for item in links if normalize_text(item.text)]
+    def result_rows():
+        return [row for row in driver.find_elements(By.XPATH, "//table//tbody/tr") if row.is_displayed()]
 
-    wait.until(lambda current: len(candidate_rows()) > 0)
-    time.sleep(0.6)
+    wait.until(lambda current: len(result_rows()) > 0)
+    time.sleep(1.1)
 
-    best_match = None
-    for element in candidate_rows():
-        candidate_name = normalize_company_name(element.text)
+    best_match_element = None
+    best_score = -1
+
+    for row in result_rows():
+        cells = row.find_elements(By.XPATH, "./td")
+        if len(cells) < 2:
+            continue
+
+        name_cell = cells[1]
+        clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
+        clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
+        click_target = clickable_candidates[0] if clickable_candidates else name_cell
+
+        candidate_name = normalize_company_name(name_cell.text)
         if not candidate_name:
             continue
-        if candidate_name == normalized_target:
-            best_match = element
-            break
-        if normalized_target in candidate_name or candidate_name in normalized_target:
-            best_match = element
 
-    if not best_match:
+        candidate_tokens = set(candidate_name.split())
+        shared_tokens = len(target_tokens & candidate_tokens)
+        score = 0
+        if candidate_name == normalized_target:
+            score = 1000
+        elif normalized_target in candidate_name or candidate_name in normalized_target:
+            score = 700 + shared_tokens
+        elif shared_tokens:
+            score = shared_tokens * 10
+
+        if score > best_score:
+            best_score = score
+            best_match_element = click_target
+
+    if not best_match_element and len(result_rows()) == 1:
+        only_row = result_rows()[0]
+        cells = only_row.find_elements(By.XPATH, "./td")
+        if len(cells) >= 2:
+            name_cell = cells[1]
+            clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
+            clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
+            best_match_element = clickable_candidates[0] if clickable_candidates else name_cell
+
+    if not best_match_element:
         return False
 
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match)
-    best_match.click()
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match_element)
+    wait.until(EC.element_to_be_clickable(best_match_element))
+    best_match_element.click()
     wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
     return True
 
@@ -552,6 +636,11 @@ def main() -> int:
         return 0
     finally:
         driver.quit()
+        for temp_directory in TEMP_DIRECTORIES_TO_CLEAN:
+            try:
+                shutil.rmtree(temp_directory, ignore_errors=True)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
