@@ -449,9 +449,8 @@ def perform_login(driver: WebDriver) -> None:
     email = os.getenv("CMP_EMAIL", "").strip()
     password = os.getenv("CMP_PASSWORD", "").strip()
     if not email or not password:
-        logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated company view...")
-        wait.until(lambda current: "/company" in current.current_url and "/auth" not in current.current_url)
-        wait_for_any(driver, SELECTORS.search_inputs)
+        logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated CMP session...")
+        wait.until(lambda current: "/auth" not in current.current_url)
         return
 
     email_input = wait_for_any(driver, SELECTORS.email_inputs)
