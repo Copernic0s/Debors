@@ -38,6 +38,8 @@ const TRACKED_ACTIVITY_FIELDS = [
   { key: 'billingCycle', label: 'Billing Cycle' }
 ];
 
+const LOCAL_ZOHO_SNAPSHOT_KEY = 'debors:latest-zoho-snapshot';
+
 const normalizeActivityValue = (fieldKey, value) => {
   if (value === null || value === undefined) return '';
   if (fieldKey === 'amount') {
@@ -80,6 +82,40 @@ const getUserAvatarSrc = (email) => {
   if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
 
   return null;
+};
+
+const loadLocalZohoSnapshot = () => {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_ZOHO_SNAPSHOT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      debtors: Array.isArray(parsed?.debtors) ? parsed.debtors : [],
+      clientsByAgent: Array.isArray(parsed?.clientsByAgent) ? parsed.clientsByAgent : [],
+      trackerLogs: Array.isArray(parsed?.trackerLogs) ? parsed.trackerLogs : [],
+      savedAt: parsed?.savedAt || null
+    };
+  } catch (error) {
+    console.error('[Sync] Failed to read local Zoho snapshot:', error);
+    return null;
+  }
+};
+
+const saveLocalZohoSnapshot = ({ debtors, clientsByAgent, trackerLogs }) => {
+  try {
+    window.localStorage.setItem(
+      LOCAL_ZOHO_SNAPSHOT_KEY,
+      JSON.stringify({
+        debtors,
+        clientsByAgent,
+        trackerLogs,
+        savedAt: new Date().toISOString()
+      })
+    );
+  } catch (error) {
+    console.error('[Sync] Failed to save local Zoho snapshot:', error);
+  }
 };
 
 const AppContainer = styled.div`
@@ -716,6 +752,7 @@ function App() {
       const csData = Array.isArray(response?.clientsByAgent) ? response.clientsByAgent : [];
       const trackerLogs = Array.isArray(response?.trackerLogs) ? response.trackerLogs : [];
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
+      const localSnapshot = loadLocalZohoSnapshot();
       const previousHadInvoices = hasMeaningfulInvoiceRows(rawZohoDataRef.current);
       const incomingHasInvoices = hasMeaningfulInvoiceRows(sheetData) || hasMeaningfulInvoiceRows(mergedData);
       const looksLikeDegradedSnapshot =
@@ -738,6 +775,8 @@ function App() {
         const fallbackSnapshot = await loadSharedState(SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot, null);
         const fallbackDebtors = Array.isArray(fallbackSnapshot?.debtors) ? fallbackSnapshot.debtors : [];
         const fallbackHasInvoices = hasMeaningfulInvoiceRows(fallbackDebtors);
+        const localFallbackDebtors = Array.isArray(localSnapshot?.debtors) ? localSnapshot.debtors : [];
+        const localFallbackHasInvoices = hasMeaningfulInvoiceRows(localFallbackDebtors);
 
         if (fallbackHasInvoices) {
           const recoveredRows = mergeDebtorsWithClientSheet(fallbackDebtors, csData);
@@ -751,6 +790,28 @@ function App() {
 
           if (notifyUser) {
             toast.error('Zoho workbook has no invoice tabs right now. Restored the last shared debt snapshot.', {
+              duration: 5000,
+              style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+            });
+          }
+          return;
+        }
+
+        if (localFallbackHasInvoices) {
+          console.warn('[Sync] Workbook has no debtor sheets. Restoring from local browser snapshot.');
+          setClientsByAgent(Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : csData);
+          setTrackerData(
+            normalizeIncomingTrackerRows(
+              Array.isArray(localSnapshot?.trackerLogs) && localSnapshot.trackerLogs.length > 0
+                ? localSnapshot.trackerLogs
+                : trackerLogs
+            )
+          );
+          setRawZohoData(mergeDebtorsWithClientSheet(localFallbackDebtors, Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : csData));
+          hasRetriedEmptyScopedLoadRef.current = false;
+
+          if (notifyUser) {
+            toast.error('Zoho returned an empty workbook. Restored the last local debtor snapshot.', {
               duration: 5000,
               style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
             });
@@ -777,6 +838,11 @@ function App() {
             },
             user?.email || null
           );
+          saveLocalZohoSnapshot({
+            debtors: sheetData,
+            clientsByAgent: csData,
+            trackerLogs
+          });
         }
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
@@ -793,6 +859,15 @@ function App() {
       }
     } catch (err) {
       console.error('[Sync] Load data failed:', err);
+      const localSnapshot = loadLocalZohoSnapshot();
+      const localDebtors = Array.isArray(localSnapshot?.debtors) ? localSnapshot.debtors : [];
+      if (hasMeaningfulInvoiceRows(localDebtors)) {
+        console.warn('[Sync] Restoring debtors from local browser snapshot after fetch failure.');
+        setClientsByAgent(Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : []);
+        setTrackerData(normalizeIncomingTrackerRows(Array.isArray(localSnapshot?.trackerLogs) ? localSnapshot.trackerLogs : []));
+        setRawZohoData(mergeDebtorsWithClientSheet(localDebtors, Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : []));
+        hasRetriedEmptyScopedLoadRef.current = false;
+      }
       // No data wiping
       if (notifyUser) {
         toast.error('Unable to connect to Zoho. Using offline data.', {

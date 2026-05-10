@@ -8,6 +8,24 @@ import {
   shouldTrackUserActivity
 } from '../services/activityLogger';
 
+const clearStoredAuthArtifacts = () => {
+  const clearKeys = (storage) => {
+    if (!storage) return;
+
+    Object.keys(storage).forEach((key) => {
+      if (
+        key === 'supabase.auth.token' ||
+        (key.startsWith('sb-') && key.includes('-auth-token'))
+      ) {
+        storage.removeItem(key);
+      }
+    });
+  };
+
+  clearKeys(window.localStorage);
+  clearKeys(window.sessionStorage);
+};
+
 export const useAppSession = ({ onSignedOut }) => {
   const [user, setUser] = useState(null);
   const [activityLogRefreshKey, setActivityLogRefreshKey] = useState(0);
@@ -67,9 +85,9 @@ export const useAppSession = ({ onSignedOut }) => {
     loggedSessionRef.current = '';
     try {
       if (hasSupabaseConfig && supabase) {
-        const signOutTask = supabase.auth.signOut({ scope: 'local' });
+        const signOutTask = supabase.auth.signOut();
         const timeoutTask = new Promise((_, reject) => {
-          window.setTimeout(() => reject(new Error('Logout timed out')), 4000);
+          window.setTimeout(() => reject(new Error('Logout timed out')), 6000);
         });
 
         const result = await Promise.race([signOutTask, timeoutTask]);
@@ -78,23 +96,15 @@ export const useAppSession = ({ onSignedOut }) => {
           throw error;
         }
       }
-
-      onSignedOut?.();
-      setUser(null);
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 120);
     } catch (error) {
       console.error('[Auth] Logout failed:', error);
-      onSignedOut?.();
-      setUser(null);
       toast.error('Session closed locally. Refresh if needed.', {
         duration: 3500
       });
-      window.setTimeout(() => {
-        window.location.reload();
-      }, 120);
     } finally {
+      clearStoredAuthArtifacts();
+      onSignedOut?.();
+      setUser(null);
       setIsLoggingOut(false);
     }
   }, [isLoggingOut, onSignedOut]);
