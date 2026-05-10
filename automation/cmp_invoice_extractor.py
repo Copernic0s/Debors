@@ -18,7 +18,13 @@ from typing import Iterable
 import pandas as pd
 import requests
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, SessionNotCreatedException, TimeoutException
+from selenium.common.exceptions import (
+    InvalidSessionIdException,
+    NoSuchElementException,
+    NoSuchWindowException,
+    SessionNotCreatedException,
+    TimeoutException,
+)
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
@@ -110,6 +116,32 @@ def normalize_company_name(value: str) -> str:
     cleaned = re.sub(r"\b(llc|inc|corp|co|ltd|limited)\b", "", cleaned)
     cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def build_search_queries(client_name: str) -> list[str]:
+    queries: list[str] = []
+    raw = str(client_name or "").strip()
+    if raw:
+        queries.append(raw)
+
+    normalized = normalize_company_name(raw)
+    if normalized and normalized not in queries:
+        queries.append(normalized)
+
+    compact = re.sub(r"[^A-Za-z0-9 ]+", " ", raw).strip()
+    compact = re.sub(r"\s+", " ", compact)
+    if compact and compact not in queries:
+        queries.append(compact)
+
+    tokens = [token for token in normalized.split() if token]
+    if len(tokens) >= 2:
+        short_query = " ".join(tokens[:2])
+        if short_query not in queries:
+            queries.append(short_query)
+    elif tokens and tokens[0] not in queries:
+        queries.append(tokens[0])
+
+    return [query for query in queries if query]
 
 
 def parse_amount(raw_value: str) -> float | None:
@@ -408,92 +440,95 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     search_input.click()
     search_input.send_keys(Keys.CONTROL, "a")
     search_input.send_keys(Keys.DELETE)
-    search_input.send_keys(client_name)
-    search_input.send_keys(Keys.ENTER)
-
     normalized_target = normalize_company_name(client_name)
     target_tokens = set(normalized_target.split())
 
     def result_rows():
         return [row for row in driver.find_elements(By.XPATH, "//table//tbody/tr") if row.is_displayed()]
-    no_data_xpath = (
-        "//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no data') "
-        "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
-    )
 
-    start = time.time()
-    stable_rows: list = []
-    stable_hits = 0
-    last_signature = ""
-    while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
-        rows = result_rows()
-        signature = "||".join([normalize_text(row.text) for row in rows[:3]])
-        if signature and signature == last_signature:
-            stable_hits += 1
-        else:
-            stable_hits = 0
-            last_signature = signature
-        if rows and stable_hits >= 2:
-            stable_rows = rows
-            break
-        if driver.find_elements(By.XPATH, no_data_xpath):
-            stable_rows = []
-            break
-        time.sleep(0.25)
+    def wait_for_stable_results() -> list:
+        no_data_xpath = (
+            "//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no data') "
+            "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
+        )
+        start = time.time()
+        stable_rows: list = []
+        stable_hits = 0
+        last_signature = ""
+        while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
+            rows = result_rows()
+            signature = "||".join([normalize_text(row.text) for row in rows[:3]])
+            if signature and signature == last_signature:
+                stable_hits += 1
+            else:
+                stable_hits = 0
+                last_signature = signature
+            if rows and stable_hits >= 2:
+                stable_rows = rows
+                break
+            if driver.find_elements(By.XPATH, no_data_xpath):
+                stable_rows = []
+                break
+            time.sleep(0.25)
+        if SEARCH_SETTLE_SECONDS > 0:
+            time.sleep(SEARCH_SETTLE_SECONDS)
+        return stable_rows if stable_rows else result_rows()
 
-    if SEARCH_SETTLE_SECONDS > 0:
-        time.sleep(SEARCH_SETTLE_SECONDS)
+    def best_match_from_rows(rows_for_match: list):
+        best_element = None
+        best_score = -1
+        for row in rows_for_match:
+            row_text = normalize_company_name(row.text)
+            if not row_text:
+                continue
 
-    best_match_element = None
-    best_score = -1
+            candidate_tokens = set(row_text.split())
+            shared_tokens = len(target_tokens & candidate_tokens)
+            score = 0
+            if row_text == normalized_target:
+                score = 1000
+            elif normalized_target in row_text or row_text in normalized_target:
+                score = 700 + shared_tokens
+            elif shared_tokens:
+                score = shared_tokens * 10
 
-    rows_for_match = stable_rows if stable_rows else result_rows()
+            clickable_candidates = row.find_elements(By.XPATH, ".//a | .//button")
+            clickable_candidates = [element for element in clickable_candidates if element.is_displayed()]
+            click_target = clickable_candidates[0] if clickable_candidates else row
 
-    for row in rows_for_match:
-        cells = row.find_elements(By.XPATH, "./td")
-        if len(cells) < 2:
+            if score > best_score:
+                best_score = score
+                best_element = click_target
+
+        if not best_element and len(rows_for_match) == 1:
+            only_row = rows_for_match[0]
+            clickable_candidates = only_row.find_elements(By.XPATH, ".//a | .//button")
+            clickable_candidates = [element for element in clickable_candidates if element.is_displayed()]
+            best_element = clickable_candidates[0] if clickable_candidates else only_row
+        return best_element, best_score
+
+    for query in build_search_queries(client_name):
+        search_input.click()
+        search_input.send_keys(Keys.CONTROL, "a")
+        search_input.send_keys(Keys.DELETE)
+        search_input.send_keys(query)
+        search_input.send_keys(Keys.ENTER)
+
+        rows = wait_for_stable_results()
+        if not rows:
             continue
 
-        name_cell = cells[1]
-        clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
-        clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
-        click_target = clickable_candidates[0] if clickable_candidates else name_cell
-
-        candidate_name = normalize_company_name(name_cell.text)
-        if not candidate_name:
+        best_match_element, best_score = best_match_from_rows(rows)
+        if not best_match_element or best_score < 1:
             continue
 
-        candidate_tokens = set(candidate_name.split())
-        shared_tokens = len(target_tokens & candidate_tokens)
-        score = 0
-        if candidate_name == normalized_target:
-            score = 1000
-        elif normalized_target in candidate_name or candidate_name in normalized_target:
-            score = 700 + shared_tokens
-        elif shared_tokens:
-            score = shared_tokens * 10
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match_element)
+        wait.until(EC.element_to_be_clickable(best_match_element))
+        best_match_element.click()
+        wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
+        return True
 
-        if score > best_score:
-            best_score = score
-            best_match_element = click_target
-
-    if not best_match_element and len(rows_for_match) == 1:
-        only_row = rows_for_match[0]
-        cells = only_row.find_elements(By.XPATH, "./td")
-        if len(cells) >= 2:
-            name_cell = cells[1]
-            clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
-            clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
-            best_match_element = clickable_candidates[0] if clickable_candidates else name_cell
-
-    if not best_match_element:
-        return False
-
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match_element)
-    wait.until(EC.element_to_be_clickable(best_match_element))
-    best_match_element.click()
-    wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
-    return True
+    return False
 
 
 def open_invoices_tab(driver: WebDriver) -> None:
@@ -609,6 +644,7 @@ def export_results(results: list[dict], output_path: Path) -> None:
 
 def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
     results = []
+    active_driver = driver
 
     for index, client in enumerate(clients, start=1):
         client_name = client["client_name"]
@@ -616,14 +652,14 @@ def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
         logging.info("[%s/%s] Processing %s", index, len(clients), client_name)
 
         try:
-            found = open_matching_company(driver, client_name)
+            found = open_matching_company(active_driver, client_name)
             if not found:
                 logging.warning("Client not found: %s", client_name)
                 results.append(build_result(client_name, billing_cycle, None, "Not Found"))
                 continue
 
-            open_invoices_tab(driver)
-            invoice_payload = extract_latest_invoice(driver)
+            open_invoices_tab(active_driver)
+            invoice_payload = extract_latest_invoice(active_driver)
 
             if invoice_payload:
                 results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
@@ -632,8 +668,32 @@ def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
                 save_debug_screenshot(driver, f"no_invoice_{index:03d}")
                 results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
         except Exception as error:  # pragma: no cover
+            recoverable = isinstance(error, (NoSuchWindowException, InvalidSessionIdException))
+            if recoverable:
+                logging.warning("Browser session dropped on %s. Restarting driver and retrying once.", client_name)
+                try:
+                    active_driver.quit()
+                except Exception:
+                    pass
+                active_driver = create_driver()
+                perform_login(active_driver)
+                try:
+                    found = open_matching_company(active_driver, client_name)
+                    if found:
+                        open_invoices_tab(active_driver)
+                        invoice_payload = extract_latest_invoice(active_driver)
+                        if invoice_payload:
+                            results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
+                        else:
+                            results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
+                    else:
+                        results.append(build_result(client_name, billing_cycle, None, "Not Found"))
+                    continue
+                except Exception as retry_error:
+                    logging.exception("Retry also failed for %s: %s", client_name, retry_error)
+
             logging.exception("Failed to process %s: %s", client_name, error)
-            save_debug_screenshot(driver, f"error_{index:03d}")
+            save_debug_screenshot(active_driver, f"error_{index:03d}")
             results.append(build_result(client_name, billing_cycle, None, f"Error: {type(error).__name__}"))
 
     return results
