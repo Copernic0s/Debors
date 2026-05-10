@@ -243,16 +243,19 @@ const formatTimestamp = (value) => {
 function ActivityLogs({ refreshSignal = 0 }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
 
   const loadLogs = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const rows = await fetchActivityLogs(50);
       setLogs(rows);
-    } catch {
+    } catch (error) {
       setLogs([]);
+      setLoadError(error?.message || 'Unable to load activity logs.');
     } finally {
       setLoading(false);
     }
@@ -331,11 +334,19 @@ function ActivityLogs({ refreshSignal = 0 }) {
           <EmptyState>Loading latest activity...</EmptyState>
         )}
 
-        {!loading && filteredLogs.length === 0 && (
-          <EmptyState>No activity logs found for the current filters.</EmptyState>
+        {!loading && loadError && (
+          <EmptyState>{loadError}</EmptyState>
         )}
 
-        {!loading && filteredLogs.map((log) => {
+        {!loading && filteredLogs.length === 0 && (
+          <EmptyState>
+            {logs.length === 0
+              ? 'No activity logs yet. Events start appearing only after the activity table is active and other users log in or make tracked edits.'
+              : 'No activity logs found for the current filters.'}
+          </EmptyState>
+        )}
+
+        {!loading && !loadError && filteredLogs.map((log) => {
           const tone = getActionTone(log.action_type);
           return (
             <LogRow key={log.id}>
