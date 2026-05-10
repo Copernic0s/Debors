@@ -344,6 +344,7 @@ def create_driver() -> WebDriver:
     user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
     profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
     clone_profile = os.getenv("CMP_CLONE_PROFILE", "true").strip().lower() != "false"
+    require_exact_profile = os.getenv("CMP_REQUIRE_EXACT_PROFILE", "true").strip().lower() != "false"
     service = ChromeService(ChromeDriverManager().install())
 
     def launch(options: ChromeOptions) -> WebDriver:
@@ -361,13 +362,23 @@ def create_driver() -> WebDriver:
                 )
             )
         except Exception as error:
-            logging.warning("Failed to clone Chrome profile '%s': %s", profile_dir, error)
+            logging.warning(
+                "Failed to clone required Chrome profile '%s': %s. "
+                "Will attempt direct launch with the same profile.",
+                profile_dir,
+                error,
+            )
 
     try:
         return launch(build_chrome_options(user_data_dir=user_data_dir, profile_dir=profile_dir))
     except SessionNotCreatedException as error:
         if not user_data_dir:
             raise
+        if require_exact_profile and profile_dir:
+            raise RuntimeError(
+                "Could not launch required Chrome profile. "
+                "Set CMP_REQUIRE_EXACT_PROFILE=false if you intentionally want temporary fallback."
+            ) from error
 
         fallback_profile_dir = tempfile.mkdtemp(prefix=TEMP_PROFILE_PREFIX)
         logging.warning(
