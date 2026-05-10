@@ -37,6 +37,8 @@ ZOHO_XLSX_URL = os.getenv(
 )
 ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
 DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
+SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
+SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
@@ -414,14 +416,40 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
 
     def result_rows():
         return [row for row in driver.find_elements(By.XPATH, "//table//tbody/tr") if row.is_displayed()]
+    no_data_xpath = (
+        "//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no data') "
+        "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
+    )
 
-    wait.until(lambda current: len(result_rows()) > 0)
-    time.sleep(1.1)
+    start = time.time()
+    stable_rows: list = []
+    stable_hits = 0
+    last_signature = ""
+    while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
+        rows = result_rows()
+        signature = "||".join([normalize_text(row.text) for row in rows[:3]])
+        if signature and signature == last_signature:
+            stable_hits += 1
+        else:
+            stable_hits = 0
+            last_signature = signature
+        if rows and stable_hits >= 2:
+            stable_rows = rows
+            break
+        if driver.find_elements(By.XPATH, no_data_xpath):
+            stable_rows = []
+            break
+        time.sleep(0.25)
+
+    if SEARCH_SETTLE_SECONDS > 0:
+        time.sleep(SEARCH_SETTLE_SECONDS)
 
     best_match_element = None
     best_score = -1
 
-    for row in result_rows():
+    rows_for_match = stable_rows if stable_rows else result_rows()
+
+    for row in rows_for_match:
         cells = row.find_elements(By.XPATH, "./td")
         if len(cells) < 2:
             continue
@@ -449,8 +477,8 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             best_score = score
             best_match_element = click_target
 
-    if not best_match_element and len(result_rows()) == 1:
-        only_row = result_rows()[0]
+    if not best_match_element and len(rows_for_match) == 1:
+        only_row = rows_for_match[0]
         cells = only_row.find_elements(By.XPATH, "./td")
         if len(cells) >= 2:
             name_cell = cells[1]
