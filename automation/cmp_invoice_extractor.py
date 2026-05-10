@@ -24,6 +24,7 @@ from selenium.common.exceptions import (
     NoSuchWindowException,
     SessionNotCreatedException,
     TimeoutException,
+    WebDriverException,
 )
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -273,6 +274,12 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--no-first-run")
     options.add_argument("--no-default-browser-check")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-features=RendererCodeIntegrity")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
 
     if user_data_dir:
         options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -280,6 +287,22 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
         options.add_argument(f"--profile-directory={profile_dir}")
 
     return options
+
+
+def safe_get(driver: WebDriver, url: str, retries: int = 2) -> None:
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            driver.get(url)
+            return
+        except WebDriverException as error:
+            last_error = error
+            if attempt >= retries:
+                break
+            logging.warning("Navigation failed for %s (attempt %s/%s): %s", url, attempt + 1, retries + 1, error)
+            time.sleep(1.2)
+    if last_error:
+        raise last_error
 
 
 def clone_chrome_profile(user_data_dir: str, profile_dir: str) -> tuple[str, str]:
@@ -395,7 +418,7 @@ def save_debug_screenshot(driver: WebDriver, prefix: str) -> None:
 
 
 def perform_login(driver: WebDriver) -> None:
-    driver.get(BASE_URL)
+    safe_get(driver, BASE_URL)
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
 
     email = os.getenv("CMP_EMAIL", "").strip()
@@ -429,7 +452,7 @@ def perform_login(driver: WebDriver) -> None:
 
 
 def ensure_company_screen(driver: WebDriver) -> None:
-    driver.get(COMPANY_URL)
+    safe_get(driver, COMPANY_URL)
     wait_for_any(driver, SELECTORS.search_inputs)
 
 
