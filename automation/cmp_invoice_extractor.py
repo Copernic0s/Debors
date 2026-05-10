@@ -287,6 +287,10 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     if profile_dir:
         options.add_argument(f"--profile-directory={profile_dir}")
 
+    debugger_address = os.getenv("CMP_DEBUGGER_ADDRESS", "").strip()
+    if debugger_address:
+        options.debugger_address = debugger_address
+
     return options
 
 
@@ -364,6 +368,11 @@ def create_driver() -> WebDriver:
         driver = webdriver.Chrome(service=service, options=options)
         driver.implicitly_wait(0)
         return driver
+
+    debugger_address = os.getenv("CMP_DEBUGGER_ADDRESS", "").strip()
+    if debugger_address:
+        logging.info("Attaching Selenium to existing Chrome debugger at %s", debugger_address)
+        return launch(build_chrome_options())
 
     if user_data_dir and profile_dir and clone_profile:
         try:
@@ -443,7 +452,9 @@ def save_debug_screenshot(driver: WebDriver, prefix: str) -> None:
 
 
 def perform_login(driver: WebDriver) -> None:
-    safe_get(driver, BASE_URL)
+    attached_mode = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
+    if not attached_mode:
+        safe_get(driver, BASE_URL)
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
 
     email = os.getenv("CMP_EMAIL", "").strip()
@@ -451,6 +462,10 @@ def perform_login(driver: WebDriver) -> None:
     if not email or not password:
         logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated CMP session...")
         wait.until(lambda current: "/auth" not in current.current_url)
+        return
+
+    if attached_mode and "/auth" not in driver.current_url:
+        logging.info("Attached mode already authenticated. Skipping credential login.")
         return
 
     email_input = wait_for_any(driver, SELECTORS.email_inputs)
