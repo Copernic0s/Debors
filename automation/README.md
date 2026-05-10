@@ -5,121 +5,148 @@ Automatiza la extracción de:
 - `Invoice #`
 - `Total Amount`
 
-desde CMP para una lista de clientes y genera un archivo `invoices_actualizados.json`.
+desde CMP para alimentar Debors sin depender de la actualización manual.
 
-## Qué hace
+## Qué hace esta versión
 
 1. Abre CMP
-2. Hace login con Selenium
-3. Va a `/company`
-4. Busca cliente por cliente
-5. Entra al perfil
+2. Reutiliza tu sesión de Chrome o hace login
+3. Va a `Customer Services > Companies`
+4. Busca compañía por compañía
+5. Entra al detalle
 6. Abre la pestaña `Invoices`
-7. Busca la factura más reciente disponible
-8. Exporta resultados a JSON
+7. Hace scroll horizontal dentro de la tabla
+8. Toma la **primera fila** como la factura más reciente
+9. Extrae:
+   - `invoice_id`
+   - `amount` desde la columna `Total amount`
+10. Exporta `invoices_actualizados.json`
 
-## Requisitos
+## Fuente de clientes
+
+Por defecto el script usa directamente la hoja:
+
+- `CS by Agent`
+
+del workbook público de Debtors.
+
+No necesitas mantener un CSV aparte si no quieres.
+
+## Instalación
 
 ```bash
 pip install -r automation/requirements.txt
 ```
 
-## Archivo de entrada
-
-Usa un CSV o JSON con estas columnas:
-
-- `client_name`
-- `billing_cycle`
-
-Ejemplo:
-
-```csv
-client_name,billing_cycle
-ACME TRUCKING LLC,Tuesday
-NOVA VERSE INC,Friday
-```
-
 ## Variables de entorno
 
-### Opción 1: login automático
-
-```powershell
-$env:CMP_EMAIL="tu_correo"
-$env:CMP_PASSWORD="tu_password"
-```
-
-### Opción 2: login manual
-
-No definas `CMP_EMAIL` ni `CMP_PASSWORD`.  
-El script abrirá CMP y esperará a que entres manualmente.
-
-## Opcionales útiles
-
-```powershell
-$env:CMP_HEADLESS="false"
-$env:CMP_TIMEOUT="25"
-$env:CMP_OUTPUT_JSON="automation\\invoices_actualizados.json"
-$env:CMP_INPUT_FILE="automation\\clients.example.csv"
-```
-
-Si quieres reutilizar tu sesión de Chrome:
+### Reutilizar sesión de Chrome
 
 ```powershell
 $env:CMP_USER_DATA_DIR="C:\\Users\\AndresMendez\\AppData\\Local\\Google\\Chrome\\User Data"
 $env:CMP_PROFILE_DIR="Default"
 ```
 
-## Ejecución
+### Login manual
 
-```bash
+Si no defines `CMP_EMAIL` y `CMP_PASSWORD`, el script abrirá CMP y esperará a que tú ya tengas sesión disponible.
+
+### Login automático opcional
+
+```powershell
+$env:CMP_EMAIL="tu_correo"
+$env:CMP_PASSWORD="tu_password"
+```
+
+### Configuración útil
+
+```powershell
+$env:CMP_HEADLESS="false"
+$env:CMP_TIMEOUT="25"
+$env:CMP_OUTPUT_JSON="automation\\invoices_actualizados.json"
+$env:CMP_INPUT_MODE="zoho_sheet"
+$env:CMP_ZOHO_SHEET_NAME="CS by Agent"
+```
+
+### Correr en segundo plano
+
+```powershell
+$env:CMP_HEADLESS="true"
+```
+
+Mi recomendación:
+
+1. primero visible
+2. luego headless
+
+## Modos de entrada
+
+### Modo recomendado: hoja Zoho
+
+```powershell
+$env:CMP_INPUT_MODE="zoho_sheet"
+python automation/cmp_invoice_extractor.py
+```
+
+### Modo archivo local
+
+```powershell
+$env:CMP_INPUT_MODE="file"
 python automation/cmp_invoice_extractor.py automation/clients.example.csv
 ```
 
-O con JSON:
+## Archivo local de ejemplo
 
-```bash
-python automation/cmp_invoice_extractor.py automation/clientes.json
+```csv
+client_name,billing_cycle
+ACME TRUCKING LLC,Tuesday
+NOVA VERSE INC,Friday
+GOLD STAR TRANSPORT LLC,Tuesday
 ```
 
-## Salida
-
-Genera una lista JSON como esta:
+## Salida esperada
 
 ```json
 [
   {
-    "client_name": "Nombre Cliente",
+    "client_name": "ROBERTIK TRUCKING LLC",
     "billing_cycle": "Tuesday",
-    "invoice_id": "INV-12345",
-    "amount": "1234.56",
+    "invoice_id": "INV-355522",
+    "amount": "84.12",
     "status": "Captured",
     "last_update": "2026-05-09",
-    "invoice_status": "Paid"
+    "invoice_status": "PAID"
   }
 ]
 ```
 
-## Logging y screenshots
+## Logs y debugging
 
 - Log: `cmp_invoice_extractor.log`
-- Capturas de error: carpeta `cmp_screenshots`
+- Screenshots de error: `cmp_screenshots`
 
 ## Nota importante
 
-Este script ya viene modular y robusto, pero los selectores de CMP pueden cambiar.  
-Si algún botón, tabla o tab no coincide exactamente, ajusta:
+Esta versión ya está adaptada al flujo que me compartiste, pero puede requerir ajustes finos si CMP cambia:
 
 - `SELECTORS.search_inputs`
 - `SELECTORS.invoice_tab_xpaths`
 - `SELECTORS.table_selectors`
 
-en [automation/cmp_invoice_extractor.py](C:/Users/AndresMendez/Downloads/Debors-main/Debors/automation/cmp_invoice_extractor.py).
+Archivo:
+[C:\Users\AndresMendez\Downloads\Debors-main\Debors\automation\cmp_invoice_extractor.py](C:\Users\AndresMendez\Downloads\Debors-main\Debors\automation\cmp_invoice_extractor.py)
 
-## Recomendación práctica
+## Siguiente paso recomendado
 
-La mejor forma de estabilizarlo rápido es:
-
-1. correrlo con 2 o 3 clientes
+1. probar con 2 o 3 compañías
 2. confirmar que encuentra bien `Invoices`
-3. ajustar selectores si hace falta
-4. luego escalar a los 144 clientes
+3. confirmar que el scroll horizontal alcanza `Total amount`
+4. después escalar a toda la hoja `CS by Agent`
+
+## Futuro cercano
+
+Cuando este snapshot actual quede estable, el siguiente paso es extenderlo a:
+
+- histórico desde octubre 2025
+- recorrido por paginación
+- captura de múltiples invoices por compañía

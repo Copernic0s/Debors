@@ -6,12 +6,14 @@ import os
 import re
 import sys
 import time
+from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import requests
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver import ChromeOptions
@@ -26,6 +28,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 BASE_URL = "https://cmp-front.production.united-fuel.com/"
 COMPANY_URL = f"{BASE_URL.rstrip('/')}/company"
+ZOHO_XLSX_URL = os.getenv(
+    "CMP_ZOHO_XLSX_URL",
+    "https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx",
+)
+ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
 DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
@@ -170,6 +177,49 @@ def read_clients(input_path: Path) -> list[dict]:
     ]
 
 
+def read_clients_from_zoho_workbook() -> list[dict]:
+    logging.info("Loading clients from Zoho workbook sheet '%s'", ZOHO_SHEET_NAME)
+    response = requests.get(ZOHO_XLSX_URL, timeout=45)
+    response.raise_for_status()
+
+    frame = pd.read_excel(
+        BytesIO(response.content),
+        sheet_name=ZOHO_SHEET_NAME,
+        engine="openpyxl",
+    )
+
+    normalized_columns = {str(column).strip().lower(): column for column in frame.columns}
+    company_column = normalized_columns.get("company name")
+    cycle_column = normalized_columns.get("billing cycle")
+
+    if not company_column or not cycle_column:
+        raise ValueError(
+            f"Sheet '{ZOHO_SHEET_NAME}' must include 'Company Name' and 'Billing Cycle' columns"
+        )
+
+    records = []
+    for _, row in frame.fillna("").iterrows():
+        company = str(row[company_column]).strip()
+        cycle = str(row[cycle_column]).strip()
+        if company:
+            records.append(
+                {
+                    "client_name": company,
+                    "billing_cycle": cycle,
+                }
+            )
+
+    deduped = []
+    seen = set()
+    for item in records:
+        key = normalize_company_name(item["client_name"])
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(item)
+
+    return deduped
+
+
 def create_driver() -> WebDriver:
     options = ChromeOptions()
     if os.getenv("CMP_HEADLESS", "false").lower() == "true":
@@ -312,7 +362,31 @@ def open_invoices_tab(driver: WebDriver) -> None:
     )
 
 
+def scroll_invoice_table_horizontally(driver: WebDriver) -> None:
+    script = """
+    const candidates = Array.from(document.querySelectorAll('div, section'));
+    const scrollable = candidates.find((element) => {
+      const style = window.getComputedStyle(element);
+      return (
+        element.scrollWidth > element.clientWidth + 80 &&
+        (style.overflowX === 'auto' || style.overflowX === 'scroll' || style.overflowX === 'overlay')
+      );
+    });
+
+    if (!scrollable) return false;
+    scrollable.scrollLeft = scrollable.scrollWidth;
+    return true;
+    """
+
+    try:
+        driver.execute_script(script)
+        time.sleep(0.35)
+    except Exception as error:  # pragma: no cover
+        logging.warning("Horizontal scroll failed: %s", error)
+
+
 def extract_latest_invoice(driver: WebDriver) -> dict | None:
+    scroll_invoice_table_horizontally(driver)
     tables = []
     for selector in SELECTORS.table_selectors:
         tables.extend(driver.find_elements(By.CSS_SELECTOR, selector))
@@ -325,7 +399,7 @@ def extract_latest_invoice(driver: WebDriver) -> dict | None:
             continue
 
         invoice_index = next((i for i, text in enumerate(headers) if ("invoice" in text and "#" in text) or "invoice" in text), None)
-        amount_index = next((i for i, text in enumerate(headers) if "total amount" in text or "amount" in text), None)
+        amount_index = next((i for i, text in enumerate(headers) if "total amount" in text), None)
         date_index = next((i for i, text in enumerate(headers) if "date" in text or "created" in text or "issued" in text), None)
         status_index = next((i for i, text in enumerate(headers) if "status" in text), None)
 
@@ -355,6 +429,9 @@ def extract_latest_invoice(driver: WebDriver) -> dict | None:
 
             if best_invoice is None or candidate["date"] >= best_invoice["date"]:
                 best_invoice = candidate
+
+            # For CMP the most recent invoice is the first row, so we can stop early.
+            return best_invoice
 
     return best_invoice
 
@@ -422,11 +499,16 @@ def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
 def main() -> int:
     configure_logging()
 
+    input_mode = os.getenv("CMP_INPUT_MODE", "zoho_sheet").strip().lower()
     input_file = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.getenv("CMP_INPUT_FILE", "automation/clients.example.csv"))
-    if not input_file.exists():
-        raise FileNotFoundError(f"Input file not found: {input_file}")
 
-    clients = read_clients(input_file)
+    if input_mode == "zoho_sheet":
+        clients = read_clients_from_zoho_workbook()
+    else:
+        if not input_file.exists():
+            raise FileNotFoundError(f"Input file not found: {input_file}")
+        clients = read_clients(input_file)
+
     if not clients:
         raise ValueError("No clients found in input file")
 
