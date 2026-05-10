@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import sys
+import tempfile
 import time
 from io import BytesIO
 from dataclasses import dataclass
@@ -15,7 +16,7 @@ from typing import Iterable
 import pandas as pd
 import requests
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, SessionNotCreatedException, TimeoutException
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
@@ -37,6 +38,7 @@ DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
+TEMP_PROFILE_PREFIX = "cmp_chrome_profile_"
 
 
 @dataclass(frozen=True)
@@ -220,7 +222,7 @@ def read_clients_from_zoho_workbook() -> list[dict]:
     return deduped
 
 
-def create_driver() -> WebDriver:
+def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> ChromeOptions:
     options = ChromeOptions()
     if os.getenv("CMP_HEADLESS", "false").lower() == "true":
         options.add_argument("--headless=new")
@@ -228,18 +230,47 @@ def create_driver() -> WebDriver:
     options.add_argument("--start-maximized")
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
 
-    user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
-    profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
     if user_data_dir:
         options.add_argument(f"--user-data-dir={user_data_dir}")
     if profile_dir:
         options.add_argument(f"--profile-directory={profile_dir}")
 
+    return options
+
+
+def create_driver() -> WebDriver:
+    user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
+    profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
     service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.implicitly_wait(0)
-    return driver
+
+    def launch(options: ChromeOptions) -> WebDriver:
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.implicitly_wait(0)
+        return driver
+
+    try:
+        return launch(build_chrome_options(user_data_dir=user_data_dir, profile_dir=profile_dir))
+    except SessionNotCreatedException as error:
+        if not user_data_dir:
+            raise
+
+        fallback_profile_dir = tempfile.mkdtemp(prefix=TEMP_PROFILE_PREFIX)
+        logging.warning(
+            "Chrome could not start with CMP_USER_DATA_DIR='%s' and CMP_PROFILE_DIR='%s'. "
+            "This usually means the profile is locked by another Chrome window. "
+            "Retrying with a temporary clean profile at '%s'. Original error: %s",
+            user_data_dir,
+            profile_dir or "<default>",
+            fallback_profile_dir,
+            error,
+        )
+        logging.info(
+            "If you need to reuse your real Chrome session, close all Chrome windows first or use a dedicated automation profile."
+        )
+        return launch(build_chrome_options(user_data_dir=fallback_profile_dir))
 
 
 def wait_for_any(driver: WebDriver, css_selectors: Iterable[str], timeout: int = DEFAULT_TIMEOUT):
