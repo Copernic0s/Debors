@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import time
+import unicodedata
 from io import BytesIO
 from dataclasses import dataclass
 from datetime import datetime
@@ -96,7 +97,10 @@ def configure_logging() -> None:
 
 
 def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip()).lower()
+    text = str(value or "").strip()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(character for character in text if not unicodedata.combining(character))
+    return re.sub(r"\s+", " ", text).lower()
 
 
 def normalize_company_name(value: str) -> str:
@@ -406,30 +410,60 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     search_input.send_keys(Keys.ENTER)
 
     normalized_target = normalize_company_name(client_name)
+    target_tokens = set(normalized_target.split())
 
-    def candidate_rows():
-        links = driver.find_elements(By.XPATH, "//table//tr//a | //table//tr//button | //table//tr//td")
-        return [item for item in links if normalize_text(item.text)]
+    def result_rows():
+        return [row for row in driver.find_elements(By.XPATH, "//table//tbody/tr") if row.is_displayed()]
 
-    wait.until(lambda current: len(candidate_rows()) > 0)
-    time.sleep(0.6)
+    wait.until(lambda current: len(result_rows()) > 0)
+    time.sleep(1.1)
 
-    best_match = None
-    for element in candidate_rows():
-        candidate_name = normalize_company_name(element.text)
+    best_match_element = None
+    best_score = -1
+
+    for row in result_rows():
+        cells = row.find_elements(By.XPATH, "./td")
+        if len(cells) < 2:
+            continue
+
+        name_cell = cells[1]
+        clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
+        clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
+        click_target = clickable_candidates[0] if clickable_candidates else name_cell
+
+        candidate_name = normalize_company_name(name_cell.text)
         if not candidate_name:
             continue
-        if candidate_name == normalized_target:
-            best_match = element
-            break
-        if normalized_target in candidate_name or candidate_name in normalized_target:
-            best_match = element
 
-    if not best_match:
+        candidate_tokens = set(candidate_name.split())
+        shared_tokens = len(target_tokens & candidate_tokens)
+        score = 0
+        if candidate_name == normalized_target:
+            score = 1000
+        elif normalized_target in candidate_name or candidate_name in normalized_target:
+            score = 700 + shared_tokens
+        elif shared_tokens:
+            score = shared_tokens * 10
+
+        if score > best_score:
+            best_score = score
+            best_match_element = click_target
+
+    if not best_match_element and len(result_rows()) == 1:
+        only_row = result_rows()[0]
+        cells = only_row.find_elements(By.XPATH, "./td")
+        if len(cells) >= 2:
+            name_cell = cells[1]
+            clickable_candidates = name_cell.find_elements(By.XPATH, ".//a | .//button | .//*[self::span or self::div]")
+            clickable_candidates = [element for element in clickable_candidates if normalize_text(element.text)]
+            best_match_element = clickable_candidates[0] if clickable_candidates else name_cell
+
+    if not best_match_element:
         return False
 
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match)
-    best_match.click()
+    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match_element)
+    wait.until(EC.element_to_be_clickable(best_match_element))
+    best_match_element.click()
     wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
     return True
 
