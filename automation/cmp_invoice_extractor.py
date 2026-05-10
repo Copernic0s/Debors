@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import sys
 import tempfile
 import time
@@ -48,6 +49,7 @@ SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
 SEARCH_KEYSTROKE_DELAY = float(os.getenv("CMP_SEARCH_KEYSTROKE_DELAY", "0.06"))
 DEBUG_NOT_FOUND = os.getenv("CMP_DEBUG_NOT_FOUND", "true").strip().lower() == "true"
+ATTACH_TIMEOUT_SECONDS = int(os.getenv("CMP_ATTACH_TIMEOUT_SECONDS", "20"))
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
@@ -369,10 +371,29 @@ def create_driver() -> WebDriver:
         driver.implicitly_wait(0)
         return driver
 
+    def wait_for_debugger(address: str, timeout_seconds: int) -> bool:
+        host, port_text = address.split(":")
+        port = int(port_text)
+        start = time.time()
+        while time.time() - start < timeout_seconds:
+            try:
+                with socket.create_connection((host, port), timeout=1.5):
+                    return True
+            except OSError:
+                time.sleep(0.5)
+        return False
+
     debugger_address = os.getenv("CMP_DEBUGGER_ADDRESS", "").strip()
     if debugger_address:
         logging.info("Attaching Selenium to existing Chrome debugger at %s", debugger_address)
-        return launch(build_chrome_options())
+        if not wait_for_debugger(debugger_address, ATTACH_TIMEOUT_SECONDS):
+            raise TimeoutException(
+                f"Chrome debugger {debugger_address} did not become reachable within {ATTACH_TIMEOUT_SECONDS}s"
+            )
+        logging.info("Chrome debugger is reachable, creating attached WebDriver...")
+        driver = launch(build_chrome_options())
+        logging.info("Attached WebDriver session created successfully.")
+        return driver
 
     if user_data_dir and profile_dir and clone_profile:
         try:
