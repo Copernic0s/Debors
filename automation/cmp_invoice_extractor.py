@@ -46,6 +46,7 @@ ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
 DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
 SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
+SEARCH_KEYSTROKE_DELAY = float(os.getenv("CMP_SEARCH_KEYSTROKE_DELAY", "0.06"))
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
@@ -143,6 +144,13 @@ def build_search_queries(client_name: str) -> list[str]:
         queries.append(tokens[0])
 
     return [query for query in queries if query]
+
+
+def type_like_human(element, text: str) -> None:
+    for character in text:
+        element.send_keys(character)
+        if SEARCH_KEYSTROKE_DELAY > 0:
+            time.sleep(SEARCH_KEYSTROKE_DELAY)
 
 
 def parse_amount(raw_value: str) -> float | None:
@@ -530,14 +538,22 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             best_element = clickable_candidates[0] if clickable_candidates else only_row
         return best_element, best_score
 
+    baseline_signature = "||".join([normalize_text(row.text) for row in result_rows()[:3]])
+
     for query in build_search_queries(client_name):
         search_input.click()
         search_input.send_keys(Keys.CONTROL, "a")
         search_input.send_keys(Keys.DELETE)
-        search_input.send_keys(query)
+        type_like_human(search_input, query)
+        time.sleep(0.35)
         search_input.send_keys(Keys.ENTER)
 
         rows = wait_for_stable_results()
+        if rows:
+            current_signature = "||".join([normalize_text(row.text) for row in rows[:3]])
+            if current_signature == baseline_signature:
+                logging.debug("Search grid did not refresh for query '%s' on '%s'", query, client_name)
+                continue
         if not rows:
             continue
 
