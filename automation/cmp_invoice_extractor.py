@@ -468,15 +468,25 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     target_tokens = set(normalized_target.split())
 
     def result_rows_snapshot() -> list[dict]:
-        script = """
+        script = r"""
         const rows = Array.from(document.querySelectorAll('table tbody tr'));
         return rows.map((row, index) => {
           const cells = Array.from(row.querySelectorAll('td'));
-          const nameCell = cells.length > 1 ? cells[1] : null;
+          let candidateName = '';
+          for (const cell of cells) {
+            const text = (cell.innerText || '').trim();
+            if (!text) continue;
+            if (/^\d+$/.test(text)) continue;
+            if (/@/.test(text)) continue;
+            if (/^\+?\d[\d\s-]{7,}$/.test(text)) continue;
+            if (/^\d{4}-\d{2}-\d{2}/.test(text)) continue;
+            candidateName = text;
+            break;
+          }
           return {
             index: index + 1,
             rowText: (row.innerText || '').trim(),
-            nameText: (nameCell ? nameCell.innerText : '').trim(),
+            nameText: candidateName,
           };
         }).filter(item => item.rowText);
         """
@@ -514,7 +524,8 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         best_row_index = None
         best_score = -1
         for row in rows_for_match:
-            row_text = normalize_company_name(row.get("nameText") or row.get("rowText", ""))
+            # Prefer full row text for matching because CMP column order can vary by viewport.
+            row_text = normalize_company_name(row.get("rowText", ""))
             if not row_text:
                 continue
 
@@ -575,12 +586,10 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         if not best_row_index or best_score < 1:
             continue
 
-        clickable_xpath = (
-            f"(//table//tbody/tr)[{int(best_row_index)}]/td[2]//*[self::a or self::button or self::span][1]"
-        )
-        fallback_xpath = f"(//table//tbody/tr)[{int(best_row_index)}]/td[2]"
-        candidates = driver.find_elements(By.XPATH, clickable_xpath)
-        target = candidates[0] if candidates else driver.find_element(By.XPATH, fallback_xpath)
+        row_xpath = f"(//table//tbody/tr)[{int(best_row_index)}]"
+        name_click_xpath = f"{row_xpath}//a[1] | {row_xpath}//button[1]"
+        candidates = driver.find_elements(By.XPATH, name_click_xpath)
+        target = candidates[0] if candidates else driver.find_element(By.XPATH, row_xpath)
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target)
         wait.until(EC.element_to_be_clickable(target))
         target.click()
