@@ -594,9 +594,24 @@ const SectionLoadingState = styled.div`
 
 const sectionLoader = <SectionLoadingState>Loading section...</SectionLoadingState>;
 
+const rowHasInvoiceActivity = (row) => {
+  const status = String(row?.status || '').trim().toLowerCase();
+  const invoiceNumber = String(row?.invoiceNumber || '').trim();
+  const amount = Number(row?.amount) || 0;
+
+  return (
+    (invoiceNumber && invoiceNumber !== 'Marked as Sent') ||
+    (['pending', 'overdue', 'paid'].includes(status) && amount > 0)
+  );
+};
+
+const hasMeaningfulInvoiceRows = (rows) =>
+  Array.isArray(rows) && rows.some((row) => rowHasInvoiceActivity(row));
+
 function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
+  const rawZohoDataRef = useRef([]);
   const [trackerData, setTrackerData] = useState([]);
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
@@ -639,6 +654,7 @@ function App() {
     [selectedAgent]
   );
   const syncInFlightRef = useRef(false);
+  const hasRetriedEmptyScopedLoadRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -661,6 +677,10 @@ function App() {
 
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
   useEffect(() => {
+    rawZohoDataRef.current = rawZohoData;
+  }, [rawZohoData]);
+
+  useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
 
     // Always merge from the LATEST reference of manualEdits
@@ -676,23 +696,44 @@ function App() {
       setLoading(true);
     }
     try {
-      const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const response = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const sheetData = Array.isArray(response?.debtors) ? response.debtors : [];
+      const csData = Array.isArray(response?.clientsByAgent) ? response.clientsByAgent : [];
+      const trackerLogs = Array.isArray(response?.trackerLogs) ? response.trackerLogs : [];
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
-      setClientsByAgent(csData || []);
+      const previousHadInvoices = hasMeaningfulInvoiceRows(rawZohoDataRef.current);
+      const incomingHasInvoices = hasMeaningfulInvoiceRows(sheetData) || hasMeaningfulInvoiceRows(mergedData);
+      const looksLikeDegradedSnapshot =
+        csData.length > 0 &&
+        mergedData.length > 0 &&
+        previousHadInvoices &&
+        !incomingHasInvoices;
 
-      if (trackerLogs) {
+      if (looksLikeDegradedSnapshot) {
+        console.warn('[Sync] Ignoring degraded Zoho snapshot and keeping previous data.');
+        if (notifyUser) {
+          toast.error('Zoho returned an incomplete snapshot. Keeping the previous synced data.', {
+            style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+          });
+        }
+        return;
+      }
+
+      setClientsByAgent(csData);
+
+      if (trackerLogs.length > 0) {
         setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
       }
 
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
+        hasRetriedEmptyScopedLoadRef.current = false;
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
-        setRawZohoData([]);
         if (notifyUser) {
           toast.error('Zoho returned no rows.', {
             icon: 'ℹ️',
@@ -813,6 +854,17 @@ function App() {
       setSelectedAgent(accessProfile.canViewAllData ? 'all' : (agentOptions[0] || 'all'));
     }
   }, [selectedAgent, agentOptions, accessProfile]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    if (accessProfile.canViewAllData) return;
+    if (hasRetriedEmptyScopedLoadRef.current) return;
+    if (rawZohoData.length > 0 || clientsByAgent.length > 0) return;
+
+    hasRetriedEmptyScopedLoadRef.current = true;
+    loadData({ silent: true, notifyUser: false });
+  }, [accessProfile.canViewAllData, clientsByAgent.length, loadData, loading, rawZohoData.length, user]);
 
   const isKevinProfile = isManagedKevinIdentity(user?.email || '');
   const kevinAccessSettings = accessFeatureOverrides.kevin || {};
