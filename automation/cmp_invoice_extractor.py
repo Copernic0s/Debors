@@ -122,29 +122,21 @@ def normalize_company_name(value: str) -> str:
 
 
 def build_search_queries(client_name: str) -> list[str]:
-    queries: list[str] = []
     raw = str(client_name or "").strip()
-    if raw:
-        queries.append(raw)
+    if not raw:
+        return []
 
-    normalized = normalize_company_name(raw)
-    if normalized and normalized not in queries:
-        queries.append(normalized)
+    primary = re.sub(r"\s+", " ", raw).upper()
+    stripped_parenthetical = re.sub(r"\s*\([^)]*\)", "", primary).strip()
+    stripped_symbols = re.sub(r"[^A-Z0-9 ]+", " ", stripped_parenthetical)
+    stripped_symbols = re.sub(r"\s+", " ", stripped_symbols).strip()
 
-    compact = re.sub(r"[^A-Za-z0-9 ]+", " ", raw).strip()
-    compact = re.sub(r"\s+", " ", compact)
-    if compact and compact not in queries:
-        queries.append(compact)
-
-    tokens = [token for token in normalized.split() if token]
-    if len(tokens) >= 2:
-        short_query = " ".join(tokens[:2])
-        if short_query not in queries:
-            queries.append(short_query)
-    elif tokens and tokens[0] not in queries:
-        queries.append(tokens[0])
-
-    return [query for query in queries if query]
+    queries = [primary]
+    if stripped_parenthetical and stripped_parenthetical not in queries:
+        queries.append(stripped_parenthetical)
+    if stripped_symbols and stripped_symbols not in queries:
+        queries.append(stripped_symbols)
+    return queries
 
 
 def type_like_human(element, text: str) -> None:
@@ -475,8 +467,20 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     normalized_target = normalize_company_name(client_name)
     target_tokens = set(normalized_target.split())
 
-    def result_rows():
-        return [row for row in driver.find_elements(By.XPATH, "//table//tbody/tr") if row.is_displayed()]
+    def result_rows_snapshot() -> list[dict]:
+        script = """
+        const rows = Array.from(document.querySelectorAll('table tbody tr'));
+        return rows.map((row, index) => {
+          const cells = Array.from(row.querySelectorAll('td'));
+          const nameCell = cells.length > 1 ? cells[1] : null;
+          return {
+            index: index + 1,
+            rowText: (row.innerText || '').trim(),
+            nameText: (nameCell ? nameCell.innerText : '').trim(),
+          };
+        }).filter(item => item.rowText);
+        """
+        return driver.execute_script(script) or []
 
     def wait_for_stable_results() -> list:
         no_data_xpath = (
@@ -484,12 +488,12 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
         )
         start = time.time()
-        stable_rows: list = []
+        stable_rows: list[dict] = []
         stable_hits = 0
         last_signature = ""
         while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
-            rows = result_rows()
-            signature = "||".join([normalize_text(row.text) for row in rows[:3]])
+            rows = result_rows_snapshot()
+            signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
             if signature and signature == last_signature:
                 stable_hits += 1
             else:
@@ -504,13 +508,13 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             time.sleep(0.25)
         if SEARCH_SETTLE_SECONDS > 0:
             time.sleep(SEARCH_SETTLE_SECONDS)
-        return stable_rows if stable_rows else result_rows()
+        return stable_rows if stable_rows else result_rows_snapshot()
 
-    def best_match_from_rows(rows_for_match: list):
-        best_element = None
+    def best_match_from_rows(rows_for_match: list[dict]):
+        best_row_index = None
         best_score = -1
         for row in rows_for_match:
-            row_text = normalize_company_name(row.text)
+            row_text = normalize_company_name(row.get("nameText") or row.get("rowText", ""))
             if not row_text:
                 continue
 
@@ -524,22 +528,15 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             elif shared_tokens:
                 score = shared_tokens * 10
 
-            clickable_candidates = row.find_elements(By.XPATH, ".//a | .//button")
-            clickable_candidates = [element for element in clickable_candidates if element.is_displayed()]
-            click_target = clickable_candidates[0] if clickable_candidates else row
-
             if score > best_score:
                 best_score = score
-                best_element = click_target
+                best_row_index = row.get("index")
 
-        if not best_element and len(rows_for_match) == 1:
-            only_row = rows_for_match[0]
-            clickable_candidates = only_row.find_elements(By.XPATH, ".//a | .//button")
-            clickable_candidates = [element for element in clickable_candidates if element.is_displayed()]
-            best_element = clickable_candidates[0] if clickable_candidates else only_row
-        return best_element, best_score
+        if not best_row_index and len(rows_for_match) == 1:
+            best_row_index = rows_for_match[0].get("index")
+        return best_row_index, best_score
 
-    baseline_signature = "||".join([normalize_text(row.text) for row in result_rows()[:3]])
+    baseline_signature = "||".join([normalize_text(row.get("rowText", "")) for row in result_rows_snapshot()[:3]])
 
     attempted_queries: list[str] = []
     for query in build_search_queries(client_name):
@@ -547,7 +544,7 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         search_input.click()
         search_input.send_keys(Keys.CONTROL, "a")
         search_input.send_keys(Keys.DELETE)
-        type_like_human(search_input, query)
+        type_like_human(search_input, query.upper())
         time.sleep(0.35)
         search_input.send_keys(Keys.ENTER)
         search_input.send_keys(Keys.TAB)
@@ -567,27 +564,33 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
 
         rows = wait_for_stable_results()
         if rows:
-            current_signature = "||".join([normalize_text(row.text) for row in rows[:3]])
+            current_signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
             if current_signature == baseline_signature:
                 logging.debug("Search grid did not refresh for query '%s' on '%s'", query, client_name)
                 continue
         if not rows:
             continue
 
-        best_match_element, best_score = best_match_from_rows(rows)
-        if not best_match_element or best_score < 1:
+        best_row_index, best_score = best_match_from_rows(rows)
+        if not best_row_index or best_score < 1:
             continue
 
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_match_element)
-        wait.until(EC.element_to_be_clickable(best_match_element))
-        best_match_element.click()
+        clickable_xpath = (
+            f"(//table//tbody/tr)[{int(best_row_index)}]/td[2]//*[self::a or self::button or self::span][1]"
+        )
+        fallback_xpath = f"(//table//tbody/tr)[{int(best_row_index)}]/td[2]"
+        candidates = driver.find_elements(By.XPATH, clickable_xpath)
+        target = candidates[0] if candidates else driver.find_element(By.XPATH, fallback_xpath)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target)
+        wait.until(EC.element_to_be_clickable(target))
+        target.click()
         wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
         return True
 
     if DEBUG_NOT_FOUND:
         try:
-            snapshot_rows = result_rows()
-            preview = [normalize_text(row.text) for row in snapshot_rows[:3]]
+            snapshot_rows = result_rows_snapshot()
+            preview = [normalize_text(row.get("rowText", "")) for row in snapshot_rows[:3]]
             logging.warning(
                 "Not found debug | client='%s' | queries=%s | top_rows=%s",
                 client_name,
