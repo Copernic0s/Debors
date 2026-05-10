@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -39,6 +40,8 @@ OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
 TEMP_PROFILE_PREFIX = "cmp_chrome_profile_"
+CLONED_PROFILE_PREFIX = "cmp_chrome_clone_"
+TEMP_DIRECTORIES_TO_CLEAN: list[str] = []
 
 
 @dataclass(frozen=True)
@@ -241,15 +244,62 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     return options
 
 
+def clone_chrome_profile(user_data_dir: str, profile_dir: str) -> tuple[str, str]:
+    source_root = Path(user_data_dir)
+    source_profile = source_root / profile_dir
+    if not source_profile.exists():
+        raise FileNotFoundError(f"Chrome profile not found: {source_profile}")
+
+    clone_root = Path(tempfile.mkdtemp(prefix=CLONED_PROFILE_PREFIX))
+    target_profile = clone_root / profile_dir
+    TEMP_DIRECTORIES_TO_CLEAN.append(str(clone_root))
+
+    local_state = source_root / "Local State"
+    if local_state.exists():
+        shutil.copy2(local_state, clone_root / "Local State")
+
+    def ignore_profile_files(_directory: str, names: list[str]) -> set[str]:
+        ignored = {
+            "lockfile",
+            "singletoncookie",
+            "singletonlock",
+            "singletonsocket",
+            "Crashpad",
+            "ShaderCache",
+            "Code Cache",
+            "GrShaderCache",
+            "GraphiteDawnCache",
+            "DawnGraphiteCache",
+        }
+        return {name for name in names if name in ignored}
+
+    shutil.copytree(source_profile, target_profile, dirs_exist_ok=True, ignore=ignore_profile_files)
+    logging.info("Cloned Chrome profile '%s' into temporary workspace '%s'", profile_dir, clone_root)
+    return str(clone_root), profile_dir
+
+
 def create_driver() -> WebDriver:
     user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
     profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
+    clone_profile = os.getenv("CMP_CLONE_PROFILE", "true").strip().lower() != "false"
     service = ChromeService(ChromeDriverManager().install())
 
     def launch(options: ChromeOptions) -> WebDriver:
         driver = webdriver.Chrome(service=service, options=options)
         driver.implicitly_wait(0)
         return driver
+
+    if user_data_dir and profile_dir and clone_profile:
+        try:
+            cloned_user_data_dir, cloned_profile_dir = clone_chrome_profile(user_data_dir, profile_dir)
+            return launch(
+                build_chrome_options(
+                    user_data_dir=cloned_user_data_dir,
+                    profile_dir=cloned_profile_dir,
+                )
+            )
+        except Exception as error:
+            logging.warning("Failed to clone Chrome profile '%s': %s", profile_dir, error)
 
     try:
         return launch(build_chrome_options(user_data_dir=user_data_dir, profile_dir=profile_dir))
@@ -552,6 +602,11 @@ def main() -> int:
         return 0
     finally:
         driver.quit()
+        for temp_directory in TEMP_DIRECTORIES_TO_CLEAN:
+            try:
+                shutil.rmtree(temp_directory, ignore_errors=True)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
