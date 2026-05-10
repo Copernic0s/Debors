@@ -343,8 +343,21 @@ def clone_chrome_profile(user_data_dir: str, profile_dir: str) -> tuple[str, str
 def create_driver() -> WebDriver:
     user_data_dir = os.getenv("CMP_USER_DATA_DIR", "").strip()
     profile_dir = os.getenv("CMP_PROFILE_DIR", "").strip()
+    if not user_data_dir:
+        local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+        if local_app_data:
+            user_data_dir = str(Path(local_app_data) / "Google" / "Chrome" / "User Data")
+    if not profile_dir:
+        profile_dir = "Profile 8"
     clone_profile = os.getenv("CMP_CLONE_PROFILE", "true").strip().lower() != "false"
     require_exact_profile = os.getenv("CMP_REQUIRE_EXACT_PROFILE", "true").strip().lower() != "false"
+    logging.info(
+        "Chrome profile config | user_data_dir='%s' | profile_dir='%s' | clone_profile=%s | strict_profile=%s",
+        user_data_dir or "<empty>",
+        profile_dir or "<empty>",
+        clone_profile,
+        require_exact_profile,
+    )
     service = ChromeService(ChromeDriverManager().install())
 
     def launch(options: ChromeOptions) -> WebDriver:
@@ -436,8 +449,9 @@ def perform_login(driver: WebDriver) -> None:
     email = os.getenv("CMP_EMAIL", "").strip()
     password = os.getenv("CMP_PASSWORD", "").strip()
     if not email or not password:
-        logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for manual login...")
-        wait.until(lambda current: "/company" in current.current_url or current.current_url.rstrip("/") != BASE_URL.rstrip("/"))
+        logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated company view...")
+        wait.until(lambda current: "/company" in current.current_url and "/auth" not in current.current_url)
+        wait_for_any(driver, SELECTORS.search_inputs)
         return
 
     email_input = wait_for_any(driver, SELECTORS.email_inputs)
@@ -460,7 +474,8 @@ def perform_login(driver: WebDriver) -> None:
             continue
 
     password_input.send_keys(Keys.ENTER)
-    wait.until(lambda current: "/company" in current.current_url)
+    wait.until(lambda current: "/company" in current.current_url and "/auth" not in current.current_url)
+    wait_for_any(driver, SELECTORS.search_inputs)
 
 
 def ensure_company_screen(driver: WebDriver) -> None:
