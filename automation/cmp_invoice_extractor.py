@@ -47,6 +47,7 @@ DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
 SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
 SEARCH_KEYSTROKE_DELAY = float(os.getenv("CMP_SEARCH_KEYSTROKE_DELAY", "0.06"))
+DEBUG_NOT_FOUND = os.getenv("CMP_DEBUG_NOT_FOUND", "true").strip().lower() == "true"
 OUTPUT_PATH = Path(os.getenv("CMP_OUTPUT_JSON", "invoices_actualizados.json"))
 LOG_PATH = Path(os.getenv("CMP_LOG_FILE", "cmp_invoice_extractor.log"))
 SCREENSHOT_DIR = Path(os.getenv("CMP_SCREENSHOT_DIR", "cmp_screenshots"))
@@ -540,13 +541,29 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
 
     baseline_signature = "||".join([normalize_text(row.text) for row in result_rows()[:3]])
 
+    attempted_queries: list[str] = []
     for query in build_search_queries(client_name):
+        attempted_queries.append(query)
         search_input.click()
         search_input.send_keys(Keys.CONTROL, "a")
         search_input.send_keys(Keys.DELETE)
         type_like_human(search_input, query)
         time.sleep(0.35)
         search_input.send_keys(Keys.ENTER)
+        search_input.send_keys(Keys.TAB)
+
+        # Some CMP builds only commit search when the search icon is clicked.
+        icon_candidates = driver.find_elements(
+            By.XPATH,
+            "//*[self::button or self::span or self::i][contains(@class,'search') or contains(@aria-label,'Search') or contains(@title,'Search')]",
+        )
+        for icon in icon_candidates[:2]:
+            try:
+                if icon.is_displayed():
+                    icon.click()
+                    break
+            except Exception:
+                continue
 
         rows = wait_for_stable_results()
         if rows:
@@ -566,6 +583,20 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         best_match_element.click()
         wait.until(lambda current: "/company" in current.current_url and current.current_url.rstrip("/") != COMPANY_URL.rstrip("/"))
         return True
+
+    if DEBUG_NOT_FOUND:
+        try:
+            snapshot_rows = result_rows()
+            preview = [normalize_text(row.text) for row in snapshot_rows[:3]]
+            logging.warning(
+                "Not found debug | client='%s' | queries=%s | top_rows=%s",
+                client_name,
+                attempted_queries,
+                preview,
+            )
+            save_debug_screenshot(driver, f"not_found_{re.sub(r'[^A-Za-z0-9]+', '_', client_name)[:40]}")
+        except Exception:
+            pass
 
     return False
 
