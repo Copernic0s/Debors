@@ -449,8 +449,8 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
             matchCount++;
             
             // Auto-expand the agent group
-            if (matchingSlot.agent) {
-                setExpandedAgents(prev => ({ ...prev, [matchingSlot.agent]: true }));
+            if (matchingSlot.agentId) {
+                setExpandedAgents(prev => ({ ...prev, [matchingSlot.agentId]: true }));
             }
           }
         });
