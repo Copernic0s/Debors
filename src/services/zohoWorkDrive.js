@@ -27,27 +27,42 @@ const buildUrl = (url, cacheBust) => {
   return `${url}${separator}t=${Date.now()}`;
 };
 
+const wait = (ms) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
 export const fetchAllDataFromSheet = async (url = LOCAL_API_URL, options = {}) => {
-  const { cacheBust = true } = options;
+  const { cacheBust = true, retries = 2 } = options;
   if (!url) throw new Error('No URL provided');
 
   const sourceUrl = buildUrl(url, cacheBust);
-  let response;
+  let lastError = null;
 
-  console.log('[API] Fetching data from:', sourceUrl); // Log the actual URL being fetched
-  try {
-    response = await fetch(sourceUrl);
-  } catch (error) {
-    console.error('[API] Network error during fetch:', error); // Log network error details
-    throw new Error(`Failed to fetch from backend: ${error.message}`);
+  console.log('[API] Fetching data from:', sourceUrl);
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(sourceUrl, {
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      lastError = error;
+      console.error(`[API] Fetch attempt ${attempt + 1} failed:`, error);
+      if (attempt < retries) {
+        await wait(700 * (attempt + 1));
+      }
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(`Backend returned error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data;
+  throw new Error(`Failed to fetch from backend: ${lastError?.message || 'Unknown error'}`);
 };
 
 export const fetchDebtorsFromSheet = async (url = LOCAL_API_URL, options = {}) => {

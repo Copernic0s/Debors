@@ -132,14 +132,6 @@ const Title = styled.h2`
   }
 `;
 
-const Subtitle = styled.p`
-  color: var(--text-muted);
-  font-size: 0.95rem;
-  margin-top: 0.75rem;
-  max-width: 280px;
-  line-height: 1.5;
-`;
-
 const Form = styled.form`
   display: flex;
   flex-direction: column;
@@ -311,7 +303,6 @@ function Login({ onLogin }) {
           <Title>
             <span className="brand">ALMAFUEL</span>
           </Title>
-          <Subtitle>Operational cockpit for collections, support tracking, and account follow-up.</Subtitle>
         </Header>
         <Form onSubmit={handleLogin}>
           <FormGroup>

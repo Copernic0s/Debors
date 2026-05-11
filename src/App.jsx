@@ -1,94 +1,121 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
 import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
-import DebtorModal from './components/DebtorModal';
-import CompanyProfileModal from './components/CompanyProfileModal';
-import ManagerAnalytics from './components/ManagerAnalytics';
-import Login from './components/Login';
-import SupportTracker from './components/SupportTracker';
 import InvoiceEntry from './components/InvoiceEntry';
+import Login from './components/Login';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
-import { supabase, hasSupabaseConfig } from './lib/supabase';
-import { calculateMetrics } from './data/mockData';
+import { hasSupabaseConfig } from './lib/supabase';
 import { fetchAllDataFromSheet } from './services/zohoWorkDrive';
-import { BILLING_CYCLES, normalizeBillingCycle } from './constants/billingCycles';
+import { BILLING_CYCLES } from './constants/billingCycles';
+import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile } from './constants/accessControl';
+import { emailService } from './services/emailService';
+import { createActivityEntry } from './services/activityLogger';
+import { mergeDebtorsWithClientSheet, mergeManualEdits } from './services/debtorDataReconciliation';
+import { useAppSharedState } from './hooks/useAppSharedState';
+import { useManualEditsState } from './hooks/useManualEditsState';
+import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
+import { useAppSession } from './hooks/useAppSession';
+import { useOverviewActions } from './hooks/useOverviewActions';
+import { useDerivedDebtorViews } from './hooks/useDerivedDebtorViews';
+import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
 import './index.css';
 
-// Table used for cloud persistence
-const TABLE_NAME = 'manual_edits';
+const DebtorModal = lazy(() => import('./components/DebtorModal'));
+const CompanyProfileModal = lazy(() => import('./components/CompanyProfileModal'));
+const ManagerAnalytics = lazy(() => import('./components/ManagerAnalytics'));
+const SupportTracker = lazy(() => import('./components/SupportTracker'));
+const ActivityLogs = lazy(() => import('./components/ActivityLogs'));
+const PortfolioCompanies = lazy(() => import('./components/PortfolioCompanies'));
 
-const mergeManualEdits = (rows, editsById) => {
-  const merged = rows
-    .filter((row) => !editsById[row.id]?.__deleted)
-    .map((row) => {
-      const patch = editsById[row.id];
-      if (!patch) return row;
-      // Merge all edits, prioritizing manual overrides
-      return {
-        ...row,
-        ...patch
-      };
-    });
+const TRACKED_ACTIVITY_FIELDS = [
+  { key: 'amount', label: 'Total Due' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'dueDate', label: 'Due Date' },
+  { key: 'status', label: 'Status' },
+  { key: 'billingCycle', label: 'Billing Cycle' }
+];
 
-  const existingIds = new Set(merged.map((r) => r.id));
-  Object.values(editsById).forEach((edit) => {
-    // Treat purely new entries or entries without a matching ID in Zoho as new rows
-    if ((edit.__isNew || !existingIds.has(edit.id)) && !edit.__deleted) {
-      // Ensure they look like real invoices
-      merged.unshift({ 
-        ...edit,
-        source: edit.source === 'manual_entry' ? 'invoice' : (edit.source || 'invoice')
-      });
-    }
-  });
+const LOCAL_ZOHO_SNAPSHOT_KEY = 'debors:latest-zoho-snapshot';
 
-  return merged;
+const normalizeActivityValue = (fieldKey, value) => {
+  if (value === null || value === undefined) return '';
+  if (fieldKey === 'amount') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? `$${numeric.toFixed(2)}` : '';
+  }
+  return String(value).trim();
 };
 
-const parseMoneyValue = (value) => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
+const buildFieldChangeActivityEntries = ({ user, previousRow, nextRow }) =>
+  TRACKED_ACTIVITY_FIELDS.reduce((entries, field) => {
+    const oldValue = normalizeActivityValue(field.key, previousRow?.[field.key]);
+    const newValue = normalizeActivityValue(field.key, nextRow?.[field.key]);
 
-  let raw = String(value ?? '').trim();
-  if (!raw) return Number.NaN;
+    if (oldValue === newValue) return entries;
 
-  raw = raw
-    .replace(/[$€£]/g, '')
-    .replace(/[\s\u00A0\u202F]/g, '')
-    .replace(/[^0-9,.-]/g, '');
+    const companyName = nextRow?.company || nextRow?.clientName || previousRow?.company || previousRow?.clientName || 'Unknown company';
+    entries.push(
+      createActivityEntry({
+        user,
+        actionType: 'EDIT',
+        details: `${user.email} changed ${field.label} for ${companyName} from ${oldValue || 'empty'} to ${newValue || 'empty'}`,
+        entityType: 'debtor',
+        entityId: nextRow?.id || previousRow?.id,
+        company: companyName,
+        fieldName: field.key,
+        oldValue,
+        newValue
+      })
+    );
 
-  if (!raw) return Number.NaN;
+    return entries;
+  }, []);
 
-  const lastComma = raw.lastIndexOf(',');
-  const lastDot = raw.lastIndexOf('.');
-  const sepIndex = Math.max(lastComma, lastDot);
+const getUserAvatarSrc = (email) => {
+  const normalizedEmail = String(email || '').toLowerCase();
 
-  if (sepIndex === -1) {
-    const parsed = Number.parseFloat(raw);
-    return Number.isFinite(parsed) ? parsed : Number.NaN;
-  }
+  if (normalizedEmail.includes('andres')) return '/avatar.png';
+  if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+  if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
 
-  const hasBoth = lastComma !== -1 && lastDot !== -1;
-  const decPart = raw.slice(sepIndex + 1);
-  const intPart = raw.slice(0, sepIndex);
-
-  let normalized;
-  if (!hasBoth && decPart.length === 3) {
-    normalized = raw.replace(/[.,]/g, '');
-  } else {
-    const cleanInt = intPart.replace(/[.,]/g, '');
-    normalized = `${cleanInt}.${decPart.replace(/[.,]/g, '')}`;
-  }
-
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  return null;
 };
 
-const roundMoney = (value) => {
-  const parsed = parseMoneyValue(value);
-  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : Number.NaN;
+const loadLocalZohoSnapshot = () => {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_ZOHO_SNAPSHOT_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      debtors: Array.isArray(parsed?.debtors) ? parsed.debtors : [],
+      clientsByAgent: Array.isArray(parsed?.clientsByAgent) ? parsed.clientsByAgent : [],
+      trackerLogs: Array.isArray(parsed?.trackerLogs) ? parsed.trackerLogs : [],
+      savedAt: parsed?.savedAt || null
+    };
+  } catch (error) {
+    console.error('[Sync] Failed to read local Zoho snapshot:', error);
+    return null;
+  }
+};
+
+const saveLocalZohoSnapshot = ({ debtors, clientsByAgent, trackerLogs }) => {
+  try {
+    window.localStorage.setItem(
+      LOCAL_ZOHO_SNAPSHOT_KEY,
+      JSON.stringify({
+        debtors,
+        clientsByAgent,
+        trackerLogs,
+        savedAt: new Date().toISOString()
+      })
+    );
+  } catch (error) {
+    console.error('[Sync] Failed to save local Zoho snapshot:', error);
+  }
 };
 
 const AppContainer = styled.div`
@@ -110,44 +137,199 @@ const MainContent = styled.main`
   background: transparent;
 `;
 
+const AccessControlPanel = styled.section`
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  padding: 1.25rem 1.4rem;
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+`;
+
+const AccessControlHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+
+  h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+
+  p {
+    margin: 0.28rem 0 0 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+`;
+
+const AccessToggleGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+`;
+
+const AccessToggleCard = styled.div`
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+
+  strong {
+    color: var(--text-main);
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.92rem;
+  }
+
+  span {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+  }
+`;
+
+const ToggleSwitch = styled.button`
+  border: 1px solid ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.35)' : 'var(--glass-border)')};
+  background: ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.16)' : 'rgba(255, 255, 255, 0.04)')};
+  color: ${(props) => (props.$active ? '#d1fae5' : 'var(--text-muted)')};
+  min-width: 88px;
+  padding: 0.62rem 0.9rem;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: ${(props) => (props.$active ? 'rgba(16, 185, 129, 0.48)' : 'rgba(249, 115, 22, 0.35)')};
+    color: var(--text-main);
+  }
+`;
+
 const Topbar = styled.header`
-  min-height: 112px;
-  border-bottom: 1px solid var(--glass-border);
+  margin: 1.5rem 2rem;
+  height: 90px;
+  background: rgba(8, 18, 34, 0.45);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(180, 223, 255, 0.12);
+  border-radius: 24px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: 1rem;
   padding: 0 2rem;
-  background: linear-gradient(180deg, rgba(8, 18, 34, 0.78), rgba(8, 18, 34, 0.58));
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  z-index: 100;
+  z-index: 1000;
   position: sticky;
-  top: 0;
+  top: 1.5rem;
+  box-shadow: 
+    0 20px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(8, 18, 34, 0.55);
+    border-color: rgba(180, 223, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 30px 60px -12px rgba(0, 0, 0, 0.6),
+      0 0 20px rgba(85, 214, 255, 0.05);
+  }
+
+  @media (max-width: 900px) {
+    margin: 1rem;
+    height: auto;
+    padding: 1rem;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    top: 1rem;
+  }
+`;
+
+const PulsatingLogo = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
   
   &::after {
     content: '';
     position: absolute;
-    bottom: -1px;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--brand-blue), var(--brand), transparent);
-    background-size: 300% 100%;
-    animation: borderGlow 8s ease-in-out infinite;
-    opacity: 0.8;
+    width: 65px;
+    height: 65px;
+    background: radial-gradient(circle, var(--brand) 0%, transparent 70%);
+    filter: blur(20px);
+    border-radius: 50%;
+    opacity: 0.3;
+    z-index: -1;
+    animation: flickerGlow 3s ease-in-out infinite alternate;
   }
 
-  @keyframes borderGlow {
-    0% { background-position: -100% 0; }
-    50% { background-position: 100% 0; }
-    100% { background-position: -100% 0; }
+  @keyframes flickerGlow {
+    0% { transform: scale(0.9); opacity: 0.2; filter: blur(15px); }
+    50% { transform: scale(1.15); opacity: 0.45; filter: blur(25px); }
+    100% { transform: scale(1); opacity: 0.3; filter: blur(20px); }
   }
 
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
-    padding: 1.1rem 1rem;
-    justify-items: center;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+`;
+
+const UserAvatar = styled.div`
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--brand-amber), var(--brand));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(255, 122, 26, 0.3);
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 12px;
+    height: 12px;
+    background: var(--ok);
+    border: 2.5px solid #081222;
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--ok);
+  }
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  .name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+  .status {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 `;
 
@@ -249,22 +431,39 @@ const BrandLockup = styled.div`
 `;
 
 const BrandTitle = styled.h1`
-  font-size: 2.7rem;
+  font-size: 1.6rem;
   font-weight: 800;
   margin: 0;
   text-transform: uppercase;
   font-family: 'Plus Jakarta Sans', sans-serif;
-  color: var(--brand-ice);
+  letter-spacing: 0.15em;
+  color: var(--text-main);
   line-height: 1;
-  text-shadow: 0 0 22px rgba(255, 179, 71, 0.08);
-
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+  
   span.brand {
-    color: var(--brand-amber);
-    margin-right: 0.02em;
+    background: linear-gradient(135deg, var(--brand-amber) 0%, var(--brand) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    transition: all 0.4s ease;
   }
 
-  @media (max-width: 900px) {
-    font-size: 2.1rem;
+  span:last-child {
+    transition: all 0.4s ease;
+  }
+
+  &:hover {
+    gap: 0;
+    letter-spacing: 0.05em;
+  }
+
+  &:hover ${PulsatingLogo} {
+    transform: translateY(-45px) scale(1.3);
+    filter: drop-shadow(0 20px 20px rgba(255, 122, 26, 0.4));
   }
 `;
 
@@ -272,12 +471,11 @@ const TopbarRight = styled.div`
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 1rem;
+  gap: 1.5rem;
 
   @media (max-width: 900px) {
     width: 100%;
     justify-content: center;
-    flex-wrap: wrap;
   }
 `;
 
@@ -302,9 +500,54 @@ const TopbarMeta = styled.div`
 `;
 
 const SyncButton = styled.button`
-  padding: 0.68rem 1rem !important;
-  font-size: 0.82rem !important;
-  border-radius: 999px !important;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.6rem 1.2rem;
+  border-radius: 14px;
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--brand-cyan);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.3);
+  }
+
+  svg {
+    transition: transform 0.6s ease;
+  }
+
+  &:hover svg {
+    transform: rotate(180deg);
+  }
+`;
+
+const LogoutButton = styled.button`
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 1.2rem;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+    transform: translateY(-2px);
+  }
 `;
 
 const ViewSwitch = styled.div`
@@ -376,225 +619,40 @@ const ViewButton = styled.button`
   }
 `;
 
-const normalizeWeekLabel = (label) => {
-  const raw = String(label || '').trim().toLowerCase();
-  if (!raw) return 'unspecified';
-  // Attempt to extract digits to form a semi-stable key even if names vary (March vs Mar)
-  const numbers = raw.match(/\d+/g);
-  if (numbers && numbers.length >= 2) {
-    // Take the first two sets of numbers (likely start/end day)
-    return `W-${numbers[0]}-${numbers[1]}`;
-  }
-  return raw.replace(/[^a-z0-9]/g, '');
+const SectionLoadingState = styled.div`
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+`;
+
+const sectionLoader = <SectionLoadingState>Loading section...</SectionLoadingState>;
+
+const rowHasInvoiceActivity = (row) => {
+  const status = String(row?.status || '').trim().toLowerCase();
+  const invoiceNumber = String(row?.invoiceNumber || '').trim();
+  const amount = Number(row?.amount) || 0;
+
+  return (
+    (invoiceNumber && invoiceNumber !== 'Marked as Sent') ||
+    (['pending', 'overdue', 'paid'].includes(status) && amount > 0)
+  );
 };
 
-const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
-  const merged = new Map();
-  const windowsWithInvoice = new Set();
-
-  // 1. Process Debt Rows (Invoices)
-  debtRows.forEach((row) => {
-    merged.set(row.id, { ...row, source: 'debt' });
-    
-    // Recognize windows that already have actual invoices
-    const normalizedCompany = String(row.company || row.clientName || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const normalizedWeek = normalizeWeekLabel(row.weekLabel);
-    if (normalizedCompany && normalizedWeek) {
-      windowsWithInvoice.add(`${normalizedWeek}|${normalizedCompany}`);
-    }
-  });
-
-  // 2. Process Client Sheet Rows (Potential Invoices / CS by Agent)
-  (csRows || []).forEach((row) => {
-    const company = String(row.company || '').trim();
-    const week = String(row.weekLabel || '').trim();
-    if (!company) return;
-
-    const normalizedCompany = company.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const normalizedWeek = normalizeWeekLabel(row.weekLabel);
-    const windowKey = `${normalizedWeek}|${normalizedCompany}`;
-    const stableId = `CS-${normalizedWeek}-${normalizedCompany}`;
-
-    // Prefer actual invoices over client sheet rows for the same window
-    if (!windowsWithInvoice.has(windowKey) && !merged.has(stableId)) {
-      merged.set(stableId, {
-        id: stableId,
-        company,
-        clientName: company,
-        agentId: String(row.agentId || 'Unassigned').trim(),
-        amount: Number(row.amount) || 0,
-        billingCycle: normalizeBillingCycle(row.billingCycle),
-        status: String(row.status || 'pending').toLowerCase() === 'paid' ? 'paid' : 'no_invoice',
-        dueDate: row.dueDate || '',
-        weekLabel: week,
-        source: 'cs'
-      });
-    }
-  });
-
-  return Array.from(merged.values());
-};
-
-const aggregateByCompany = (rows) => {
-  const grouped = new Map();
-
-  rows.forEach((row) => {
-    const company = String(row.company || row.clientName || '').trim();
-    if (!company) return;
-
-    const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const key = `${company.toLowerCase()}-${invKey}`;
-    const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
-    const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
-    const amountToAdd = isPaid ? 0 : amount;
-
-    const current = grouped.get(key);
-    const normalizedCycle = normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED;
-    const isCsSource = row.id?.startsWith('CS-') || row.source === 'cs';
-
-    if (!current) {
-      grouped.set(key, {
-        ...row,
-        company,
-        clientName: company,
-        agentId: agent,
-        agentSet: new Set([agent]),
-        amount: amountToAdd,
-        billingCycle: normalizedCycle,
-        cycleSet: new Set([normalizedCycle]),
-        isSheetCycle: isCsSource && normalizedCycle !== BILLING_CYCLES.UNSPECIFIED,
-        status: row.status || 'pending',
-        notes: row.notes || '',
-        invoiceNumber: row.invoiceNumber || '',
-        invoiceCount: row.invoiceNumber ? 1 : 0,
-        hasInvoice: Boolean(String(row.invoiceNumber || '').trim()),
-        invoiceCountOverride: Number.isFinite(Number(row.invoiceCountOverride)) ? Number(row.invoiceCountOverride) : null,
-        dueDate: row.dueDate || '',
-        latestId: row.id,
-        id: `CMP-${key}`,
-        seenInvoices: new Set([invKey])
-      });
-      return;
-    }
-
-    // Accumulate SUM (non-paid only), AGENTS, and CYCLES with deduplication
-    if (!current.seenInvoices.has(invKey)) {
-      current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
-      current.seenInvoices.add(invKey);
-      if (row.invoiceNumber) current.invoiceCount += 1;
-    }
-    
-    current.agentSet.add(agent);
-    
-    // Priority 1: If the row comes from the CS sheet and has a cycle, it's the MASTER.
-    // Priority 2: If we don't have a master cycle yet, take the first non-unspecified one found.
-    const normalizedRowCycle = normalizeBillingCycle(row.billingCycle);
-    if (normalizedRowCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
-      current.cycleSet.add(normalizedRowCycle);
-      
-      if (!current.isSheetCycle) {
-        if (isCsSource) {
-          current.billingCycle = normalizedRowCycle;
-          current.isSheetCycle = true;
-        } else if (current.billingCycle === BILLING_CYCLES.UNSPECIFIED) {
-          current.billingCycle = normalizedRowCycle;
-        }
-      }
-    }
-
-    if (row.invoiceNumber) current.invoiceCount += 1;
-    if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
-
-    // Metadata Priority: Follow the LATEST due date for the displayed fields
-    if (row.dueDate) {
-      if (!current.dueDate || row.dueDate > current.dueDate) {
-        current.dueDate = row.dueDate;
-        current.latestId = row.id;
-        
-        current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
-        current.status = row.status || current.status;
-        current.notes = row.notes || current.notes;
-        if (!current.isSheetCycle) {
-          current.billingCycle = row.billingCycle || current.billingCycle;
-        }
-        current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
-        current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
-        current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
-      }
-    }
-
-    // Status aggregation: Prioritize most critical (Overdue > Pending > Paid)
-    const statuses = [String(current.status || '').toLowerCase(), String(row.status || '').toLowerCase()];
-    if (statuses.some((s) => s === 'overdue')) {
-      current.status = 'overdue';
-    } else if (statuses.some((s) => s === 'pending')) {
-      current.status = 'pending';
-    } else if (statuses.every((s) => s === 'paid' || s === 'inactive')) {
-      current.status = 'paid';
-    }
-  });
-
-  const today = new Date();
-
-  return Array.from(grouped.values()).map((item) => {
-    const agents = Array.from(item.agentSet);
-    const cycles = Array.from(item.cycleSet);
-    
-    // Re-calculate auto-overdue based on the FINAL aggregated due date
-    let status = item.status;
-    let isAutoOverdue = false;
-    
-    if (status !== 'paid' && status !== 'inactive' && status !== 'no_invoice' && item.dueDate) {
-      const dateStr = item.dueDate.includes('T') ? item.dueDate : `${item.dueDate}T17:00:00`;
-      const parsedDue = new Date(dateStr);
-      if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
-        status = 'overdue';
-        isAutoOverdue = true;
-      }
-    }
-    // NEW INACTIVE LOGIC
-    const companyRows = rows.filter(r => 
-      String(r.company || r.clientName || '').trim().toLowerCase() === item.company.toLowerCase()
-    ).sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
-
-    const lastRows = companyRows.slice(-3);
-    const consecutiveNoUsage = lastRows.length >= 3 && lastRows.every(r => r.lastNoUsageDate);
-    const persistentNoUsageCount = Number(item.noUsageCount) || 0;
-
-    if (consecutiveNoUsage || persistentNoUsageCount >= 3) {
-      item.status = 'inactive';
-    }
-
-    return {
-      ...item,
-      status,
-      isAutoOverdue,
-      agentId: agents.join(', '),
-      // If we found a specific cycle in the latest row, use it. Otherwise find any non-unspecified from the set.
-      billingCycle: (item.billingCycle && item.billingCycle !== BILLING_CYCLES.UNSPECIFIED) 
-        ? item.billingCycle 
-        : (Array.from(item.cycleSet).find(c => c !== BILLING_CYCLES.UNSPECIFIED) || BILLING_CYCLES.UNSPECIFIED),
-      dueDate: item.dueDate || '',
-      invoiceCount: Number.isFinite(Number(item.invoiceCountOverride)) ? Number(item.invoiceCountOverride) : item.invoiceCount,
-      sourceType: item.hasInvoice ? 'invoice' : 'cs',
-      agentSet: undefined,
-      cycleSet: undefined,
-      invoiceCountOverride: item.invoiceCountOverride
-    };
-  });
-};
+const hasMeaningfulInvoiceRows = (rows) =>
+  Array.isArray(rows) && rows.some((row) => rowHasInvoiceActivity(row));
 
 function App() {
   const [data, setData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
+  const rawZohoDataRef = useRef([]);
   const [trackerData, setTrackerData] = useState([]);
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [activeView, setActiveView] = useState('overview'); // 'overview', 'analytics', 'tracker'
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
-  const [lastSyncAt, setLastSyncAt] = useState(null);
   const [lastTick, setLastTick] = useState(Date.now());
   const [selectedAgent, setSelectedAgent] = useState('all');
   const [selectedWeek, setSelectedWeek] = useState('all');
@@ -602,25 +660,47 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
-  const [manualEdits, setManualEdits] = useState({});
-  const [user, setUser] = useState(null);
+  const {
+    activityLogRefreshKey,
+    handleLogout,
+    isLoggingOut,
+    recordActivityEntries,
+    setAuthenticatedUser,
+    user
+  } = useAppSession({
+    onSignedOut: () => {
+      setActiveView('overview');
+      setCurrentDebtor(null);
+      setActiveCompany(null);
+    }
+  });
+  const {
+    accessFeatureOverrides,
+    handleSaveFollowUp,
+    normalizeIncomingTrackerRows,
+    updateFeatureAccessOverride
+  } = useAppSharedState({ user, setTrackerData });
+  const {
+    manualEdits,
+    manualEditsRef,
+    persistEditedRows,
+    setManualEdits
+  } = useManualEditsState({ user, loading });
+  const accessProfile = useMemo(() => resolveAccessProfile(user, accessFeatureOverrides), [user, accessFeatureOverrides]);
+  const matchesSelectedAgent = useCallback(
+    (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
+    [selectedAgent]
+  );
   const syncInFlightRef = useRef(false);
-  const manualEditsRef = useRef({});
-
+  const hasRetriedEmptyScopedLoadRef = useRef(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    if (!hasSupabaseConfig || !supabase) return;
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
+
+  const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -633,78 +713,11 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const fetchManualEdits = useCallback(async () => {
-    if (!user) return;
-    try {
-      const { data: edits, error } = await supabase
-        .from(TABLE_NAME)
-        .select('*');
-
-      if (error) throw error;
-
-      const editsById = {};
-      edits.forEach(edit => {
-        editsById[edit.id] = {
-          ...edit,
-          // Map DB snake_case to App camelCase
-          company: edit.company,
-          clientName: edit.company,
-          agentId: edit.agent_id,
-          dueDate: edit.due_date,
-          billingCycle: edit.billing_cycle,
-          lastInvoicedDate: edit.last_invoiced_date,
-          lastNoUsageDate: edit.last_no_usage_date,
-          noUsageCount: (edit.notes || '').match(/\[streak:(\d+)\]/)?.[1] ? Number((edit.notes || '').match(/\[streak:(\d+)\]/)[1]) : (Number(edit.no_usage_count) || 0),
-          invoiceNumber: edit.invoice_number,
-          notes: (edit.notes || '').replace(/\[streak:\d+\]/, '').trim(),
-          __isNew: edit.is_new,
-          __deleted: edit.is_deleted
-        };
-      });
-
-      setManualEdits(editsById);
-      manualEditsRef.current = editsById;
-    } catch (error) {
-      console.error('Error fetching manual edits:', error.message);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (user) {
-      fetchManualEdits();
-    }
-  }, [user, fetchManualEdits]);
-
-  // Data Repair: If we have confirm records (lastInvoicedDate) but no dueDate,
-  // calculate it and persist it. This fixes records from before this patch.
-  useEffect(() => {
-    if (loading || !manualEdits || Object.keys(manualEdits).length === 0) return;
-
-    const toFix = Object.values(manualEdits).filter(edit => 
-      edit.lastInvoicedDate && (!edit.dueDate || String(edit.dueDate).trim() === '')
-    );
-
-    if (toFix.length > 0) {
-      console.log(`[Repair] Found ${toFix.length} records missing dueDate. Patching...`);
-      const fixed = toFix.map(item => {
-        const invDate = new Date(item.lastInvoicedDate + 'T00:00:00');
-        invDate.setDate(invDate.getDate() + 1);
-        const due = invDate.toISOString().split('T')[0];
-        return { ...item, dueDate: due };
-      });
-
-      // Update local state and persist to DB
-      setManualEdits(prev => {
-        const next = { ...prev };
-        fixed.forEach(f => { next[f.id] = f; });
-        manualEditsRef.current = next;
-        return next;
-      });
-      persistEditedRows(fixed);
-    }
-  }, [loading]);
-
   // Reactive Data Hydration: Merges Zoho Data + Manual Edits whenever either changes
+  useEffect(() => {
+    rawZohoDataRef.current = rawZohoData;
+  }, [rawZohoData]);
+
   useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
 
@@ -713,6 +726,19 @@ function App() {
     setData(hydrated);
   }, [rawZohoData, manualEdits]);
 
+  useEffect(() => {
+    if (!hasMeaningfulInvoiceRows(rawZohoData)) return;
+
+    saveSharedState(
+      SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot,
+      {
+        debtors: rawZohoData.filter((row) => row?.source !== 'cs' && row?.id && !String(row.id).startsWith('CS-')),
+        savedAt: new Date().toISOString()
+      },
+      user?.email || null
+    );
+  }, [rawZohoData, user]);
+
   const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
     if (syncInFlightRef.current) return;
     syncInFlightRef.current = true;
@@ -720,28 +746,110 @@ function App() {
     if (!silent) {
       setLoading(true);
     }
-    setIsSyncing(true);
-
     try {
-      const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const response = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      const sheetData = Array.isArray(response?.debtors) ? response.debtors : [];
+      const csData = Array.isArray(response?.clientsByAgent) ? response.clientsByAgent : [];
+      const trackerLogs = Array.isArray(response?.trackerLogs) ? response.trackerLogs : [];
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
-      setClientsByAgent(csData || []);
+      const localSnapshot = loadLocalZohoSnapshot();
+      const previousHadInvoices = hasMeaningfulInvoiceRows(rawZohoDataRef.current);
+      const incomingHasInvoices = hasMeaningfulInvoiceRows(sheetData) || hasMeaningfulInvoiceRows(mergedData);
+      const looksLikeDegradedSnapshot =
+        csData.length > 0 &&
+        mergedData.length > 0 &&
+        previousHadInvoices &&
+        !incomingHasInvoices;
 
-      if (trackerLogs) {
-        setTrackerData(trackerLogs);
+      if (looksLikeDegradedSnapshot) {
+        console.warn('[Sync] Ignoring degraded Zoho snapshot and keeping previous data.');
+        if (notifyUser) {
+          toast.error('Zoho returned an incomplete snapshot. Keeping the previous synced data.', {
+            style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+          });
+        }
+        return;
+      }
+
+      if (!incomingHasInvoices) {
+        const fallbackSnapshot = await loadSharedState(SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot, null);
+        const fallbackDebtors = Array.isArray(fallbackSnapshot?.debtors) ? fallbackSnapshot.debtors : [];
+        const fallbackHasInvoices = hasMeaningfulInvoiceRows(fallbackDebtors);
+        const localFallbackDebtors = Array.isArray(localSnapshot?.debtors) ? localSnapshot.debtors : [];
+        const localFallbackHasInvoices = hasMeaningfulInvoiceRows(localFallbackDebtors);
+
+        if (fallbackHasInvoices) {
+          const recoveredRows = mergeDebtorsWithClientSheet(fallbackDebtors, csData);
+          console.warn('[Sync] Workbook has no debtor sheets. Restoring from last shared debtor snapshot.');
+          setClientsByAgent(csData);
+          if (trackerLogs.length > 0) {
+            setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
+          }
+          setRawZohoData(recoveredRows);
+          hasRetriedEmptyScopedLoadRef.current = false;
+
+          if (notifyUser) {
+            toast.error('Zoho workbook has no invoice tabs right now. Restored the last shared debt snapshot.', {
+              duration: 5000,
+              style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+            });
+          }
+          return;
+        }
+
+        if (localFallbackHasInvoices) {
+          console.warn('[Sync] Workbook has no debtor sheets. Restoring from local browser snapshot.');
+          setClientsByAgent(Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : csData);
+          setTrackerData(
+            normalizeIncomingTrackerRows(
+              Array.isArray(localSnapshot?.trackerLogs) && localSnapshot.trackerLogs.length > 0
+                ? localSnapshot.trackerLogs
+                : trackerLogs
+            )
+          );
+          setRawZohoData(mergeDebtorsWithClientSheet(localFallbackDebtors, Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : csData));
+          hasRetriedEmptyScopedLoadRef.current = false;
+
+          if (notifyUser) {
+            toast.error('Zoho returned an empty workbook. Restored the last local debtor snapshot.', {
+              duration: 5000,
+              style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+            });
+          }
+          return;
+        }
+      }
+
+      setClientsByAgent(csData);
+
+      if (trackerLogs.length > 0) {
+        setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
       }
 
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
-        setSyncSourceLabel('Zoho WorkDrive');
+        hasRetriedEmptyScopedLoadRef.current = false;
+        if (incomingHasInvoices) {
+          saveSharedState(
+            SHARED_APP_STATE_KEYS.latestZohoDebtorSnapshot,
+            {
+              debtors: sheetData,
+              savedAt: new Date().toISOString()
+            },
+            user?.email || null
+          );
+          saveLocalZohoSnapshot({
+            debtors: sheetData,
+            clientsByAgent: csData,
+            trackerLogs
+          });
+        }
         if (notifyUser) {
           toast.success(`Sync completed (${mergedData.length} records)`, {
             style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
           });
         }
       } else {
-        setRawZohoData([]);
-        setSyncSourceLabel('Zoho WorkDrive');
         if (notifyUser) {
           toast.error('Zoho returned no rows.', {
             icon: 'ℹ️',
@@ -751,22 +859,28 @@ function App() {
       }
     } catch (err) {
       console.error('[Sync] Load data failed:', err);
+      const localSnapshot = loadLocalZohoSnapshot();
+      const localDebtors = Array.isArray(localSnapshot?.debtors) ? localSnapshot.debtors : [];
+      if (hasMeaningfulInvoiceRows(localDebtors)) {
+        console.warn('[Sync] Restoring debtors from local browser snapshot after fetch failure.');
+        setClientsByAgent(Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : []);
+        setTrackerData(normalizeIncomingTrackerRows(Array.isArray(localSnapshot?.trackerLogs) ? localSnapshot.trackerLogs : []));
+        setRawZohoData(mergeDebtorsWithClientSheet(localDebtors, Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : []));
+        hasRetriedEmptyScopedLoadRef.current = false;
+      }
       // No data wiping
-      setSyncSourceLabel('Offline Data');
       if (notifyUser) {
         toast.error('Unable to connect to Zoho. Using offline data.', {
           style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
         });
       }
     } finally {
-      setLastSyncAt(new Date());
       if (!silent) {
         setLoading(false);
       }
-      setIsSyncing(false);
       syncInFlightRef.current = false;
     }
-  }, []);
+  }, [normalizeIncomingTrackerRows, user?.email]);
 
   useEffect(() => {
     loadData();
@@ -787,21 +901,60 @@ function App() {
     };
   }, [loadData]);
 
-  useEffect(() => {
-    if (selectedAgent === 'all') return;
-    const exists = data.some((item) => String(item.agentId || '').trim() === selectedAgent);
-    if (!exists) {
-      setSelectedAgent('all');
-    }
-  }, [selectedAgent, data]);
+  const {
+    accessibleClientsByAgent,
+    accessibleData,
+    accessibleTrackerData,
+    agentData,
+    agentOptions,
+    analyticsAggregatedRows,
+    analyticsInvoiceRows,
+    companyProfile,
+    metrics
+  } = useDerivedDebtorViews({
+    accessProfile,
+    activeCompany,
+    clientsByAgent,
+    data,
+    lastTick,
+    matchesSelectedAgent,
+    selectedAgent,
+    selectedWeek,
+    statusScope,
+    trackerData
+  });
 
   useEffect(() => {
     if (selectedWeek === 'all') return;
-    const exists = data.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
+    const exists = accessibleData.some((item) => String(item.weekLabel || '').trim() === selectedWeek);
     if (!exists) {
       setSelectedWeek('all');
     }
-  }, [selectedWeek, data]);
+  }, [selectedWeek, accessibleData]);
+
+  useEffect(() => {
+    if (accessProfile.canViewAllData) return;
+
+    const scopedAgents = Array.from(
+      new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))
+    );
+
+    if (scopedAgents.length === 0) return;
+
+    if (!scopedAgents.some((agentName) => agentMatchesScopeValue(agentName, selectedAgent)) && selectedAgent !== 'all') {
+      setSelectedAgent(scopedAgents[0]);
+    }
+  }, [accessProfile, accessibleData, selectedAgent]);
+
+  useEffect(() => {
+    if (activeView === 'tracker' && !accessProfile.canViewSupportTracker) {
+      setActiveView('overview');
+    }
+
+    if (activeView === 'invoice_entry' && !accessProfile.canViewInvoiceEntry) {
+      setActiveView('overview');
+    }
+  }, [activeView, accessProfile]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -815,430 +968,62 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [loadData]);
 
-  const handleSaveDebtor = (debtor) => {
-    if (currentDebtor) {
-      const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
-      if (isAggregatedRow) {
-        const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
-        setData((prev) => {
-          const changed = [];
-          const next = prev.map((item) => {
-            const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
-            if (!sameCompany) return item;
 
-            const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-            const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-            if (!inAgentScope || !inWeekScope) return item;
 
-            const updatedRow = {
-              ...item,
-              company: debtor.company || debtor.clientName,
-              clientName: debtor.company || debtor.clientName,
-              amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
-              dueDate: debtor.dueDate,
-              status: debtor.status,
-              agentId: debtor.agentId,
-              billingCycle: debtor.billingCycle,
-              invoiceNumber: debtor.invoiceNumber,
-              notes: debtor.notes
-            };
-            changed.push(updatedRow);
-            return updatedRow;
-          });
-          
-          if (changed.length > 0) {
-            setManualEdits(prevEdits => {
-              const nextEdits = { ...prevEdits };
-              changed.forEach(row => {
-                nextEdits[row.id] = row;
-              });
-              manualEditsRef.current = nextEdits;
-              return nextEdits;
-            });
-            persistEditedRows(changed);
-          }
-          return next;
-        });
-      } else {
-        setData((prev) => {
-          const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
-          setManualEdits(prevEdits => {
-            const nextEdits = { ...prevEdits, [debtor.id]: debtor };
-            manualEditsRef.current = nextEdits;
-            return nextEdits;
-          });
-          persistEditedRows([debtor]);
-          return next;
-        });
-      }
 
-      toast.success('Debt updated successfully', {
-        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-      });
-    } else {
-      const newId = debtor.id || `MANUAL-${Date.now()}`;
-      const newDebtor = {
-        ...debtor,
-        id: newId,
-        amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
-      };
-      setData([newDebtor, ...data]);
-      setManualEdits((prev) => {
-        const nextEdit = {
-          ...newDebtor,
-          __isNew: true,
-          __deleted: false
-        };
-        const next = {
-          ...prev,
-          [newId]: nextEdit
-        };
-        persistEditedRows([nextEdit]);
-        return next;
-      });
-      toast.success('New debtor added', {
-        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-      });
+  useEffect(() => {
+    if (selectedAgent === 'all') return;
+    const exists = agentOptions.includes(selectedAgent);
+    if (!exists) {
+      setSelectedAgent(accessProfile.canViewAllData ? 'all' : (agentOptions[0] || 'all'));
     }
-    setIsModalOpen(false);
-    setCurrentDebtor(null);
+  }, [selectedAgent, agentOptions, accessProfile]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    if (accessProfile.canViewAllData) return;
+    if (hasRetriedEmptyScopedLoadRef.current) return;
+    if (rawZohoData.length > 0 || clientsByAgent.length > 0) return;
+
+    hasRetriedEmptyScopedLoadRef.current = true;
+    loadData({ silent: true, notifyUser: false });
+  }, [accessProfile.canViewAllData, clientsByAgent.length, loadData, loading, rawZohoData.length, user]);
+
+  const isKevinProfile = isManagedKevinIdentity(user?.email || '');
+  const kevinAccessSettings = accessFeatureOverrides.kevin || {};
+  const kevinSectionAccess = {
+    canViewInvoiceEntry: Boolean(kevinAccessSettings.canViewInvoiceEntry ?? false),
+    canViewSupportTracker: Boolean(kevinAccessSettings.canViewSupportTracker ?? false)
   };
 
-  const handleResetDebtor = async (id) => {
-    if (!user || !id) return;
-    try {
-      // 1. Delete from Supabase to effectively remove the override
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .delete()
-        .eq('id', String(id));
-
-      if (error) throw error;
-
-      // 2. Remove from local state
-      setManualEdits((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        manualEditsRef.current = next;
-        return next;
-      });
-
-      toast.success('Override removed. Restoring Zoho data...', {
-        icon: '🔄',
-        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-      });
-      setIsModalOpen(false);
-      setCurrentDebtor(null);
-    } catch (error) {
-      toast.error('Failed to reset record');
-      console.error(error);
-    }
-  };
-
-  const handleDeleteDebtor = (id) => {
-    if (String(id).startsWith('CMP-')) {
-      const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
-
-      const rowsToDelete = data.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
-      );
-
-      setData((prev) => prev.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
-      ));
-
-      setManualEdits((prev) => {
-        const next = { ...prev };
-        const changed = [];
-        rowsToDelete.forEach((d) => {
-          const edit = { ...(next[d.id] || {}), id: d.id, __deleted: true };
-          next[d.id] = edit;
-          changed.push(edit);
-        });
-        persistEditedRows(changed);
-        return next;
-      });
-    } else {
-      setData((prev) => prev.filter((d) => d.id !== id));
-      setManualEdits((prev) => {
-        const edit = {
-          ...(prev[id] || {}),
-          id,
-          __deleted: true
-        };
-        const next = {
-          ...prev,
-          [id]: edit
-        };
-        persistEditedRows([edit]);
-        return next;
-      });
-    }
-    toast.success('Record deleted', {
-      icon: '🗑️',
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
-
-  const openCompanyProfile = (companyName) => {
-    if (!companyName) return;
-    setActiveCompany(companyName);
-  };
-
-  const persistEditedRows = async (rows) => {
-    if (!rows || rows.length === 0 || !user) return;
-
-    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
-    // We also filter out any null or undefined IDs.
-    const upserts = rows
-      .filter(row => row.id)
-      .map(row => ({
-        id: String(row.id),
-        company: row.company || row.clientName || null,
-        agent_id: row.agentId || null,
-        amount: Number(row.amount) || 0,
-        status: String(row.status || 'pending'),
-        due_date: row.dueDate || null,
-        last_invoiced_date: row.lastInvoicedDate || null,
-        last_no_usage_date: row.lastNoUsageDate || null,
-        billing_cycle: row.billingCycle || null,
-        invoice_number: row.invoiceNumber || null,
-        updated_at: new Date().toISOString(),
-        notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
-      }));
-
-    if (upserts.length === 0) return;
-
-    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
-
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert(upserts);
-
-      if (error) {
-        console.error('[Persistence] Supabase Error:', error);
-        throw error;
-      }
-
-      // Update local ref after successful DB update
-      setManualEdits(prev => {
-        const next = { ...prev };
-        rows.forEach(row => {
-          next[row.id] = { ...row };
-        });
-        manualEditsRef.current = next;
-        return next;
-      });
-    } catch (error) {
-      const msg = error?.message || 'Unknown network error';
-      toast.error(`Cloud Sync Failed: ${msg}`, { duration: 5000 });
-      console.error('[Persistence] Detailed Error:', error);
-    }
-  };
-
-  const quickUpdateBillingCycle = (row, nextCycle) => {
-    const idToUpdate = row.latestId || row.id;
-    if (!idToUpdate) return;
-
-    const normalizedNextCycle = normalizeBillingCycle(nextCycle);
-
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
-
-        const updatedRow = {
-          ...item,
-          billingCycle: normalizedNextCycle
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
-    });
-
-    toast.success('Billing cycle updated', {
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
-
-  const quickUpdatePaymentStatus = (row, nextStatus) => {
-    const idToUpdate = row.latestId || row.id;
-    if (!idToUpdate) return;
-
-    const normalizedStatus = String(nextStatus || '').toLowerCase();
-
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
-
-        const updatedRow = {
-          ...item,
-          status: normalizedStatus
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
-    });
-
-    toast.success('Payment status updated', {
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
-
-  const quickUpdateTotalDue = (row, nextAmount) => {
-    const idToUpdate = row.latestId || row.id;
-    if (!idToUpdate) return;
-
-    const parsedAmount = roundMoney(nextAmount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
-
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
-
-        const updatedRow = {
-          ...item,
-          amount: parsedAmount
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
-    });
-
-    toast.success('Total due updated', {
-      style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-    });
-  };
-
-
-
-
-  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
-
-  const hydratedWithSmartStatus = React.useMemo(() => {
-    const today = new Date();
-    return data.map(row => {
-      let status = row.status || 'pending';
-      let isAutoOverdue = false;
-
-      // Only attempt auto-overdue if the status isn't already 'paid' or 'no_invoice'
-      if (status !== 'paid' && status !== 'no_invoice' && row.dueDate) {
-        // According to user instructions: Due Date 5 p.m. Eastern time
-        // We use T17:00:00 to match the 5pm cutoff (relative to local time)
-        const dateStr = row.dueDate.includes('T') ? row.dueDate : `${row.dueDate}T17:00:00`;
-        const parsedDue = new Date(dateStr);
-        if (!Number.isNaN(parsedDue.getTime()) && parsedDue < today) {
-          status = 'overdue';
-          isAutoOverdue = true;
-        }
-      }
-      return { ...row, status, isAutoOverdue };
-    });
-  }, [data, lastTick]);
-
-  const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-    const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-    const status = String(item.status || '').toLowerCase();
-    const isOpen = status === 'pending' || status === 'overdue';
-    const matchesStatus = statusScope === 'all' || isOpen;
-    return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope]);
-
-  const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
-  const agentData = aggregatedData;
-  const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
-
-  const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
-    const map = new Map();
-    agentData.forEach((item) => {
-      const key = String(item.company || item.clientName || '').trim().toLowerCase();
-      if (!key) return;
-      const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
-      const previous = map.get(key) || false;
-      map.set(key, previous || isInDebt);
-    });
-
-    const size = map.size;
-    const inDebt = Array.from(map.values()).filter(Boolean).length;
-    return {
-      snapshotClients: size,
-      snapshotClientsInDebt: inDebt,
-      snapshotClientsClear: size - inDebt
-    };
-  }, [agentData]);
-  const syncTimeLabel = lastSyncAt
-    ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
-    : '--:--';
-
-  const companyProfile = React.useMemo(() => {
-    if (!activeCompany) return null;
-
-    const scopedRows = data.filter((item) => {
-      const company = String(item.company || item.clientName || '').trim().toLowerCase();
-      const byCompany = company === activeCompany.trim().toLowerCase();
-      if (!byCompany) return false;
-      const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-      const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-      return byAgent && byWeek;
-    });
-
-    // Deduplicate by week to avoid double-counting placeholders
-    const deduplicatedRows = [];
-    const seenWindows = new Set();
-    
-    // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
-    const sortedScoped = [...scopedRows].sort((a, b) => {
-      if (a.source === 'debt' && b.source !== 'debt') return -1;
-      if (a.source !== 'debt' && b.source === 'debt') return 1;
-      return 0;
-    });
-
-    const seenIds = new Set();
-    const seenInvoices = new Set();
-    
-    sortedScoped.forEach(row => {
-      const invKey = String(row.invoiceNumber || row.id).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (!seenIds.has(row.id) && !seenInvoices.has(invKey)) {
-        deduplicatedRows.push(row);
-        seenIds.add(row.id);
-        if (row.invoiceNumber) seenInvoices.add(invKey);
-      }
-    });
-
-    const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-'));
-    const totalDebt = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalOverdue = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() === 'overdue')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
-    return {
-      company: activeCompany,
-      totalDebt,
-      totalOverdue,
-      invoiceCount: invoiceRows.length,
-      agents: Array.from(new Set(deduplicatedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
-      contacts: Array.from(new Set(deduplicatedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
-      invoices: invoiceRows.sort((a, b) => 
-        String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
-      )
-    };
-  }, [activeCompany, data, selectedAgent, selectedWeek]);
-
-
+  const {
+    handleDeleteDebtor,
+    handleResetDebtor,
+    handleSaveDebtor,
+    openCompanyProfile,
+    quickUpdateBillingCycle,
+    quickUpdatePaymentStatus,
+    quickUpdateTotalDue
+  } = useOverviewActions({
+    buildFieldChangeActivityEntries,
+    createActivityEntry,
+    currentDebtor,
+    data,
+    manualEditsRef,
+    manualEditsTable: MANUAL_EDITS_TABLE,
+    matchesSelectedAgent,
+    persistEditedRows,
+    recordActivityEntries,
+    selectedWeek,
+    setActiveCompany,
+    setCurrentDebtor,
+    setData,
+    setIsModalOpen,
+    setManualEdits,
+    user
+  });
 
   const overviewContent = (
     <div style={{ 
@@ -1248,15 +1033,21 @@ function App() {
       opacity: loading ? 0.5 : 1, 
       transition: 'opacity 0.3s' 
     }}>
-      <TopbarMeta>
-        <span>User: {user?.email} | Source: {syncSourceLabel} | Last sync: {syncTimeLabel}</span>
-      </TopbarMeta>
-
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        {!accessProfile.canViewAllData && (
+          <ViewButton type="button" $active={activeView === 'portfolio'} onClick={() => setActiveView('portfolio')}>Portfolio Companies</ViewButton>
+        )}
+        {accessProfile.canViewSupportTracker && (
+          <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
+        )}
+        {accessProfile.canViewInvoiceEntry && (
+          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
+        )}
+        {accessProfile.canViewActivityLogs && (
+          <ViewButton type="button" $active={activeView === 'activity_logs'} onClick={() => setActiveView('activity_logs')}>Activity Logs</ViewButton>
+        )}
       </ViewSwitch>
 
       {activeView === 'overview' && (
@@ -1267,33 +1058,26 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-                <option value="all">All agents</option>
+              <AgentSelect
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                disabled={!accessProfile.canViewAllData}
+              >
+                {accessProfile.canViewAllData && <option value="all">All agents</option>}
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
               </AgentSelect>
 
-              <AgentSelect value={selectedWeek} onChange={(e) => setSelectedWeek(e.target.value)}>
-                <option value="all">All weeks</option>
-                {weekOptions.map((weekName) => (
-                  <option key={weekName} value={weekName}>{weekName}</option>
-                ))}
-              </AgentSelect>
-
-              <AgentSelect value={statusScope} onChange={(e) => setStatusScope(e.target.value)}>
+              <AgentSelect
+                value={statusScope}
+                onChange={(e) => setStatusScope(e.target.value)}
+              >
                 <option value="all">All records</option>
                 <option value="open">Open balances only</option>
               </AgentSelect>
 
             </FiltersRow>
-
-            <AgentSnapshot>
-              <Users size={16} color="var(--brand)" />
-              <div>
-                <strong>{snapshotClients}</strong> clients | <strong>{snapshotClientsInDebt}</strong> in debt | <strong>{snapshotClientsClear}</strong> clear
-              </div>
-            </AgentSnapshot>
           </AgentToolbar>
 
           <Dashboard metrics={metrics} />
@@ -1313,27 +1097,109 @@ function App() {
       )}
 
       {activeView === 'analytics' && (
-        <ManagerAnalytics
-          invoiceRows={scopedInvoiceData}
-          aggregatedRows={agentData}
-          selectedAgent={selectedAgent}
-          onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
-          onOpenCompanyProfile={openCompanyProfile}
-        />
+        <Suspense fallback={sectionLoader}>
+          <ManagerAnalytics
+            invoiceRows={analyticsInvoiceRows}
+            aggregatedRows={analyticsAggregatedRows}
+            selectedAgent={selectedAgent}
+            onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+            onOpenCompanyProfile={openCompanyProfile}
+            isManager={accessProfile.canViewAllData}
+          />
+        </Suspense>
+      )}
+
+      {activeView === 'portfolio' && !accessProfile.canViewAllData && (
+        <Suspense fallback={sectionLoader}>
+          <PortfolioCompanies
+            companies={accessibleClientsByAgent}
+            debtRows={accessibleData}
+            currentUserEmail={user?.email || ''}
+          />
+        </Suspense>
       )}
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={trackerData} />
+          <Suspense fallback={sectionLoader}>
+            <SupportTracker
+              data={accessibleTrackerData}
+              canManageEntries={accessProfile.canEditData}
+              canComment={Boolean(user)}
+              currentUserEmail={user?.email || ''}
+              onSaveFollowUp={handleSaveFollowUp}
+            />
+          </Suspense>
+        </ContentScroll>
+      )}
+
+      {activeView === 'activity_logs' && accessProfile.canViewActivityLogs && (
+        <ContentScroll>
+          {accessProfile.canManageAccessOverrides && (
+            <AccessControlPanel>
+              <AccessControlHeader>
+                <div>
+                  <h3>Kevin Section Access</h3>
+                  <p>
+                    Control when Kevin can open `Invoice Entry` and `Support Tracker` without changing his broader operations access.
+                  </p>
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  {isKevinProfile ? 'You are viewing the restricted profile logic live.' : 'Managed from Andres profile.'}
+                </div>
+              </AccessControlHeader>
+
+              <AccessToggleGrid>
+                <AccessToggleCard>
+                  <div>
+                    <strong>Invoice Entry</strong>
+                    <span>Currently {kevinSectionAccess.canViewInvoiceEntry ? 'enabled' : 'disabled'} for Kevin.</span>
+                  </div>
+                  <ToggleSwitch
+                    type="button"
+                    $active={kevinSectionAccess.canViewInvoiceEntry}
+                    onClick={() =>
+                      updateFeatureAccessOverride('kevin', {
+                        canViewInvoiceEntry: !kevinSectionAccess.canViewInvoiceEntry
+                      })
+                    }
+                  >
+                    {kevinSectionAccess.canViewInvoiceEntry ? 'Enabled' : 'Disabled'}
+                  </ToggleSwitch>
+                </AccessToggleCard>
+
+                <AccessToggleCard>
+                  <div>
+                    <strong>Support Tracker</strong>
+                    <span>Currently {kevinSectionAccess.canViewSupportTracker ? 'enabled' : 'disabled'} for Kevin.</span>
+                  </div>
+                  <ToggleSwitch
+                    type="button"
+                    $active={kevinSectionAccess.canViewSupportTracker}
+                    onClick={() =>
+                      updateFeatureAccessOverride('kevin', {
+                        canViewSupportTracker: !kevinSectionAccess.canViewSupportTracker
+                      })
+                    }
+                  >
+                    {kevinSectionAccess.canViewSupportTracker ? 'Enabled' : 'Disabled'}
+                  </ToggleSwitch>
+                </AccessToggleCard>
+              </AccessToggleGrid>
+            </AccessControlPanel>
+          )}
+          <Suspense fallback={sectionLoader}>
+            <ActivityLogs refreshSignal={activityLogRefreshKey} />
+          </Suspense>
         </ContentScroll>
       )}
 
       {activeView === 'invoice_entry' && (
         <ContentScroll>
-          <InvoiceEntry 
-            clientsByAgent={clientsByAgent} 
-            existingData={data} 
-            onSaveInvoice={(invoice) => {
+            <InvoiceEntry 
+              clientsByAgent={accessibleClientsByAgent} 
+              existingData={accessibleData} 
+              onSaveInvoice={(invoice) => {
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
                 // If it's a completely new manual entry, we add it to the array.
@@ -1350,7 +1216,28 @@ function App() {
                 return [...prev, invoice];
               });
               
-              persistEditedRows([invoice]);
+               persistEditedRows([invoice]);
+
+               // Trigger email notification if requested
+               if (invoice.sendNotification) {
+                 emailService.sendInvoiceNotification(invoice).then(res => {
+                   if (res.success) {
+                     toast.success(`Notification sent to ${invoice.company}`, {
+                       icon: '📧',
+                       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+                     });
+                   } else {
+                     toast.error(`Email failed: ${res.error}`, {
+                       style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+                     });
+                   }
+                 });
+               }
+
+               toast.success('Invoice saved and synced', {
+                 icon: '✅',
+                 style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+               });
             }} 
           />
         </ContentScroll>
@@ -1372,7 +1259,7 @@ function App() {
   if (!user) {
     return (
       <AppContainer>
-        <Login onLogin={setUser} />
+        <Login onLogin={setAuthenticatedUser} />
         <Toaster position="bottom-right" />
       </AppContainer>
     );
@@ -1383,26 +1270,47 @@ function App() {
       <MainContent style={{ position: 'relative', zIndex: 1 }}>
         <Topbar>
           <TopbarLeft>
-            <div />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <UserAvatar>
+                {getUserAvatarSrc(user?.email) ? (
+                  <img 
+                    src={getUserAvatarSrc(user?.email)}
+                    alt="User" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}
+                  />
+                ) : (
+                  user?.email?.split('@')[0].split('.').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??'
+                )}
+              </UserAvatar>
+              <UserInfo>
+                <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
+                <span className="status">Active Session</span>
+              </UserInfo>
+            </div>
           </TopbarLeft>
 
           <BrandLockup>
-            <AlmaFuelLogo size={60} />
-            <BrandTitle><span className="brand">Alma</span>fuel</BrandTitle>
+            <BrandTitle>
+              <span className="brand">Alma</span>
+              <PulsatingLogo>
+                <AlmaFuelLogo size={42} />
+              </PulsatingLogo>
+              <span>fuel</span>
+            </BrandTitle>
           </BrandLockup>
 
           <TopbarRight>
             <ActionButtons>
-              <SyncButton className="btn btn-secondary" onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
-                <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} /> Sync
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '0.8rem', padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <Clock size={12} color="var(--brand)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{timeString}</span>
+              </div>
+              <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
+                <span>Sync</span>
               </SyncButton>
-              <button
-                className="btn btn-outline"
-                onClick={() => supabase.auth.signOut()}
-                style={{ fontSize: '0.82rem', padding: '0.68rem 1rem', borderRadius: '999px' }}
-              >
-                Logout
-              </button>
+              <LogoutButton onClick={handleLogout} disabled={isLoggingOut}>
+                {isLoggingOut ? 'Closing...' : 'Logout'}
+              </LogoutButton>
             </ActionButtons>
           </TopbarRight>
         </Topbar>
@@ -1412,25 +1320,27 @@ function App() {
         </ContentScroll>
       </MainContent>
 
-      <DebtorModal
-        key={`${currentDebtor?.id || 'new'}-${isModalOpen ? 'open' : 'closed'}`}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveDebtor}
-        onReset={handleResetDebtor}
-        debtor={currentDebtor}
-      />
+      <Suspense fallback={null}>
+        <DebtorModal
+          key={`${currentDebtor?.id || 'new'}-${isModalOpen ? 'open' : 'closed'}`}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSaveDebtor}
+          onReset={handleResetDebtor}
+          debtor={currentDebtor}
+        />
 
-      <CompanyProfileModal
-        isOpen={Boolean(activeCompany)}
-        onClose={() => setActiveCompany(null)}
-        profile={companyProfile}
-        onEditInvoice={(inv) => {
-          setActiveCompany(null);
-          setCurrentDebtor(inv);
-          setIsModalOpen(true);
-        }}
-      />
+        <CompanyProfileModal
+          isOpen={Boolean(activeCompany)}
+          onClose={() => setActiveCompany(null)}
+          profile={companyProfile}
+          onEditInvoice={(inv) => {
+            setActiveCompany(null);
+            setCurrentDebtor(inv);
+            setIsModalOpen(true);
+          }}
+        />
+      </Suspense>
 
 
       <Toaster position="bottom-right" />
@@ -1443,3 +1353,6 @@ function App() {
 }
 
 export default App;
+
+
+

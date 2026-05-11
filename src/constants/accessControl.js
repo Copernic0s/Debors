@@ -1,0 +1,170 @@
+const MANAGER_ROLE = 'manager';
+const AGENT_ROLE = 'agent';
+
+const parseCsv = (value) =>
+  String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const parseDelimitedList = (value) =>
+  String(value || '')
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const parseAgentScopeMap = (rawValue) => {
+  const map = new Map();
+
+  String(rawValue || '')
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      const [emailPart, scopesPart] = entry.split('=');
+      const email = String(emailPart || '').trim().toLowerCase();
+      if (!email) return;
+      map.set(email, parseDelimitedList(scopesPart));
+    });
+
+  return map;
+};
+
+const normalizeScopeValue = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+const hasPrivilegedIdentityFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('andres') || localPart.includes('kevin');
+};
+
+const canViewActivityLogsFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('andres');
+};
+
+const isManagedKevinIdentity = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('kevin');
+};
+
+const getSpecialAgentScopeFallback = (email) => {
+  if (email === 'hector.lomeli@theunitedtransports.com') {
+    return ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
+  }
+  return [];
+};
+
+export const resolveAccessProfile = (user, featureAccessOverrides = {}) => {
+  const email = String(user?.email || '').trim().toLowerCase();
+  const operationsEmails = new Set(
+    [
+      ...parseCsv(import.meta.env.VITE_OPERATIONS_EMAILS),
+      ...parseCsv(import.meta.env.VITE_MANAGER_EMAILS)
+    ].map((item) => item.toLowerCase())
+  );
+  const agentScopeMap = parseAgentScopeMap(import.meta.env.VITE_AGENT_SCOPE_MAP);
+
+  const metadataRole = String(
+    user?.app_metadata?.role ||
+      user?.user_metadata?.role ||
+      ''
+  )
+    .trim()
+    .toLowerCase();
+
+  const metadataAgentIds = [
+    ...parseDelimitedList(user?.app_metadata?.agent_scope),
+    ...parseDelimitedList(user?.user_metadata?.agent_scope),
+    ...parseCsv(user?.app_metadata?.agent_ids),
+    ...parseCsv(user?.user_metadata?.agent_ids),
+    user?.app_metadata?.agent_id,
+    user?.user_metadata?.agent_id,
+    user?.app_metadata?.agent_name,
+    user?.user_metadata?.agent_name
+  ]
+    .map(normalizeScopeValue)
+    .filter(Boolean);
+
+  const configuredAgentIds = (agentScopeMap.get(email) || [])
+    .map(normalizeScopeValue)
+    .filter(Boolean);
+  const fallbackAgentIds = getSpecialAgentScopeFallback(email)
+    .map(normalizeScopeValue)
+    .filter(Boolean);
+  const agentScope = Array.from(
+    new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds])
+  );
+
+  const normalizedRole =
+    metadataRole === 'operations_access'
+      ? MANAGER_ROLE
+      : metadataRole === 'collections_access'
+        ? AGENT_ROLE
+        : metadataRole;
+  const isManager =
+    normalizedRole === MANAGER_ROLE ||
+    operationsEmails.has(email) ||
+    hasPrivilegedIdentityFallback(email);
+  const role = isManager ? MANAGER_ROLE : AGENT_ROLE;
+  const overrideKey = isManagedKevinIdentity(email) ? 'kevin' : email;
+  const userFeatureOverrides = featureAccessOverrides?.[overrideKey] || featureAccessOverrides?.[email] || {};
+  const defaultManagerViewSupportTracker = isManager && !isManagedKevinIdentity(email);
+  const defaultManagerViewInvoiceEntry = isManager && !isManagedKevinIdentity(email);
+  const canViewSupportTracker = Boolean(
+    userFeatureOverrides.canViewSupportTracker ?? defaultManagerViewSupportTracker
+  );
+  const canViewInvoiceEntry = Boolean(
+    userFeatureOverrides.canViewInvoiceEntry ?? defaultManagerViewInvoiceEntry
+  );
+
+  return {
+    role,
+    email,
+    agentScope,
+    accessLabel: isManager ? 'Control Access' : 'Assigned Portfolio',
+    canEditData: isManager,
+    canDeleteData: isManager,
+    canResetData: isManager,
+    canSyncData: isManager,
+    canUseInvoiceEntry: canViewInvoiceEntry,
+    canEditInvoiceDetails: isManager,
+    canCommentOnly: !isManager,
+    canViewAllData: isManager,
+    canViewSupportTracker,
+    canViewInvoiceEntry: canViewInvoiceEntry,
+    canViewActivityLogs: canViewActivityLogsFallback(email),
+    canManageAccessOverrides: canViewActivityLogsFallback(email),
+    hasScopedPortfolio: isManager ? true : agentScope.length > 0
+  };
+};
+
+export function agentMatchesScopeValue(scopeValue, agentValue) {
+  const normalizedScope = normalizeScopeValue(scopeValue);
+  const normalizedAgent = normalizeScopeValue(agentValue);
+  if (!normalizedScope || !normalizedAgent) return false;
+
+  return (
+    normalizedScope === normalizedAgent ||
+    normalizedAgent.includes(normalizedScope) ||
+    normalizedScope.includes(normalizedAgent)
+  );
+}
+
+export const userCanAccessAgent = (accessProfile, agentId) => {
+  if (accessProfile?.canViewAllData) return true;
+  const normalizedAgentId = normalizeScopeValue(agentId);
+  if (!normalizedAgentId) return false;
+
+  return (accessProfile?.agentScope || []).some((scopeValue) => {
+    return agentMatchesScopeValue(scopeValue, normalizedAgentId);
+  });
+};
+
+export { MANAGER_ROLE, AGENT_ROLE, normalizeScopeValue, isManagedKevinIdentity };
