@@ -132,12 +132,19 @@ def build_search_queries(client_name: str) -> list[str]:
     stripped_parenthetical = re.sub(r"\s*\([^)]*\)", "", primary).strip()
     stripped_symbols = re.sub(r"[^A-Z0-9 ]+", " ", stripped_parenthetical)
     stripped_symbols = re.sub(r"\s+", " ", stripped_symbols).strip()
+    
+    # Strip LLC, INC, CORP, etc for a broader search
+    stripped_llc = re.sub(r"\b(LLC|INC|CORP|CO|LTD|LIMITED)\b", "", stripped_symbols, flags=re.IGNORECASE)
+    stripped_llc = re.sub(r"\s+", " ", stripped_llc).strip()
 
     queries = [primary]
     if stripped_parenthetical and stripped_parenthetical not in queries:
         queries.append(stripped_parenthetical)
     if stripped_symbols and stripped_symbols not in queries:
         queries.append(stripped_symbols)
+    if stripped_llc and stripped_llc not in queries:
+        queries.append(stripped_llc)
+        
     return queries
 
 
@@ -283,6 +290,8 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     options.add_argument("--disable-features=RendererCodeIntegrity")
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--disable-extensions")
 
     if user_data_dir:
         options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -474,15 +483,20 @@ def save_debug_screenshot(driver: WebDriver, prefix: str) -> None:
 
 def perform_login(driver: WebDriver) -> None:
     attached_mode = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
-    if not attached_mode:
-        safe_get(driver, BASE_URL)
+    
+    # Always navigate to /company first
+    logging.info("Navigating to %s", COMPANY_URL)
+    safe_get(driver, COMPANY_URL)
+    
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
 
     email = os.getenv("CMP_EMAIL", "").strip()
     password = os.getenv("CMP_PASSWORD", "").strip()
     if not email or not password:
         logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated CMP session...")
-        wait.until(lambda current: "/auth" not in current.current_url)
+        logging.info("Current URL: %s", driver.current_url)
+        wait.until(lambda current: "/company" in current.current_url and "/auth" not in current.current_url)
+        logging.info("Login check passed! Proceeding...")
         return
 
     if attached_mode and "/auth" not in driver.current_url:
@@ -554,29 +568,42 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         return driver.execute_script(script) or []
 
     def wait_for_stable_results() -> list:
-        no_data_xpath = (
-            "//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no data') "
-            "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
-        )
         start = time.time()
         stable_rows: list[dict] = []
         stable_hits = 0
         last_signature = ""
         while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
             rows = result_rows_snapshot()
+            
+            # Check if it looks like a "no data" placeholder
+            is_no_data = False
+            if len(rows) == 1:
+                text = rows[0].get("rowText", "").lower()
+                if "no data" in text or "no results" in text or "nothing found" in text:
+                    is_no_data = True
+                    
+            if is_no_data:
+                # If it's been less than 7 seconds, keep waiting in case it's just loading
+                if time.time() - start < 7.0:
+                    time.sleep(0.5)
+                    continue
+                else:
+                    stable_rows = []
+                    break
+
             signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
             if signature and signature == last_signature:
                 stable_hits += 1
             else:
                 stable_hits = 0
                 last_signature = signature
-            if rows and stable_hits >= 2:
+                
+            if rows and stable_hits >= 3:
                 stable_rows = rows
                 break
-            if driver.find_elements(By.XPATH, no_data_xpath):
-                stable_rows = []
-                break
-            time.sleep(0.25)
+
+            time.sleep(0.5)
+            
         if SEARCH_SETTLE_SECONDS > 0:
             time.sleep(SEARCH_SETTLE_SECONDS)
         return stable_rows if stable_rows else result_rows_snapshot()
@@ -634,6 +661,10 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             except Exception:
                 continue
 
+        # Hard wait to allow slow network requests to complete before checking results
+        logging.info("Waiting 5 seconds for results to load for '%s'...", query)
+        time.sleep(5.0)
+
         rows = wait_for_stable_results()
         if rows:
             current_signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
@@ -681,6 +712,10 @@ def open_invoices_tab(driver: WebDriver) -> None:
     WebDriverWait(driver, DEFAULT_TIMEOUT).until(
         lambda current: any(current.find_elements(By.CSS_SELECTOR, selector) for selector in SELECTORS.table_selectors)
     )
+    
+    # Hard wait to allow the network request for invoice rows to complete
+    logging.info("Waiting 5 seconds for invoice rows to populate...")
+    time.sleep(5.0)
 
 
 def scroll_invoice_table_horizontally(driver: WebDriver) -> None:
@@ -715,21 +750,39 @@ def extract_latest_invoice(driver: WebDriver) -> dict | None:
     best_invoice = None
 
     for table in tables:
-        headers = [normalize_text(cell.text) for cell in table.find_elements(By.XPATH, ".//thead//th")]
+        # Some tables use standard th, others use role=columnheader
+        header_cells = table.find_elements(By.XPATH, ".//thead//th | .//*[@role='columnheader'] | .//th")
+        if not header_cells:
+            # If still nothing, try the first row's td
+            header_cells = table.find_elements(By.XPATH, "(.//tr | .//*[@role='row'])[1]//*[self::td or self::th or @role='cell' or @role='columnheader']")
+
+        headers = [normalize_text(cell.text) for cell in header_cells]
         if not headers:
             continue
 
-        invoice_index = next((i for i, text in enumerate(headers) if ("invoice" in text and "#" in text) or "invoice" in text), None)
-        amount_index = next((i for i, text in enumerate(headers) if "total amount" in text), None)
-        date_index = next((i for i, text in enumerate(headers) if "date" in text or "created" in text or "issued" in text), None)
-        status_index = next((i for i, text in enumerate(headers) if "status" in text), None)
+        invoice_index = next((i for i, text in enumerate(headers) if text in ["invoice number", "invoice #", "invoice_number"]), None)
+        if invoice_index is None:
+            invoice_index = next((i for i, text in enumerate(headers) if "invoice num" in text), None)
+
+        amount_index = next((i for i, text in enumerate(headers) if text in ["total amount", "amount"]), None)
+        if amount_index is None:
+            amount_index = next((i for i, text in enumerate(headers) if "total amount" in text), None)
+
+        date_index = next((i for i, text in enumerate(headers) if text in ["invoice date", "created at", "date"]), None)
+        if date_index is None:
+            date_index = next((i for i, text in enumerate(headers) if "date" in text or "created" in text), None)
+
+        status_index = next((i for i, text in enumerate(headers) if text == "status"), None)
+        if status_index is None:
+            status_index = next((i for i, text in enumerate(headers) if "status" in text and "company" not in text), None)
 
         if invoice_index is None or amount_index is None:
+            logging.debug("Skipping table because required columns are missing. Found headers: %s", headers)
             continue
 
-        rows = table.find_elements(By.XPATH, ".//tbody/tr")
+        rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
         for row in rows:
-            cells = row.find_elements(By.XPATH, "./td")
+            cells = row.find_elements(By.XPATH, "./td | .//*[@role='cell']")
             if len(cells) <= max(invoice_index, amount_index):
                 continue
 
@@ -861,6 +914,8 @@ def main() -> int:
     driver = create_driver()
     try:
         perform_login(driver)
+        logging.info("Login complete. Current URL: %s", driver.current_url)
+        logging.info("Starting to process %d clients...", len(clients))
         results = process_clients(driver, clients)
         export_results(results, OUTPUT_PATH)
         logging.info("Extraction finished. Output saved to %s", OUTPUT_PATH)

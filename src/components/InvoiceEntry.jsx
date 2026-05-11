@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { Search, Save, Check, X } from 'lucide-react';
+import { Search, Save, Check, X, Upload } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
 const Container = styled.div`
@@ -398,16 +399,77 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
     });
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const jsonData = JSON.parse(event.target.result);
+        if (!Array.isArray(jsonData)) {
+          toast.error('Invalid JSON format. Expected an array of invoices.');
+          return;
+        }
+
+        let matchCount = 0;
+        const newEntries = { ...entries };
+
+        jsonData.forEach(item => {
+          if (!item.invoice_id || !item.amount) return;
+          
+          // Normalize string to match (remove spaces, symbols)
+          const normalizeString = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+          
+          const matchingSlot = expectedSlots.find(slot => 
+            normalizeString(slot.company) === normalizeString(item.client_name)
+          );
+
+          if (matchingSlot) {
+            newEntries[matchingSlot.id] = {
+              ...(newEntries[matchingSlot.id] || matchingSlot),
+              invoiceNumber: item.invoice_id,
+              amount: item.amount
+            };
+            matchCount++;
+            
+            // Auto-expand the agent group
+            if (matchingSlot.agent) {
+                setExpandedAgents(prev => ({ ...prev, [matchingSlot.agent]: true }));
+            }
+          }
+        });
+
+        setEntries(newEntries);
+        toast.success(`Successfully imported ${matchCount} invoices from CMP!`);
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to parse JSON file.');
+      }
+      
+      // Reset input
+      e.target.value = null;
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <Container>
       <Header>
         <Title>Weekly Invoice Entry</Title>
-        <Input 
-          value={week} 
-          onChange={e => setWeek(e.target.value)} 
-          style={{ width: '200px' }} 
-          placeholder="Week Label (e.g. Mar 16 - 22)"
-        />
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(139, 92, 246, 0.1)', border: '1px solid var(--violet)', color: 'var(--violet)', padding: '0.65rem 1rem', borderRadius: '12px', fontWeight: 600, fontSize: '0.85rem', transition: 'all 0.2s' }}>
+              <Upload size={16} />
+              Import CMP JSON
+              <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileUpload} />
+            </label>
+            <Input 
+              value={week} 
+              onChange={e => setWeek(e.target.value)} 
+              style={{ width: '200px' }} 
+              placeholder="Week Label (e.g. Mar 16 - 22)"
+            />
+        </div>
       </Header>
       
       {expectedSlots.length === 0 ? (
