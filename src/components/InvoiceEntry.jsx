@@ -433,9 +433,12 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
           // Normalize string to match (remove spaces, symbols)
           const normalizeString = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
           
-          const matchingSlot = expectedSlots.find(slot => 
-            normalizeString(slot.company) === normalizeString(item.client_name)
-          );
+          // Find the first slot for this company that hasn't been filled yet
+          const matchingSlot = expectedSlots.find(slot => {
+            const isCompanyMatch = normalizeString(slot.company) === normalizeString(item.client_name);
+            const isSlotEmpty = !newEntries[slot.id] || !newEntries[slot.id].invoiceNumber;
+            return isCompanyMatch && isSlotEmpty;
+          });
 
           if (matchingSlot) {
             newEntries[matchingSlot.id] = {
