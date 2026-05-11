@@ -418,12 +418,27 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         jsonData.forEach(item => {
           if (!item.invoice_id || !item.amount) return;
           
+          // 1. Protection against stale invoices (older than 14 days)
+          if (item.date) {
+            const invoiceDate = new Date(item.date);
+            const today = new Date();
+            const diffDays = Math.ceil(Math.abs(today - invoiceDate) / (1000 * 60 * 60 * 24)); 
+            if (diffDays > 14) return; // Skip old invoices
+          }
+
+          // 2. Protection against duplicate invoices (already saved in Zoho)
+          const isDuplicate = existingData.some(d => String(d.invoiceNumber).trim() === String(item.invoice_id).trim());
+          if (isDuplicate) return; // Skip if we already have this exact invoice ID
+
           // Normalize string to match (remove spaces, symbols)
           const normalizeString = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
           
-          const matchingSlot = expectedSlots.find(slot => 
-            normalizeString(slot.company) === normalizeString(item.client_name)
-          );
+          // Find the first slot for this company that hasn't been filled yet
+          const matchingSlot = expectedSlots.find(slot => {
+            const isCompanyMatch = normalizeString(slot.company) === normalizeString(item.client_name);
+            const isSlotEmpty = !newEntries[slot.id] || !newEntries[slot.id].invoiceNumber;
+            return isCompanyMatch && isSlotEmpty;
+          });
 
           if (matchingSlot) {
             newEntries[matchingSlot.id] = {
