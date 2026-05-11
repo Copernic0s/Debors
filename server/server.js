@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const XLSX = require('xlsx');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -402,6 +405,70 @@ app.get('/api/debtors', async (req, res) => {
   } catch (error) {
     console.error('Error fetching/parsing Zoho sheet:', error.message);
     res.status(500).json({ error: 'Failed to ingest data from Zoho' });
+  }
+});
+
+// SSE Endpoint to run the Python CMP scraper
+app.get('/api/run-cmp-bot', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  res.write('data: ' + JSON.stringify({ message: 'Starting CMP Scraper Initialization...' }) + '\n\n');
+
+  const pythonScriptPath = path.join(__dirname, '..', 'automation', 'cmp_invoice_extractor.py');
+  
+  const botProcess = spawn('python', [pythonScriptPath], {
+    env: { ...process.env, CMP_CLONE_PROFILE: 'true' },
+    cwd: path.join(__dirname, '..', 'automation')
+  });
+
+  botProcess.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach(line => {
+      if (line.trim()) {
+        res.write('data: ' + JSON.stringify({ message: line.trim() }) + '\n\n');
+      }
+    });
+  });
+
+  botProcess.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+    lines.forEach(line => {
+      if (line.trim()) {
+        // Send stderr also as messages, the frontend can render them
+        res.write('data: ' + JSON.stringify({ message: line.trim() }) + '\n\n');
+      }
+    });
+  });
+
+  botProcess.on('close', (code) => {
+    res.write('data: ' + JSON.stringify({ done: true, code }) + '\n\n');
+    res.end();
+  });
+
+  botProcess.on('error', (err) => {
+    res.write('data: ' + JSON.stringify({ error: err.message }) + '\n\n');
+    res.end();
+  });
+
+  req.on('close', () => {
+    botProcess.kill();
+  });
+});
+
+app.get('/api/cmp-results', (req, res) => {
+  const jsonPath = path.join(__dirname, '..', 'automation', 'invoices_actualizados.json');
+  if (fs.existsSync(jsonPath)) {
+    try {
+      const data = fs.readFileSync(jsonPath, 'utf8');
+      res.json(JSON.parse(data));
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to parse JSON results' });
+    }
+  } else {
+    res.status(404).json({ error: 'Results not found' });
   }
 });
 
