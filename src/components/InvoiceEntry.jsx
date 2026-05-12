@@ -476,8 +476,32 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       }
 
       // 2. Protection against duplicate invoices (already saved in Zoho)
-      const isDuplicate = existingData.some(d => String(d.invoiceNumber).trim() === String(item.invoice_id).trim());
-      if (isDuplicate) return; // Skip if we already have this exact invoice ID
+      const existingRecord = existingData.find(d => String(d.invoiceNumber).trim() === String(item.invoice_id).trim());
+      if (existingRecord) {
+         let needsUpdate = false;
+         const updatedRecord = { ...existingRecord };
+         
+         // Fix unspecified billing cycle
+         if (item.billing_cycle && String(item.billing_cycle).trim() !== '' && (!existingRecord.billingCycle || existingRecord.billingCycle === 'Unspecified' || existingRecord.billingCycle === 'unspecified')) {
+             updatedRecord.billingCycle = item.billing_cycle;
+             needsUpdate = true;
+         }
+         
+         // Fix due date
+         if (item.due_date && String(item.due_date).trim() !== '' && item.due_date !== 'None' && existingRecord.dueDate !== item.due_date) {
+             updatedRecord.dueDate = item.due_date;
+             needsUpdate = true;
+         }
+
+         if (needsUpdate) {
+             onSaveInvoice({
+                ...updatedRecord,
+                source: 'bot_update',
+                sendNotification: false
+             });
+         }
+         return; // Skip the rest of the flow since it's already an existing invoice
+      }
 
       // Normalize string to match (remove spaces, symbols, and common suffixes)
       const normalizeString = (str) => {
