@@ -843,87 +843,131 @@ def export_results(results: list[dict], output_path: Path) -> None:
         json.dump(results, handle, ensure_ascii=False, indent=2)
 
 
-def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
+def process_global_invoices(driver: WebDriver) -> list[dict]:
     results = []
-    active_driver = driver
-
-    for index, client in enumerate(clients, start=1):
-        client_name = client["client_name"]
-        billing_cycle = client["billing_cycle"]
-        logging.info("[%s/%s] Processing %s", index, len(clients), client_name)
-
+    
+    # We loop up to 15 pages with 500 items each (7500 invoices total). 
+    # This guarantees we find pending invoices going back months without relying on fragile React UI clicks.
+    for page in range(1, 16):
+        url = f"https://cmp-front.production.united-fuel.com/invoicing?page={page}&limit=500"
+        logging.info("Loading global invoices page %d (Items %d to %d)...", page, (page-1)*500, page*500)
+        driver.get(url)
+        
+        wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
         try:
-            found = open_matching_company(active_driver, client_name)
-            if not found:
-                logging.warning("Client not found: %s", client_name)
-                results.append(build_result(client_name, billing_cycle, None, "Not Found"))
+            wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
+            logging.info("Table shell detected. Waiting 8 seconds for 500 rows to populate from the server...")
+            time.sleep(8) # Robust wait for React to fetch and render 500 rows
+        except TimeoutException:
+            logging.warning("Table not found on page %d, stopping pagination.", page)
+            break
+            
+        tables = []
+        for selector in SELECTORS.table_selectors:
+            tables.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+            
+        if not tables:
+            logging.warning("No tables found on page %d.", page)
+            break
+            
+        table = tables[0]
+        
+        header_cells = table.find_elements(By.XPATH, ".//thead//th | .//*[@role='columnheader'] | .//th")
+        if not header_cells:
+            header_cells = table.find_elements(By.XPATH, "(.//tr | .//*[@role='row'])[1]//*[self::td or self::th or @role='cell' or @role='columnheader']")
+            
+        headers = [normalize_text(cell.text) for cell in header_cells]
+        if not headers:
+            logging.warning("Could not find headers in table.")
+            break
+            
+        if page == 1:
+            logging.info("Headers found: %s", headers)
+            
+        company_index = next((i for i, text in enumerate(headers) if "company name" in text), None)
+        invoice_index = next((i for i, text in enumerate(headers) if text in ["invoice number", "invoice #", "invoice_number"]), None)
+        amount_index = next((i for i, text in enumerate(headers) if text in ["total amount", "amount", "total due"]), None)
+        date_index = next((i for i, text in enumerate(headers) if text in ["invoice date", "created at", "date"]), None)
+        status_index = next((i for i, text in enumerate(headers) if text == "status" or "payment status" in text), None)
+        billing_cycle_index = next((i for i, text in enumerate(headers) if "billing cycle" in text), None)
+        due_date_index = next((i for i, text in enumerate(headers) if "due date" in text), None)
+            
+        if company_index is None or invoice_index is None or amount_index is None or status_index is None:
+            logging.error("Missing required columns. Found: %s", headers)
+            break
+            
+        rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
+        if len(rows) <= 1:
+            logging.info("No data rows found on page %d. Stopping.", page)
+            break
+            
+        valid_rows_found = len(rows)
+        pending_found_this_page = 0
+        
+        js_script = """
+        var table = arguments[0];
+        var cIdx = arguments[1], iIdx = arguments[2], aIdx = arguments[3], sIdx = arguments[4], dIdx = arguments[5], bcIdx = arguments[6], ddIdx = arguments[7];
+        var rows = table.querySelectorAll('tbody tr, [role="row"]:not([role="columnheader"])');
+        var extracted = [];
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td, [role="cell"]');
+            if (cells.length > Math.max(cIdx, iIdx, aIdx, sIdx)) {
+                var company = cells[cIdx].innerText.trim();
+                var invoice = cells[iIdx].innerText.trim();
+                var amount = cells[aIdx].innerText.trim();
+                var status = cells[sIdx].innerText.trim();
+                var date = (dIdx !== null && dIdx < cells.length) ? cells[dIdx].innerText.trim() : "";
+                var billing_cycle = (bcIdx !== null && bcIdx < cells.length) ? cells[bcIdx].innerText.trim() : "";
+                var due_date = (ddIdx !== null && ddIdx < cells.length) ? cells[ddIdx].innerText.trim() : "";
+                
+                var status_upper = status.toUpperCase();
+                if (status_upper.includes("PENDING") || status_upper.includes("PARTIAL")) {
+                    extracted.push([company, invoice, amount, status, date, billing_cycle, due_date]);
+                }
+            }
+        }
+        return extracted;
+        """
+        
+        raw_rows = driver.execute_script(js_script, table, company_index, invoice_index, amount_index, status_index, date_index, billing_cycle_index, due_date_index)
+        
+        for row_data in raw_rows:
+            company_name, invoice_id, amount_text, status, date_text, billing_cycle, due_date_text = row_data
+            if not company_name or not invoice_id:
                 continue
-
-            open_invoices_tab(active_driver)
-            invoice_payload = extract_latest_invoice(active_driver)
-
-            if invoice_payload:
-                results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
-            else:
-                logging.warning("No invoice rows found for: %s", client_name)
-                save_debug_screenshot(driver, f"no_invoice_{index:03d}")
-                results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
-        except Exception as error:  # pragma: no cover
-            recoverable = isinstance(error, (NoSuchWindowException, InvalidSessionIdException))
-            if recoverable:
-                logging.warning("Browser session dropped on %s. Restarting driver and retrying once.", client_name)
-                try:
-                    active_driver.quit()
-                except Exception:
-                    pass
-                active_driver = create_driver()
-                perform_login(active_driver)
-                try:
-                    found = open_matching_company(active_driver, client_name)
-                    if found:
-                        open_invoices_tab(active_driver)
-                        invoice_payload = extract_latest_invoice(active_driver)
-                        if invoice_payload:
-                            results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
-                        else:
-                            results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
-                    else:
-                        results.append(build_result(client_name, billing_cycle, None, "Not Found"))
-                    continue
-                except Exception as retry_error:
-                    logging.exception("Retry also failed for %s: %s", client_name, retry_error)
-
-            logging.exception("Failed to process %s: %s", client_name, error)
-            save_debug_screenshot(active_driver, f"error_{index:03d}")
-            results.append(build_result(client_name, billing_cycle, None, f"Error: {type(error).__name__}"))
-
+                
+            amount = parse_amount(amount_text)
+            date_value = parse_date(date_text)
+            due_date_value = parse_date(due_date_text) if due_date_text else None
+            
+            pending_found_this_page += 1
+            results.append({
+                "client_name": company_name,
+                "billing_cycle": billing_cycle,
+                "invoice_id": invoice_id,
+                "amount": f"{amount:.2f}" if amount is not None else "",
+                "invoice_status": status,
+                "status": "Captured",
+                "date": date_value.strftime("%Y-%m-%d") if hasattr(date_value, "strftime") else str(date_value),
+                "due_date": due_date_value.strftime("%Y-%m-%d") if hasattr(due_date_value, "strftime") else str(due_date_value),
+                "last_update": datetime.now().strftime("%Y-%m-%d"),
+            })
+                
+        logging.info("Scanned %d total rows on page %d. Found %d pending/partial (Total stored: %d).", valid_rows_found, page, pending_found_this_page, len(results))
+        if valid_rows_found == 0:
+            break
+            
     return results
-
 
 def main() -> int:
     configure_logging()
-
-    input_mode = os.getenv("CMP_INPUT_MODE", "zoho_sheet").strip().lower()
-    input_file = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.getenv("CMP_INPUT_FILE", "automation/clients.example.csv"))
-
-    if input_mode == "zoho_sheet":
-        clients = read_clients_from_zoho_workbook()
-    else:
-        if not input_file.exists():
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-        clients = read_clients(input_file)
-
-    if not clients:
-        raise ValueError("No clients found in input file")
-
     driver = create_driver()
     try:
         perform_login(driver)
-        logging.info("Login complete. Current URL: %s", driver.current_url)
-        logging.info("Starting to process %d clients...", len(clients))
-        results = process_clients(driver, clients)
+        logging.info("Login complete. Starting global extraction...")
+        results = process_global_invoices(driver)
         export_results(results, OUTPUT_PATH)
-        logging.info("Extraction finished. Output saved to %s", OUTPUT_PATH)
+        logging.info("Extraction finished. Extracted %d pending invoices. Output saved to %s", len(results), OUTPUT_PATH)
         return 0
     finally:
         driver.quit()
@@ -932,7 +976,6 @@ def main() -> int:
                 shutil.rmtree(temp_directory, ignore_errors=True)
             except Exception:
                 pass
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -479,8 +479,12 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       const isDuplicate = existingData.some(d => String(d.invoiceNumber).trim() === String(item.invoice_id).trim());
       if (isDuplicate) return; // Skip if we already have this exact invoice ID
 
-      // Normalize string to match (remove spaces, symbols)
-      const normalizeString = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Normalize string to match (remove spaces, symbols, and common suffixes)
+      const normalizeString = (str) => {
+        let cleaned = String(str).toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+        cleaned = cleaned.replace(/\b(llc|inc|corp|co|ltd|limited)\b/g, '');
+        return cleaned.replace(/\s+/g, ''); // strip all spaces at the end
+      };
       
       // Find the first slot for this company that hasn't been filled yet
       const matchingSlot = expectedSlots.find(slot => {
@@ -495,6 +499,18 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
           invoiceNumber: item.invoice_id,
           amount: item.amount
         };
+        
+        // Correct the billing cycle if the bot found one
+        if (item.billing_cycle && String(item.billing_cycle).trim() !== '') {
+           updatedEntry.billingCycle = item.billing_cycle;
+           updatedEntry.cycle = item.billing_cycle; // Update UI slot too
+        }
+
+        // Correct the due date if the bot found one
+        if (item.due_date && String(item.due_date).trim() !== '' && item.due_date !== 'None') {
+           updatedEntry.dueDate = item.due_date;
+        }
+
         newEntries[matchingSlot.id] = updatedEntry;
         validMatches.push({ id: matchingSlot.id, entry: updatedEntry });
         matchCount++;
@@ -533,6 +549,40 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
     } else {
        toast('Bot finished, but no new pending invoices found.', { icon: 'ℹ️' });
     }
+    
+    // --- Deductive PAID Logic ---
+    let autoPaidCount = 0;
+    
+    existingData.forEach(d => {
+       const currentStatus = String(d.status || '').trim().toLowerCase();
+       const invoiceNum = String(d.invoiceNumber || '').trim();
+       
+       if (currentStatus === 'pending' && invoiceNum && invoiceNum !== 'Marked as Sent') {
+          // Check if this invoice is still in the bot's pending list
+          const isStillPending = jsonData.some(item => 
+              String(item.invoice_id).trim() === invoiceNum
+          );
+          
+          if (!isStillPending) {
+             // It's no longer pending on CMP! Auto-mark as paid.
+             autoPaidCount++;
+             onSaveInvoice({
+                ...d,
+                status: 'paid',
+                amount: 0,
+                source: 'bot_deduction',
+                sendNotification: false
+             });
+          }
+       }
+    });
+    
+    if (autoPaidCount > 0) {
+       setTimeout(() => {
+          toast.success(`Auto-marked ${autoPaidCount} older invoices as PAID based on CMP data!`, { duration: 5000 });
+       }, 1500);
+    }
+    // ----------------------------
   };
 
   const fetchAndApplyResults = () => {
