@@ -279,7 +279,6 @@ export const aggregateByCompany = (rows) => {
         current.dueDate = row.dueDate;
         current.latestId = row.id;
         current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
-        current.status = row.status || current.status;
         current.notes = row.notes || current.notes;
         if (!current.isSheetCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
           current.billingCycle = normalizedRowCycle;
