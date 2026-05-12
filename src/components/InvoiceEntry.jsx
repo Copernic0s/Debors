@@ -543,6 +543,34 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
         if (matchingSlot.agentId) {
             setExpandedAgents(prev => ({ ...prev, [matchingSlot.agentId]: true }));
         }
+      } else {
+        // If no empty slot is available, find ANY existing record for this company to clone their base data
+        const baseRecord = existingData.find(d => normalizeString(d.company || d.clientName) === normalizeString(item.client_name));
+        
+        if (baseRecord) {
+           const newId = `BOT-NEW-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+           const newEntry = {
+              ...baseRecord,
+              id: newId,
+              invoiceNumber: item.invoice_id,
+              amount: item.amount,
+              status: 'pending',
+              source: 'bot_extraction'
+           };
+           
+           if (item.billing_cycle && String(item.billing_cycle).trim() !== '') {
+               newEntry.billingCycle = item.billing_cycle;
+               newEntry.cycle = item.billing_cycle;
+           }
+           
+           if (item.due_date && String(item.due_date).trim() !== '' && item.due_date !== 'None') {
+               newEntry.dueDate = item.due_date;
+           }
+           
+           newEntries[newId] = newEntry;
+           validMatches.push({ id: newId, entry: newEntry });
+           matchCount++;
+        }
       }
     });
 
