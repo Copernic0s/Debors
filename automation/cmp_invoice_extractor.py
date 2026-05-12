@@ -641,9 +641,14 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     for query in build_search_queries(client_name):
         attempted_queries.append(query)
         search_input.click()
+        search_input.clear()
+        # Fallback to ensure it's empty
         search_input.send_keys(Keys.CONTROL, "a")
-        search_input.send_keys(Keys.DELETE)
-        type_like_human(search_input, query.upper())
+        search_input.send_keys(Keys.BACKSPACE)
+        
+        # We send the entire query at once. Character-by-character typing can cause
+        # React's onChange handler to re-render and move the cursor, interleaving characters.
+        search_input.send_keys(query.upper())
         time.sleep(0.35)
         search_input.send_keys(Keys.ENTER)
         search_input.send_keys(Keys.TAB)
