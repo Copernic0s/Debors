@@ -213,7 +213,7 @@ export const aggregateByCompany = (rows) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
     const companyKey = normalizeMatchKey(company);
-    const key = `${companyKey}-${invKey}`;
+    const key = `${companyKey}`;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;
