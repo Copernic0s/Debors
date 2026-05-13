@@ -990,11 +990,6 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                     
                 next_btn = next_btns[-1]
                 
-                # Check if button is disabled
-                if not next_btn.is_enabled() or next_btn.get_attribute("disabled") or "disabled" in str(next_btn.get_attribute("class")).lower():
-                    logging.info("Next button is disabled. Reached the last page.")
-                    break
-                    
                 logging.info("Clicking 'Next >' button to load page %d...", page + 1)
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", next_btn)
                 
