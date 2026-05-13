@@ -44,7 +44,7 @@ ZOHO_XLSX_URL = os.getenv(
     "https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx",
 )
 ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
-DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "60"))
+DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "90"))
 SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
 SEARCH_KEYSTROKE_DELAY = float(os.getenv("CMP_SEARCH_KEYSTROKE_DELAY", "0.06"))
@@ -856,8 +856,8 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
         wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
         try:
             wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
-            logging.info("Table shell detected. Waiting 25 seconds for 500 rows to populate from the server (Slow Wi-Fi Mode)...")
-            time.sleep(25) # Robust wait for React to fetch and render 500 rows over slow Wi-Fi
+            logging.info("Table shell detected. Waiting 60 seconds for 500 rows to populate from the server (Extremely Slow Wi-Fi Mode)...")
+            time.sleep(60) # Robust wait for React to fetch and render 500 rows over slow Wi-Fi
         except TimeoutException:
             logging.warning("Table not found on page %d, stopping pagination.", page)
             break
