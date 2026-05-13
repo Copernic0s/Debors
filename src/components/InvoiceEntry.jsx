@@ -457,6 +457,11 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
       return;
     }
 
+    if (jsonData.length === 0) {
+      toast.error('Bot returned an empty list! The CMP page might have failed to load. Aborting to protect data.', { duration: 6000 });
+      return;
+    }
+
     let matchCount = 0;
     const newEntries = { ...entries };
     const validMatches = []; // To save automatically
@@ -491,6 +496,16 @@ export default function InvoiceEntry({ clientsByAgent, existingData, onSaveInvoi
          if (item.due_date && String(item.due_date).trim() !== '' && item.due_date !== 'None' && existingRecord.dueDate !== item.due_date) {
              updatedRecord.dueDate = item.due_date;
              needsUpdate = true;
+         }
+
+         // --- Auto-Healing (Fix incorrectly marked Paid invoices) ---
+         if (String(existingRecord.status).toLowerCase() === 'paid' && Number(existingRecord.amount) === 0) {
+             const cmpStatus = String(item.invoice_status).toLowerCase();
+             if (cmpStatus.includes('pending') || cmpStatus.includes('partial')) {
+                 updatedRecord.status = 'pending';
+                 updatedRecord.amount = item.amount;
+                 needsUpdate = true;
+             }
          }
 
          if (needsUpdate) {
