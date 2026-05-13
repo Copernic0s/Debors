@@ -856,10 +856,28 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
         wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
         try:
             wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
-            logging.info("Table shell detected. Waiting 60 seconds for 500 rows to populate from the server (Extremely Slow Wi-Fi Mode)...")
-            time.sleep(60) # Robust wait for React to fetch and render 500 rows over slow Wi-Fi
+            logging.info("Table shell detected. Polling for data rows to render (up to 120 seconds)...")
+            
+            # Smart polling for rows
+            for _ in range(24): # 120 seconds max
+                tables = []
+                for selector in SELECTORS.table_selectors:
+                    tables.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+                
+                if tables:
+                    current_rows = tables[0].find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
+                    if len(current_rows) > 1:
+                        logging.info("Data rows rendered successfully!")
+                        break
+                time.sleep(5)
+            else:
+                logging.warning("Timeout waiting for rows to render. It might actually be empty.")
+                
         except TimeoutException:
             logging.warning("Table not found on page %d, stopping pagination.", page)
+            if page > 1 and len(results) > 0:
+                logging.error("Network dropped on page %d! Aborting extraction to prevent partial data corruption.", page)
+                return []
             break
             
         tables = []
@@ -898,6 +916,9 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
             
         rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
         if len(rows) <= 1:
+            if page > 1 and len(results) >= 490: # If we got a full page before, page 2 shouldn't be completely empty out of nowhere
+                logging.error("Page %d has no data rows but previous page was full! Network dropped. Aborting to prevent data corruption.", page)
+                return []
             logging.info("No data rows found on page %d. Stopping.", page)
             break
             
