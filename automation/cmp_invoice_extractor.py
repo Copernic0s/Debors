@@ -846,12 +846,12 @@ def export_results(results: list[dict], output_path: Path) -> None:
 def process_global_invoices(driver: WebDriver) -> list[dict]:
     results = []
     
-    # We loop up to 15 pages with 500 items each (7500 invoices total). 
-    # This guarantees we find pending invoices going back months without relying on fragile React UI clicks.
+    url = "https://cmp-front.production.united-fuel.com/invoicing?limit=500"
+    logging.info("Loading global invoices base URL: %s", url)
+    driver.get(url)
+    
     for page in range(1, 16):
-        url = f"https://cmp-front.production.united-fuel.com/invoicing?page={page}&limit=500"
-        logging.info("Loading global invoices page %d (Items %d to %d)...", page, (page-1)*500, page*500)
-        driver.get(url)
+        logging.info("Scanning global invoices page %d (Items %d to %d)...", page, (page-1)*500, page*500)
         
         wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
         try:
@@ -975,9 +975,35 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
             })
                 
         logging.info("Scanned %d total rows on page %d. Found %d pending/partial (Total stored: %d).", valid_rows_found, page, pending_found_this_page, len(results))
-        if valid_rows_found == 0:
+        if valid_rows_found <= 1:
             break
             
+        # --- NEW PAGINATION LOGIC: CLICK NEXT BUTTON ---
+        if page < 15:
+            try:
+                next_btns = driver.find_elements(By.XPATH, "//div[contains(@class, 'MuiTablePagination-actions')]//button[@title='Go to next page'] | //button[contains(., 'Next')] | //li[contains(., 'Next')] | //a[contains(., 'Next')]")
+                
+                # Filter out obvious wrong matches if any, usually taking the last one works best
+                if not next_btns:
+                    logging.info("Could not find a 'Next' button on page %d. Assuming end of pages.", page)
+                    break
+                    
+                next_btn = next_btns[-1]
+                
+                # Check if button is disabled
+                if not next_btn.is_enabled() or next_btn.get_attribute("disabled") or "disabled" in str(next_btn.get_attribute("class")).lower():
+                    logging.info("Next button is disabled. Reached the last page.")
+                    break
+                    
+                logging.info("Clicking 'Next >' button to load page %d...", page + 1)
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", next_btn)
+                
+                logging.info("Waiting 10 seconds for React to fetch and render the next page...")
+                time.sleep(10) # Give React time to remove the old rows and load the new ones before the next loop iteration starts polling
+            except Exception as e:
+                logging.warning("Failed to click Next Page button: %s. Stopping pagination.", e)
+                break
+        
     return results
 
 def main() -> int:
