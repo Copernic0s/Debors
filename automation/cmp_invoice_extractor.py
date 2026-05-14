@@ -991,11 +991,33 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                     
                 next_btn = next_btns[-1]
                 
-                logging.info("Clicking 'Next >' button to load page %d...", page + 1)
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();", next_btn)
+                # Store the ID of the first row to ensure it changes
+                first_row_id = rows[0].text if len(rows) > 0 else ""
                 
-                logging.info("Waiting 10 seconds for React to fetch and render the next page...")
-                time.sleep(10) # Give React time to remove the old rows and load the new ones before the next loop iteration starts polling
+                logging.info("Clicking 'Next >' button to load page %d...", page + 1)
+                
+                # Scroll into view
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_btn)
+                time.sleep(1)
+                
+                # Use physical mouse click via ActionChains because React often ignores JS clicks
+                from selenium.webdriver.common.action_chains import ActionChains
+                ActionChains(driver).move_to_element(next_btn).click().perform()
+                
+                logging.info("Waiting for table to refresh (up to 20 seconds)...")
+                
+                # Poll until the first row changes
+                for _ in range(20):
+                    time.sleep(1)
+                    new_rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
+                    if len(new_rows) > 1:
+                        new_first_row_id = new_rows[0].text
+                        if new_first_row_id != first_row_id:
+                            logging.info("Table refreshed successfully!")
+                            break
+                else:
+                    logging.warning("Table did not seem to refresh after clicking Next. We might be stuck.")
+                    
             except Exception as e:
                 logging.warning("Failed to click Next Page button: %s. Stopping pagination.", e)
                 break
