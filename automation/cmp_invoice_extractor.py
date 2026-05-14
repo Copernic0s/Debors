@@ -981,7 +981,8 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
         # --- NEW PAGINATION LOGIC: CLICK NEXT BUTTON ---
         if page < 15:
             try:
-                next_btns = driver.find_elements(By.XPATH, "//div[contains(@class, 'MuiTablePagination-actions')]//button[@title='Go to next page'] | //button[contains(., 'Next')] | //li[contains(., 'Next')] | //a[contains(., 'Next')]")
+                # Use a very broad selector for any button/link/div that has "Next" or an SVG that implies next, or aria-label
+                next_btns = driver.find_elements(By.XPATH, "//*[@aria-label='Go to next page' or @title='Go to next page' or @title='Next Page' or contains(@class, 'next') or contains(text(), 'Next')] | //button[contains(., 'Next')]")
                 
                 # Filter out obvious wrong matches if any, usually taking the last one works best
                 if not next_btns:
