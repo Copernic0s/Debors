@@ -996,13 +996,16 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                 
                 logging.info("Clicking 'Next >' button to load page %d...", page + 1)
                 
-                # Scroll into view
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", next_btn)
-                time.sleep(1)
-                
-                # Use physical mouse click via ActionChains because React often ignores JS clicks
-                from selenium.webdriver.common.action_chains import ActionChains
-                ActionChains(driver).move_to_element(next_btn).click().perform()
+                # Ultimate raw JS click (bypasses all visual overlays, toolbars, and React quirks)
+                driver.execute_script("""
+                    var event = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    arguments[0].dispatchEvent(event);
+                    arguments[0].click(); // Fallback
+                """, next_btn)
                 
                 logging.info("Waiting for table to refresh (up to 20 seconds)...")
                 
@@ -1016,7 +1019,8 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                             logging.info("Table refreshed successfully!")
                             break
                 else:
-                    logging.warning("Table did not seem to refresh after clicking Next. We might be stuck.")
+                    logging.warning("Table did not refresh! Aborting pagination to prevent duplicate data extraction.")
+                    break
                     
             except Exception as e:
                 logging.warning("Failed to click Next Page button: %s. Stopping pagination.", e)
