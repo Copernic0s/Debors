@@ -96,35 +96,55 @@ def log_entry(input_text):
 
 def show_input_dialog():
     root = tk.Tk()
-    root.title("Tracker Rápido")
-    root.geometry("450x120")
-    root.attributes("-topmost", True)
-    root.configure(bg='#1e293b') # Dark mode feel
+    root.overrideredirect(True)
+    root.configure(bg='#00ff00')
     
-    # Center the window
+    window_width = 700
+    window_height = 130
+    
     root.update_idletasks()
-    width = root.winfo_width()
-    frm_width = root.winfo_rootx() - root.winfo_x()
-    win_width = width + 2 * frm_width
-    height = root.winfo_height()
-    titlebar_height = root.winfo_rooty() - root.winfo_y()
-    win_height = height + titlebar_height + frm_width
-    x = root.winfo_screenwidth() // 2 - win_width // 2
-    y = root.winfo_screenheight() // 2 - win_height // 2
-    root.geometry(f'{width}x{height}+{x}+{y}')
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+    x = (screen_width // 2) - (window_width // 2)
+    y = (screen_height // 2) - (window_height // 2)
+    root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    root.attributes("-topmost", True)
+    
+    main_frame = tk.Frame(root, bg='#0a0a0a', bd=0)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+    
+    header_lbl = tk.Label(
+        main_frame, 
+        text="root@debors-tracker:~# Awaiting input... [AI & Clipboard Active]", 
+        bg='#0a0a0a', 
+        fg='#00ff00',
+        font=('Consolas', 10, 'bold'),
+        anchor='w'
+    )
+    header_lbl.pack(fill=tk.X, padx=15, pady=(15, 5))
+    
+    input_frame = tk.Frame(main_frame, bg='#0a0a0a')
+    input_frame.pack(fill=tk.X, padx=15, pady=5)
     
     tk.Label(
-        root, 
-        text="Portapapeles + IA Activada: Escribe tu nota natural", 
-        bg='#1e293b', 
-        fg='#94a3b8',
-        font=('Arial', 10)
-    ).pack(pady=(15, 5))
+        input_frame,
+        text="> ",
+        bg='#0a0a0a',
+        fg='#00ff00',
+        font=('Consolas', 14, 'bold')
+    ).pack(side=tk.LEFT)
     
-    entry = tk.Entry(root, width=50, font=('Arial', 11), bg='#0f172a', fg='#f8fafc', insertbackground='white')
-    entry.pack(pady=5, ipady=4)
+    entry = tk.Entry(
+        input_frame, 
+        font=('Consolas', 13), 
+        bg='#0a0a0a', 
+        fg='#00ff00', 
+        insertbackground='#00ff00', 
+        relief=tk.FLAT,
+        bd=0
+    )
+    entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
     
-    # Magia del Portapapeles
     try:
         clip = root.clipboard_get().strip()
         if len(clip) > 0 and len(clip) < 50 and '\n' not in clip:
@@ -133,11 +153,14 @@ def show_input_dialog():
         pass
         
     entry.focus_set()
-    entry.icursor(tk.END) # Mover el cursor al final
+    entry.icursor(tk.END)
     
     def on_submit(event=None):
         text = entry.get()
         if text.strip():
+            header_lbl.config(text="root@debors-tracker:~# Processing AI extraction...", fg='#00ffff')
+            entry.config(state=tk.DISABLED)
+            root.update()
             log_entry(text)
         root.destroy()
         
