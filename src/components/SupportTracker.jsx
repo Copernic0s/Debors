@@ -964,13 +964,15 @@ const SupportTracker = ({
     followUpDue: '',
     newComment: ''
   });
+  const [deletedIds, setDeletedIds] = useState(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const cycleWindow = useMemo(() => getCycleWindow(new Date()), []);
 
   const normalizedData = useMemo(
     () =>
       sortByNewestDate(
-        data.map((item, index) => ({
+        data.filter(item => !deletedIds.has(item.id || item.rowIndex)).map((item, index) => ({
           ...item,
           id: item.id || `tracker-row-${index}`,
           statusLabel: normalizeStatusLabel(item.status),
@@ -983,7 +985,7 @@ const SupportTracker = ({
           lastComment: Array.isArray(item.comments) && item.comments.length > 0 ? item.comments[item.comments.length - 1] : item.lastComment || null
         }))
       ),
-    [data]
+    [data, deletedIds]
   );
 
   const filterOptions = useMemo(() => {
@@ -1494,23 +1496,34 @@ const SupportTracker = ({
                       {item.comments.length > 0 || item.nextAction || item.followUpDue ? 'Update' : 'Open'}
                     </ActionCellButton>
                     {item.isLocal && (
-                      <ActionCellButton 
-                        type="button" 
-                        title="Borrar registro rápido"
-                        style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
-                        onClick={async () => {
-                          if (window.confirm('¿Seguro que deseas borrar este registro rápido?')) {
+                      confirmDeleteId === item.id ? (
+                        <ActionCellButton 
+                          type="button" 
+                          style={{ color: 'white', backgroundColor: '#ef4444', borderColor: '#ef4444' }}
+                          onClick={async () => {
                             try {
                               const res = await fetch(`http://localhost:3001/api/tracker/${item.id}`, { method: 'DELETE' });
-                              if (res.ok) window.location.reload();
+                              if (res.ok) {
+                                setDeletedIds(prev => new Set(prev).add(item.id));
+                              }
                             } catch (e) {
                               console.error('Failed to delete entry:', e);
                             }
-                          }
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </ActionCellButton>
+                            setConfirmDeleteId(null);
+                          }}
+                        >
+                          Confirmar
+                        </ActionCellButton>
+                      ) : (
+                        <ActionCellButton 
+                          type="button" 
+                          title="Borrar registro rápido"
+                          style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                          onClick={() => setConfirmDeleteId(item.id)}
+                        >
+                          <Trash2 size={14} />
+                        </ActionCellButton>
+                      )
                     )}
                   </td>
                 </tr>

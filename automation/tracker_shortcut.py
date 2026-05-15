@@ -47,7 +47,7 @@ def log_entry(input_text):
         "agent": "Hector", # Default agent
         "task": task,
         "status": status,
-        "notes": "Anotado vía Atajo Rápido",
+        "notes": "",
         "isLocal": True
     }
     
