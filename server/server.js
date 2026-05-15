@@ -396,6 +396,20 @@ app.get('/api/debtors', async (req, res) => {
       ? XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], { defval: '' }).map(mapTrackerRow)
       : [];
 
+    // Merge local shortcut tracker entries
+    try {
+      const localTrackerPath = path.join(__dirname, '..', 'automation', 'local_tracker.json');
+      if (fs.existsSync(localTrackerPath)) {
+        const localData = fs.readFileSync(localTrackerPath, 'utf8');
+        const localLogs = JSON.parse(localData);
+        if (Array.isArray(localLogs)) {
+          trackerLogs.push(...localLogs);
+        }
+      }
+    } catch (err) {
+      console.error('[Zoho Sync] Failed to merge local tracker logs:', err.message);
+    }
+
     res.json({
       debtors: consolidatedDebtors,
       clientsByAgent,
