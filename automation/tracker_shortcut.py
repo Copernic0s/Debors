@@ -7,7 +7,14 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 
-GEMINI_API_KEY = "AIzaSyDjd6_cyrbVUX33DDmT6tZIYB3Mb2BK9X8"
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r') as f:
+        for line in f:
+            if line.startswith("GEMINI_API_KEY="):
+                os.environ["GEMINI_API_KEY"] = line.strip().split("=", 1)[1].strip().strip('"')
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
