@@ -850,7 +850,8 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
     logging.info("Loading global invoices base URL: %s", url)
     driver.get(url)
     
-    for page in range(1, 16):
+    is_aborted = False
+    for page in range(1, 51):
         logging.info("Scanning global invoices page %d (Items %d to %d)...", page, (page-1)*500, page*500)
         
         wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
@@ -979,7 +980,7 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
             break
             
         # --- NEW PAGINATION LOGIC: CLICK NEXT BUTTON ---
-        if page < 15:
+        if page < 50:
             try:
                 # Use a very broad selector for any button/link/div that has "Next" or an SVG that implies next, or aria-label
                 next_btns = driver.find_elements(By.XPATH, "//*[@aria-label='Go to next page' or @title='Go to next page' or @title='Next Page' or contains(@class, 'next') or contains(text(), 'Next')] | //button[contains(., 'Next')]")
@@ -1007,10 +1008,10 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                     arguments[0].click(); // Fallback
                 """, next_btn)
                 
-                logging.info("Waiting for table to refresh (up to 20 seconds)...")
+                logging.info("Waiting for table to refresh (up to 60 seconds)...")
                 
                 # Poll until the first row changes
-                for _ in range(20):
+                for _ in range(60):
                     time.sleep(1)
                     new_rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
                     if len(new_rows) > 1:
@@ -1020,12 +1021,18 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                             break
                 else:
                     logging.warning("Table did not refresh! Aborting pagination to prevent duplicate data extraction.")
+                    is_aborted = True
                     break
                     
             except Exception as e:
                 logging.warning("Failed to click Next Page button: %s. Stopping pagination.", e)
+                is_aborted = True
                 break
         
+    if is_aborted:
+        logging.error("Extraction aborted prematurely due to network issues! Returning empty list to protect frontend data integrity.")
+        return []
+
     return results
 
 def main() -> int:
