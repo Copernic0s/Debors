@@ -1,1 +1,42 @@
-[]
+[
+  {
+    "id": "TRK-local-52338095",
+    "date": "2026-05-14",
+    "company": "DEBORS TRUCKING",
+    "agent": "Hector",
+    "task": "Factura solicitada y enviada por correo electrónico",
+    "status": "Completed",
+    "notes": "",
+    "isLocal": true
+  },
+  {
+    "id": "TRK-local-e3ae00ac",
+    "date": "2026-05-14",
+    "company": "TRCIKUGN",
+    "agent": "Hector",
+    "task": "Factura solicitada y enviada",
+    "status": "Completed",
+    "notes": "",
+    "isLocal": true
+  },
+  {
+    "id": "TRK-local-f74f7c63",
+    "date": "2026-05-14",
+    "company": "",
+    "agent": "Hector",
+    "task": "Crear atajo traductor con IA y voz para el trabajo",
+    "status": "Follow-up",
+    "notes": "",
+    "isLocal": true
+  },
+  {
+    "id": "TRK-local-42cf3bd3",
+    "date": "2026-05-15",
+    "company": "DGMMS TRANSPORT LLC",
+    "agent": "Hector",
+    "task": "I called the customer to explain the autopay, completed",
+    "status": "Follow-up",
+    "notes": "",
+    "isLocal": true
+  }
+]

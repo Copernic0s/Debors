@@ -1013,12 +1013,16 @@ def process_global_invoices(driver: WebDriver) -> list[dict]:
                 # Poll until the first row changes
                 for _ in range(60):
                     time.sleep(1)
-                    new_rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
-                    if len(new_rows) > 1:
-                        new_first_row_id = new_rows[0].text
-                        if new_first_row_id != first_row_id:
-                            logging.info("Table refreshed successfully!")
-                            break
+                    try:
+                        new_rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
+                        if len(new_rows) > 1:
+                            new_first_row_id = new_rows[0].text
+                            if new_first_row_id != first_row_id:
+                                logging.info("Table refreshed successfully!")
+                                break
+                    except Exception as e:
+                        # Ignore stale elements during React renders
+                        pass
                 else:
                     logging.warning("Table did not refresh! Aborting pagination to prevent duplicate data extraction.")
                     is_aborted = True
