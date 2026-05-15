@@ -422,6 +422,30 @@ app.get('/api/debtors', async (req, res) => {
   }
 });
 
+app.delete('/api/tracker/:id', (req, res) => {
+  try {
+    const localTrackerPath = path.join(__dirname, '..', 'automation', 'local_tracker.json');
+    if (!fs.existsSync(localTrackerPath)) {
+      return res.status(404).json({ error: 'No local tracker file found' });
+    }
+    const localData = fs.readFileSync(localTrackerPath, 'utf8');
+    const localLogs = JSON.parse(localData);
+    
+    const initialLength = localLogs.length;
+    const filteredLogs = localLogs.filter(log => log.id !== req.params.id);
+    
+    if (filteredLogs.length === initialLength) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+    
+    fs.writeFileSync(localTrackerPath, JSON.stringify(filteredLogs, null, 2), 'utf8');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting local tracker log:', err.message);
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
 // SSE Endpoint to run the Python CMP scraper
 app.get('/api/run-cmp-bot', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');

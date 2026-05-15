@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "TRK-local-1c38aa8a",
+    "date": "2026-05-14",
+    "company": "Prueba",
+    "agent": "Hector",
+    "task": "Test",
+    "status": "test",
+    "notes": "Anotado vía Atajo Rápido",
+    "isLocal": true
+  }
+]
