@@ -13,6 +13,7 @@ import {
   PanelRightOpen,
   Save,
   Search,
+  Trash2,
   X
 } from 'lucide-react';
 
@@ -1487,11 +1488,30 @@ const SupportTracker = ({
                     </StatusBadge>
                   </td>
                   <td className="col-notes">{item.notes || 'No notes'}</td>
-                  <td>
+                  <td style={{ display: 'flex', gap: '0.5rem' }}>
                     <ActionCellButton type="button" onClick={() => openRecord(item)}>
                       <PanelRightOpen size={14} />
                       {item.comments.length > 0 || item.nextAction || item.followUpDue ? 'Update' : 'Open'}
                     </ActionCellButton>
+                    {item.isLocal && (
+                      <ActionCellButton 
+                        type="button" 
+                        title="Borrar registro rápido"
+                        style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                        onClick={async () => {
+                          if (window.confirm('¿Seguro que deseas borrar este registro rápido?')) {
+                            try {
+                              const res = await fetch(`http://localhost:3001/api/tracker/${item.id}`, { method: 'DELETE' });
+                              if (res.ok) window.location.reload();
+                            } catch (e) {
+                              console.error('Failed to delete entry:', e);
+                            }
+                          }
+                        }}
+                      >
+                        <Trash2 size={14} />
+                      </ActionCellButton>
+                    )}
                   </td>
                 </tr>
               );
