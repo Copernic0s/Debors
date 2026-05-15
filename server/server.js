@@ -396,6 +396,20 @@ app.get('/api/debtors', async (req, res) => {
       ? XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], { defval: '' }).map(mapTrackerRow)
       : [];
 
+    // Merge local shortcut tracker entries
+    try {
+      const localTrackerPath = path.join(__dirname, '..', 'automation', 'local_tracker.json');
+      if (fs.existsSync(localTrackerPath)) {
+        const localData = fs.readFileSync(localTrackerPath, 'utf8');
+        const localLogs = JSON.parse(localData);
+        if (Array.isArray(localLogs)) {
+          trackerLogs.push(...localLogs);
+        }
+      }
+    } catch (err) {
+      console.error('[Zoho Sync] Failed to merge local tracker logs:', err.message);
+    }
+
     res.json({
       debtors: consolidatedDebtors,
       clientsByAgent,
@@ -405,6 +419,30 @@ app.get('/api/debtors', async (req, res) => {
   } catch (error) {
     console.error('Error fetching/parsing Zoho sheet:', error.message);
     res.status(500).json({ error: 'Failed to ingest data from Zoho' });
+  }
+});
+
+app.delete('/api/tracker/:id', (req, res) => {
+  try {
+    const localTrackerPath = path.join(__dirname, '..', 'automation', 'local_tracker.json');
+    if (!fs.existsSync(localTrackerPath)) {
+      return res.status(404).json({ error: 'No local tracker file found' });
+    }
+    const localData = fs.readFileSync(localTrackerPath, 'utf8');
+    const localLogs = JSON.parse(localData);
+    
+    const initialLength = localLogs.length;
+    const filteredLogs = localLogs.filter(log => log.id !== req.params.id);
+    
+    if (filteredLogs.length === initialLength) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+    
+    fs.writeFileSync(localTrackerPath, JSON.stringify(filteredLogs, null, 2), 'utf8');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting local tracker log:', err.message);
+    res.status(500).json({ error: 'Failed to delete' });
   }
 });
 
