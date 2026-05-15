@@ -315,6 +315,12 @@ export const aggregateByCompany = (rows) => {
       }
     }
 
+    // Final safety net: If the total amount is 0, it cannot be overdue or pending.
+    if (item.amount <= 0) {
+      status = 'paid';
+      isAutoOverdue = false;
+    }
+
     const companyRows = rows
       .filter((row) => String(row.company || row.clientName || '').trim().toLowerCase() === item.company.toLowerCase())
       .sort((a, b) => String(a.weekLabel || '').localeCompare(String(b.weekLabel || '')));
