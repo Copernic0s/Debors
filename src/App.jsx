@@ -20,6 +20,7 @@ import { useAppSession } from './hooks/useAppSession';
 import { useOverviewActions } from './hooks/useOverviewActions';
 import { useDerivedDebtorViews } from './hooks/useDerivedDebtorViews';
 import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from './services/sharedAppState';
+import { fetchTrackerEntries, mergeTrackerEntries } from './services/trackerEntries';
 import './index.css';
 
 const DebtorModal = lazy(() => import('./components/DebtorModal'));
@@ -752,6 +753,8 @@ function App() {
       const sheetData = Array.isArray(response?.debtors) ? response.debtors : [];
       const csData = Array.isArray(response?.clientsByAgent) ? response.clientsByAgent : [];
       const trackerLogs = Array.isArray(response?.trackerLogs) ? response.trackerLogs : [];
+      const remoteTrackerEntries = await fetchTrackerEntries();
+      const mergedTrackerLogs = mergeTrackerEntries(trackerLogs, remoteTrackerEntries);
       const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
       const localSnapshot = loadLocalZohoSnapshot();
       const previousHadInvoices = hasMeaningfulInvoiceRows(rawZohoDataRef.current);
@@ -783,8 +786,8 @@ function App() {
           const recoveredRows = mergeDebtorsWithClientSheet(fallbackDebtors, csData);
           console.warn('[Sync] Workbook has no debtor sheets. Restoring from last shared debtor snapshot.');
           setClientsByAgent(csData);
-          if (trackerLogs.length > 0) {
-            setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
+          if (mergedTrackerLogs.length > 0) {
+            setTrackerData(normalizeIncomingTrackerRows(mergedTrackerLogs));
           }
           setRawZohoData(recoveredRows);
           hasRetriedEmptyScopedLoadRef.current = false;
@@ -805,7 +808,7 @@ function App() {
             normalizeIncomingTrackerRows(
               Array.isArray(localSnapshot?.trackerLogs) && localSnapshot.trackerLogs.length > 0
                 ? localSnapshot.trackerLogs
-                : trackerLogs
+                : mergedTrackerLogs
             )
           );
           setRawZohoData(mergeDebtorsWithClientSheet(localFallbackDebtors, Array.isArray(localSnapshot?.clientsByAgent) ? localSnapshot.clientsByAgent : csData));
@@ -823,8 +826,8 @@ function App() {
 
       setClientsByAgent(csData);
 
-      if (trackerLogs.length > 0) {
-        setTrackerData(normalizeIncomingTrackerRows(trackerLogs));
+      if (mergedTrackerLogs.length > 0) {
+        setTrackerData(normalizeIncomingTrackerRows(mergedTrackerLogs));
       }
 
       if (mergedData && mergedData.length > 0) {
@@ -842,7 +845,7 @@ function App() {
           saveLocalZohoSnapshot({
             debtors: sheetData,
             clientsByAgent: csData,
-            trackerLogs
+            trackerLogs: mergedTrackerLogs
           });
         }
         if (notifyUser) {

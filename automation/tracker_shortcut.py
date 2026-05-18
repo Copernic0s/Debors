@@ -7,7 +7,7 @@ import urllib.request
 import urllib.parse
 from datetime import datetime
 
-GEMINI_API_KEY = "AIzaSyDjd6_cyrbVUX33DDmT6tZIYB3Mb2BK9X8"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +26,37 @@ def save_data(data):
     with open(JSON_PATH, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+def maybe_publish_to_vercel(entries):
+    api_url = os.getenv("TRACKER_UPLOAD_URL", "").strip()
+    secret = os.getenv("TRACKER_UPLOAD_SECRET", "").strip()
+    if not api_url or not secret:
+        return False
+
+    payload = {
+        "items": entries
+    }
+
+    req = urllib.request.Request(
+        api_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {secret}'
+        },
+        method='POST'
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status >= 200 and resp.status < 300:
+                return True
+    except Exception as e:
+        print("Publish failed:", e)
+    return False
+
 def call_gemini(prompt):
+    if not GEMINI_API_KEY:
+        return None
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     
     system_instruction = """
@@ -93,6 +123,18 @@ def log_entry(input_text):
     data = load_data()
     data.append(entry)
     save_data(data)
+
+    # Best-effort publish to shared store (Supabase via Vercel API)
+    maybe_publish_to_vercel([{
+        "id": entry.get("id"),
+        "date": entry.get("date"),
+        "company": entry.get("company"),
+        "agent": entry.get("agent"),
+        "task": entry.get("task"),
+        "status": entry.get("status"),
+        "notes": entry.get("notes"),
+        "created_by": os.getenv("TRACKER_CREATED_BY", "")
+    }])
 
 def show_input_dialog():
     root = tk.Tk()
