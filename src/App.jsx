@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
-import { RefreshCw, Users, List, BarChart2, Clock, Bot, FileText } from 'lucide-react';
+import { RefreshCw, Users, List, BarChart2, Clock, Bot, FileText, CircleCheck, CircleX, Loader2 } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -13,6 +13,7 @@ import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile } 
 import { emailService } from './services/emailService';
 import { createActivityEntry } from './services/activityLogger';
 import { mergeDebtorsWithClientSheet, mergeManualEdits } from './services/debtorDataReconciliation';
+import { applyCmpInvoiceOverrides, fetchCmpInvoiceCache } from './services/cmpInvoices';
 import { useAppSharedState } from './hooks/useAppSharedState';
 import { useManualEditsState } from './hooks/useManualEditsState';
 import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
@@ -1001,6 +1002,39 @@ function App() {
     return `http://${window.location.hostname}:3001`;
   }, []);
 
+  const [cmpStatus, setCmpStatus] = useState({
+    running: false,
+    startedAt: null,
+    lastExitAt: null,
+    lastExitCode: null,
+    logMtime: null
+  });
+
+  const refreshCmpStatus = useCallback(async () => {
+    if (!CMP_RUNNER_API_BASE) return;
+    try {
+      const response = await fetch(`${CMP_RUNNER_API_BASE}/api/cmp/status`, { method: 'GET' });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) return;
+      setCmpStatus({
+        running: Boolean(payload.running),
+        startedAt: payload.startedAt || null,
+        lastExitAt: payload.lastExitAt || null,
+        lastExitCode: payload.lastExitCode ?? null,
+        logMtime: payload.logMtime || null
+      });
+    } catch (error) {
+      // ignore (offline / server not running)
+    }
+  }, [CMP_RUNNER_API_BASE]);
+
+  useEffect(() => {
+    if (!isAndresProfile || !isLocalHost || !CMP_RUNNER_API_BASE) return;
+    refreshCmpStatus();
+    const interval = window.setInterval(refreshCmpStatus, 3000);
+    return () => window.clearInterval(interval);
+  }, [CMP_RUNNER_API_BASE, isAndresProfile, isLocalHost, refreshCmpStatus]);
+
   const runCmpScraperFromUi = useCallback(async () => {
     if (!CMP_RUNNER_API_BASE) return;
     try {
@@ -1011,6 +1045,7 @@ function App() {
       if (!response.ok) {
         throw new Error(payload?.error || `Failed to start scraper (${response.status})`);
       }
+      refreshCmpStatus();
       toast.success('CMP scraper started. Keep Chrome open and check the log if needed.', {
         duration: 4500,
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -1021,7 +1056,7 @@ function App() {
         style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
       });
     }
-  }, [CMP_RUNNER_API_BASE]);
+  }, [CMP_RUNNER_API_BASE, refreshCmpStatus]);
 
   const showCmpScraperLogTail = useCallback(async () => {
     if (!CMP_RUNNER_API_BASE) return;
@@ -1294,10 +1329,34 @@ function App() {
                   onClick={runCmpScraperFromUi}
                   title="Run CMP Auto Scraper (local only)"
                   style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  disabled={cmpStatus.running}
                 >
-                  <Bot size={14} />
-                  <span>Scrape</span>
+                  {cmpStatus.running ? <Loader2 size={14} className="spin" /> : <Bot size={14} />}
+                  <span>{cmpStatus.running ? 'Running' : 'Scrape'}</span>
                 </SyncButton>
+              )}
+              {isAndresProfile && isLocalHost && (
+                <div
+                  title={
+                    cmpStatus.running
+                      ? `Running since ${cmpStatus.startedAt || ''}`
+                      : cmpStatus.lastExitAt
+                        ? `Last exit ${cmpStatus.lastExitAt} (code ${cmpStatus.lastExitCode ?? 'n/a'})`
+                        : 'CMP scraper idle'
+                  }
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginRight: '0.4rem', opacity: 0.9 }}
+                >
+                  {cmpStatus.running ? (
+                    <Loader2 size={14} className="spin" color="var(--brand)" />
+                  ) : cmpStatus.lastExitAt && cmpStatus.lastExitCode !== null && cmpStatus.lastExitCode !== 0 ? (
+                    <CircleX size={14} color="#ef4444" />
+                  ) : (
+                    <CircleCheck size={14} color="#22c55e" />
+                  )}
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)' }}>
+                    {cmpStatus.running ? 'CMP' : 'CMP'}
+                  </span>
+                </div>
               )}
               {isAndresProfile && isLocalHost && (
                 <SyncButton
@@ -1348,6 +1407,7 @@ function App() {
 
       <style>{`
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spin { animation: spin 1.1s linear infinite; }
       `}</style>
     </AppContainer>
   );
