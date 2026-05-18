@@ -1008,6 +1008,8 @@ function App() {
     lastExitCode: null,
     logMtime: null
   });
+  const cmpWasRunningRef = useRef(false);
+  const cmpLastNotifiedExitRef = useRef(null);
 
   const refreshCmpStatus = useCallback(async () => {
     if (!CMP_RUNNER_API_BASE) return;
@@ -1022,6 +1024,30 @@ function App() {
         lastExitCode: payload.lastExitCode ?? null,
         logMtime: payload.logMtime || null
       });
+
+      // Notify on stop (only once per exit)
+      const nowRunning = Boolean(payload.running);
+      const wasRunning = cmpWasRunningRef.current;
+      cmpWasRunningRef.current = nowRunning;
+
+      if (wasRunning && !nowRunning) {
+        const exitAt = payload.lastExitAt || null;
+        if (exitAt && cmpLastNotifiedExitRef.current !== exitAt) {
+          cmpLastNotifiedExitRef.current = exitAt;
+          const code = payload.lastExitCode;
+          if (typeof code === 'number' && code !== 0) {
+            toast.error(`CMP scraper stopped (exit ${code}). Open Log for details.`, {
+              duration: 6500,
+              style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+            });
+          } else {
+            toast.success('CMP scraper finished.', {
+              duration: 4500,
+              style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+            });
+          }
+        }
+      }
     } catch (error) {
       // ignore (offline / server not running)
     }
