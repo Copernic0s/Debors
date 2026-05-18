@@ -15,6 +15,11 @@ dist-ssr
 .env.*
 .env.local
 
+# CMP automation outputs
+cmp_screenshots/
+invoices_actualizados.json
+automation/__pycache__/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
