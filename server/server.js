@@ -18,10 +18,15 @@ const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf
 // The frontend shows the button only for Andres and only in DEV.
 let cmpProcess = null;
 let cmpStartedAt = null;
+let cmpLastExitAt = null;
+let cmpLastExitCode = null;
+let cmpLastSignal = null;
+let cmpStdoutLogPath = null;
 
 const repoRoot = path.resolve(__dirname, '..');
 const CMP_LOG_PATH = path.resolve(repoRoot, process.env.CMP_LOG_FILE || 'cmp_invoice_extractor.log');
 const CMP_RUNNER_PS1 = path.resolve(repoRoot, 'automation', 'run_cmp_bot.ps1');
+const CMP_RUNNER_STDOUT_LOG = path.resolve(repoRoot, process.env.CMP_RUNNER_STDOUT_LOG || 'cmp_runner_stdout.log');
 
 const isProcessRunning = (proc) => Boolean(proc && proc.exitCode === null);
 
@@ -37,10 +42,28 @@ const tailFile = (filePath, maxLines) => {
 };
 
 app.get('/api/cmp/status', (req, res) => {
+  let logMtime = null;
+  let logSize = null;
+  try {
+    const stat = fs.existsSync(CMP_LOG_PATH) ? fs.statSync(CMP_LOG_PATH) : null;
+    if (stat) {
+      logMtime = stat.mtime.toISOString();
+      logSize = stat.size;
+    }
+  } catch (error) {
+    // ignore
+  }
+
   res.json({
     running: isProcessRunning(cmpProcess),
     startedAt: cmpStartedAt,
-    logPath: CMP_LOG_PATH
+    lastExitAt: cmpLastExitAt,
+    lastExitCode: cmpLastExitCode,
+    lastSignal: cmpLastSignal,
+    logPath: CMP_LOG_PATH,
+    logMtime,
+    logSize,
+    stdoutLogPath: cmpStdoutLogPath
   });
 });
 
@@ -75,17 +98,37 @@ app.post('/api/cmp/run', (req, res) => {
   }
 
   cmpStartedAt = new Date().toISOString();
+  cmpLastExitAt = null;
+  cmpLastExitCode = null;
+  cmpLastSignal = null;
+  cmpStdoutLogPath = CMP_RUNNER_STDOUT_LOG;
+
+  const stdoutStream = fs.createWriteStream(CMP_RUNNER_STDOUT_LOG, { flags: 'a' });
+  stdoutStream.write(`\n==== CMP RUN START ${cmpStartedAt} ====\n`);
+
   cmpProcess = spawn(
     'powershell.exe',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', CMP_RUNNER_PS1],
     {
       cwd: repoRoot,
       windowsHide: true,
-      stdio: 'ignore'
+      stdio: ['ignore', 'pipe', 'pipe']
     }
   );
 
-  cmpProcess.on('exit', () => {
+  if (cmpProcess.stdout) {
+    cmpProcess.stdout.on('data', (chunk) => stdoutStream.write(chunk));
+  }
+  if (cmpProcess.stderr) {
+    cmpProcess.stderr.on('data', (chunk) => stdoutStream.write(chunk));
+  }
+
+  cmpProcess.on('exit', (code, signal) => {
+    cmpLastExitAt = new Date().toISOString();
+    cmpLastExitCode = typeof code === 'number' ? code : null;
+    cmpLastSignal = signal || null;
+    stdoutStream.write(`\n==== CMP RUN EXIT ${cmpLastExitAt} code=${cmpLastExitCode ?? 'null'} signal=${cmpLastSignal ?? 'null'} ====\n`);
+    stdoutStream.end();
     cmpProcess = null;
   });
 
