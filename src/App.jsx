@@ -4,7 +4,6 @@ import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
-import InvoiceEntry from './components/InvoiceEntry';
 import Login from './components/Login';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { hasSupabaseConfig } from './lib/supabase';
@@ -950,10 +949,6 @@ function App() {
     if (activeView === 'tracker' && !accessProfile.canViewSupportTracker) {
       setActiveView('overview');
     }
-
-    if (activeView === 'invoice_entry' && !accessProfile.canViewInvoiceEntry) {
-      setActiveView('overview');
-    }
   }, [activeView, accessProfile]);
 
   useEffect(() => {
@@ -994,7 +989,6 @@ function App() {
   const isKevinProfile = isManagedKevinIdentity(user?.email || '');
   const kevinAccessSettings = accessFeatureOverrides.kevin || {};
   const kevinSectionAccess = {
-    canViewInvoiceEntry: Boolean(kevinAccessSettings.canViewInvoiceEntry ?? false),
     canViewSupportTracker: Boolean(kevinAccessSettings.canViewSupportTracker ?? false)
   };
 
@@ -1041,9 +1035,6 @@ function App() {
         )}
         {accessProfile.canViewSupportTracker && (
           <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        )}
-        {accessProfile.canViewInvoiceEntry && (
-          <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
         )}
         {accessProfile.canViewActivityLogs && (
           <ViewButton type="button" $active={activeView === 'activity_logs'} onClick={() => setActiveView('activity_logs')}>Activity Logs</ViewButton>
@@ -1141,7 +1132,7 @@ function App() {
                 <div>
                   <h3>Kevin Section Access</h3>
                   <p>
-                    Control when Kevin can open `Invoice Entry` and `Support Tracker` without changing his broader operations access.
+                    Control when Kevin can open `Support Tracker` without changing his broader operations access.
                   </p>
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
@@ -1150,24 +1141,6 @@ function App() {
               </AccessControlHeader>
 
               <AccessToggleGrid>
-                <AccessToggleCard>
-                  <div>
-                    <strong>Invoice Entry</strong>
-                    <span>Currently {kevinSectionAccess.canViewInvoiceEntry ? 'enabled' : 'disabled'} for Kevin.</span>
-                  </div>
-                  <ToggleSwitch
-                    type="button"
-                    $active={kevinSectionAccess.canViewInvoiceEntry}
-                    onClick={() =>
-                      updateFeatureAccessOverride('kevin', {
-                        canViewInvoiceEntry: !kevinSectionAccess.canViewInvoiceEntry
-                      })
-                    }
-                  >
-                    {kevinSectionAccess.canViewInvoiceEntry ? 'Enabled' : 'Disabled'}
-                  </ToggleSwitch>
-                </AccessToggleCard>
-
                 <AccessToggleCard>
                   <div>
                     <strong>Support Tracker</strong>
@@ -1193,55 +1166,7 @@ function App() {
           </Suspense>
         </ContentScroll>
       )}
-
-      {activeView === 'invoice_entry' && (
-        <ContentScroll>
-            <InvoiceEntry 
-              clientsByAgent={accessibleClientsByAgent} 
-              existingData={accessibleData} 
-              onSaveInvoice={(invoice) => {
-              // Optimistically update local data state so it shows in Overview immediately
-              setData(prev => {
-                // If it's a completely new manual entry, we add it to the array.
-                // If it already exists (e.g. replacing 'no_invoice' with real invoice), we update it.
-                const existingIndex = prev.findIndex(item => item.id === invoice.id || 
-                  (item.company === invoice.company && item.weekLabel === invoice.weekLabel && item.status === 'no_invoice')
-                );
-                
-                if (existingIndex >= 0) {
-                  const next = [...prev];
-                  next[existingIndex] = { ...next[existingIndex], ...invoice };
-                  return next;
-                }
-                return [...prev, invoice];
-              });
-              
-               persistEditedRows([invoice]);
-
-               // Trigger email notification if requested
-               if (invoice.sendNotification) {
-                 emailService.sendInvoiceNotification(invoice).then(res => {
-                   if (res.success) {
-                     toast.success(`Notification sent to ${invoice.company}`, {
-                       icon: '📧',
-                       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-                     });
-                   } else {
-                     toast.error(`Email failed: ${res.error}`, {
-                       style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
-                     });
-                   }
-                 });
-               }
-
-               toast.success('Invoice saved and synced', {
-                 icon: '✅',
-                 style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
-               });
-            }} 
-          />
-        </ContentScroll>
-      )}</div>
+      </div>
   );
 
   if (!hasSupabaseConfig) {

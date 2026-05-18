@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Search, ChevronDown, ChevronUp, Edit2, Trash2, Inbox, PlusCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Edit2, Trash2, Inbox } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
@@ -598,14 +598,7 @@ export default function DebtorsList({
                   <EmptyStateContainer>
                     <Inbox size={64} />
                     <h3>No Debtors Found</h3>
-                    <p>It looks like everything is clear! Start the new week by entering fresh invoices.</p>
-                    <EmptyStateButton 
-                      type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent('switch-view', { detail: 'invoice_entry' }))}
-                    >
-                      <PlusCircle size={18} />
-                      Go to Invoice Entry
-                    </EmptyStateButton>
+                    <p>It looks like everything is clear. Use Sync to pull the latest invoices, then review the current cycle.</p>
                   </EmptyStateContainer>
                 </td>
               </tr>

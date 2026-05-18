@@ -116,12 +116,8 @@ export const resolveAccessProfile = (user, featureAccessOverrides = {}) => {
   const overrideKey = isManagedKevinIdentity(email) ? 'kevin' : email;
   const userFeatureOverrides = featureAccessOverrides?.[overrideKey] || featureAccessOverrides?.[email] || {};
   const defaultManagerViewSupportTracker = isManager && !isManagedKevinIdentity(email);
-  const defaultManagerViewInvoiceEntry = isManager && !isManagedKevinIdentity(email);
   const canViewSupportTracker = Boolean(
     userFeatureOverrides.canViewSupportTracker ?? defaultManagerViewSupportTracker
-  );
-  const canViewInvoiceEntry = Boolean(
-    userFeatureOverrides.canViewInvoiceEntry ?? defaultManagerViewInvoiceEntry
   );
 
   return {
@@ -133,12 +129,10 @@ export const resolveAccessProfile = (user, featureAccessOverrides = {}) => {
     canDeleteData: isManager,
     canResetData: isManager,
     canSyncData: isManager,
-    canUseInvoiceEntry: canViewInvoiceEntry,
     canEditInvoiceDetails: isManager,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
     canViewSupportTracker,
-    canViewInvoiceEntry: canViewInvoiceEntry,
     canViewActivityLogs: canViewActivityLogsFallback(email),
     canManageAccessOverrides: canViewActivityLogsFallback(email),
     hasScopedPortfolio: isManager ? true : agentScope.length > 0
