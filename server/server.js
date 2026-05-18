@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const XLSX = require('xlsx');
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,6 +12,90 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
+
+// ---- Local-only CMP automation helpers (dev/localhost) ----
+// These endpoints are intentionally simple and are meant to be used ONLY on localhost.
+// The frontend shows the button only for Andres and only in DEV.
+let cmpProcess = null;
+let cmpStartedAt = null;
+
+const repoRoot = path.resolve(__dirname, '..');
+const CMP_LOG_PATH = path.resolve(repoRoot, process.env.CMP_LOG_FILE || 'cmp_invoice_extractor.log');
+const CMP_RUNNER_PS1 = path.resolve(repoRoot, 'automation', 'run_cmp_bot.ps1');
+
+const isProcessRunning = (proc) => Boolean(proc && proc.exitCode === null);
+
+const tailFile = (filePath, maxLines) => {
+  try {
+    if (!fs.existsSync(filePath)) return '';
+    const text = fs.readFileSync(filePath, 'utf8');
+    const lines = text.split(/\r?\n/);
+    return lines.slice(Math.max(0, lines.length - maxLines)).join('\n');
+  } catch (error) {
+    return '';
+  }
+};
+
+app.get('/api/cmp/status', (req, res) => {
+  res.json({
+    running: isProcessRunning(cmpProcess),
+    startedAt: cmpStartedAt,
+    logPath: CMP_LOG_PATH
+  });
+});
+
+app.get('/api/cmp/log', (req, res) => {
+  const lines = Math.min(1000, Math.max(50, Number(req.query.lines || 200)));
+  res.json({
+    logPath: CMP_LOG_PATH,
+    lines,
+    tail: tailFile(CMP_LOG_PATH, lines)
+  });
+});
+
+app.post('/api/cmp/run', (req, res) => {
+  // Guard: avoid accidental exposure when deployed.
+  const isLocalDev = process.env.NODE_ENV !== 'production';
+  if (!isLocalDev) {
+    return res.status(403).json({ error: 'CMP runner is only available in local development.' });
+  }
+
+  if (isProcessRunning(cmpProcess)) {
+    return res.status(409).json({
+      error: 'CMP extractor already running.',
+      startedAt: cmpStartedAt
+    });
+  }
+
+  if (!fs.existsSync(CMP_RUNNER_PS1)) {
+    return res.status(500).json({
+      error: 'CMP runner script not found.',
+      runner: CMP_RUNNER_PS1
+    });
+  }
+
+  cmpStartedAt = new Date().toISOString();
+  cmpProcess = spawn(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', CMP_RUNNER_PS1],
+    {
+      cwd: repoRoot,
+      windowsHide: true,
+      stdio: 'ignore'
+    }
+  );
+
+  cmpProcess.on('exit', () => {
+    cmpProcess = null;
+  });
+
+  return res.json({
+    ok: true,
+    startedAt: cmpStartedAt,
+    runner: CMP_RUNNER_PS1,
+    logPath: CMP_LOG_PATH
+  });
+});
 
 // Constants and Normalization Fns from Frontend
 const BILLING_CYCLES = {
