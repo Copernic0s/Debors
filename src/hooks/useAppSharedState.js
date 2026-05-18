@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'react-hot-toast';
 import { loadSharedState, saveSharedState, SHARED_APP_STATE_KEYS } from '../services/sharedAppState';
 import {
   normalizeTrackerRows,
@@ -57,7 +58,7 @@ export const useAppSharedState = ({ user, setTrackerData }) => {
     []
   );
 
-  const handleSaveFollowUp = useCallback((payload) => {
+  const handleSaveFollowUp = useCallback(async (payload) => {
     if (!payload?.id) return;
 
     const normalizedComments = sanitizeTrackerComments(payload.comments);
@@ -71,16 +72,23 @@ export const useAppSharedState = ({ user, setTrackerData }) => {
       lastComment: normalizedComments.length > 0 ? normalizedComments[normalizedComments.length - 1] : null
     };
 
+    let nextSnapshot = null;
+
     setTrackerFollowUps((prev) => {
       const next = {
         ...prev,
         [normalizedFollowUp.id]: normalizedFollowUp
       };
+      nextSnapshot = next;
       trackerFollowUpsRef.current = next;
       writeTrackerFollowUps(next);
-      saveSharedState(SHARED_APP_STATE_KEYS.trackerFollowUps, next, user?.email || null);
       return next;
     });
+
+    const saveResult = await saveSharedState(SHARED_APP_STATE_KEYS.trackerFollowUps, nextSnapshot, user?.email || null);
+    if (!saveResult?.success) {
+      toast.error('Tracker update saved locally, but cloud sync failed. Check Supabase config.', { duration: 5000 });
+    }
 
     setTrackerData((prev) =>
       normalizeTrackerRows(
