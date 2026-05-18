@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
-import { RefreshCw, Users, List, BarChart2, Clock } from 'lucide-react';
+import { RefreshCw, Users, List, BarChart2, Clock, Bot, FileText } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -989,10 +989,64 @@ function App() {
   }, [accessProfile.canViewAllData, clientsByAgent.length, loadData, loading, rawZohoData.length, user]);
 
   const isKevinProfile = isManagedKevinIdentity(user?.email || '');
+  const isAndresProfile = String(user?.email || '').toLowerCase().includes('andres');
+  const isLocalHost = import.meta.env.DEV && ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const kevinAccessSettings = accessFeatureOverrides.kevin || {};
   const kevinSectionAccess = {
     canViewSupportTracker: Boolean(kevinAccessSettings.canViewSupportTracker ?? false)
   };
+
+  const CMP_RUNNER_API_BASE = useMemo(() => {
+    if (!import.meta.env.DEV) return null;
+    return `http://${window.location.hostname}:3001`;
+  }, []);
+
+  const runCmpScraperFromUi = useCallback(async () => {
+    if (!CMP_RUNNER_API_BASE) return;
+    try {
+      const response = await fetch(`${CMP_RUNNER_API_BASE}/api/cmp/run`, {
+        method: 'POST'
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || `Failed to start scraper (${response.status})`);
+      }
+      toast.success('CMP scraper started. Keep Chrome open and check the log if needed.', {
+        duration: 4500,
+        style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
+      });
+    } catch (error) {
+      toast.error(`Could not start CMP scraper. Start the local backend (port 3001). ${error?.message || ''}`, {
+        duration: 6000,
+        style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+      });
+    }
+  }, [CMP_RUNNER_API_BASE]);
+
+  const showCmpScraperLogTail = useCallback(async () => {
+    if (!CMP_RUNNER_API_BASE) return;
+    try {
+      const response = await fetch(`${CMP_RUNNER_API_BASE}/api/cmp/log?lines=120`, { method: 'GET' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || `Failed to read log (${response.status})`);
+      const tail = String(payload?.tail || '').trim();
+      toast(tail ? tail : 'No CMP log data yet.', {
+        duration: 7000,
+        style: {
+          background: 'var(--surface-3)',
+          color: 'var(--text-main)',
+          border: '1px solid var(--border-color)',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace',
+          whiteSpace: 'pre-wrap'
+        }
+      });
+    } catch (error) {
+      toast.error(`Could not read CMP log. ${error?.message || ''}`, {
+        duration: 6000,
+        style: { background: 'var(--surface-3)', color: '#ef4444', border: '1px solid #ef4444' }
+      });
+    }
+  }, [CMP_RUNNER_API_BASE]);
 
   const {
     handleDeleteDebtor,
@@ -1235,6 +1289,26 @@ function App() {
               <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
                 <span>Sync</span>
               </SyncButton>
+              {isAndresProfile && isLocalHost && (
+                <SyncButton
+                  onClick={runCmpScraperFromUi}
+                  title="Run CMP Auto Scraper (local only)"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <Bot size={14} />
+                  <span>Scrape</span>
+                </SyncButton>
+              )}
+              {isAndresProfile && isLocalHost && (
+                <SyncButton
+                  onClick={showCmpScraperLogTail}
+                  title="View CMP log tail (local only)"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <FileText size={14} />
+                  <span>Log</span>
+                </SyncButton>
+              )}
               <LogoutButton onClick={handleLogout} disabled={isLoggingOut}>
                 {isLoggingOut ? 'Closing...' : 'Logout'}
               </LogoutButton>
