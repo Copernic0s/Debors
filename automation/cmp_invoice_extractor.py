@@ -44,7 +44,7 @@ ZOHO_XLSX_URL = os.getenv(
     "https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx",
 )
 ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
-DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "25"))
+DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "90"))
 SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
 SEARCH_KEYSTROKE_DELAY = float(os.getenv("CMP_SEARCH_KEYSTROKE_DELAY", "0.06"))
@@ -132,12 +132,19 @@ def build_search_queries(client_name: str) -> list[str]:
     stripped_parenthetical = re.sub(r"\s*\([^)]*\)", "", primary).strip()
     stripped_symbols = re.sub(r"[^A-Z0-9 ]+", " ", stripped_parenthetical)
     stripped_symbols = re.sub(r"\s+", " ", stripped_symbols).strip()
+    
+    # Strip LLC, INC, CORP, etc for a broader search
+    stripped_llc = re.sub(r"\b(LLC|INC|CORP|CO|LTD|LIMITED)\b", "", stripped_symbols, flags=re.IGNORECASE)
+    stripped_llc = re.sub(r"\s+", " ", stripped_llc).strip()
 
     queries = [primary]
     if stripped_parenthetical and stripped_parenthetical not in queries:
         queries.append(stripped_parenthetical)
     if stripped_symbols and stripped_symbols not in queries:
         queries.append(stripped_symbols)
+    if stripped_llc and stripped_llc not in queries:
+        queries.append(stripped_llc)
+        
     return queries
 
 
@@ -283,6 +290,8 @@ def build_chrome_options(*, user_data_dir: str = "", profile_dir: str = "") -> C
     options.add_argument("--disable-features=RendererCodeIntegrity")
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--remote-debugging-port=9222")
+    options.add_argument("--disable-extensions")
 
     if user_data_dir:
         options.add_argument(f"--user-data-dir={user_data_dir}")
@@ -474,15 +483,20 @@ def save_debug_screenshot(driver: WebDriver, prefix: str) -> None:
 
 def perform_login(driver: WebDriver) -> None:
     attached_mode = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
-    if not attached_mode:
-        safe_get(driver, BASE_URL)
+    
+    # Always navigate to /company first
+    logging.info("Navigating to %s", COMPANY_URL)
+    safe_get(driver, COMPANY_URL)
+    
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
 
     email = os.getenv("CMP_EMAIL", "").strip()
     password = os.getenv("CMP_PASSWORD", "").strip()
     if not email or not password:
         logging.info("CMP_EMAIL/CMP_PASSWORD not set. Waiting for authenticated CMP session...")
-        wait.until(lambda current: "/auth" not in current.current_url)
+        logging.info("Current URL: %s", driver.current_url)
+        wait.until(lambda current: "/company" in current.current_url and "/auth" not in current.current_url)
+        logging.info("Login check passed! Proceeding...")
         return
 
     if attached_mode and "/auth" not in driver.current_url:
@@ -554,29 +568,42 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
         return driver.execute_script(script) or []
 
     def wait_for_stable_results() -> list:
-        no_data_xpath = (
-            "//*[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no data') "
-            "or contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'no results')]"
-        )
         start = time.time()
         stable_rows: list[dict] = []
         stable_hits = 0
         last_signature = ""
         while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
             rows = result_rows_snapshot()
+            
+            # Check if it looks like a "no data" placeholder
+            is_no_data = False
+            if len(rows) == 1:
+                text = rows[0].get("rowText", "").lower()
+                if "no data" in text or "no results" in text or "nothing found" in text:
+                    is_no_data = True
+                    
+            if is_no_data:
+                # If it's been less than 7 seconds, keep waiting in case it's just loading
+                if time.time() - start < 7.0:
+                    time.sleep(0.5)
+                    continue
+                else:
+                    stable_rows = []
+                    break
+
             signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
             if signature and signature == last_signature:
                 stable_hits += 1
             else:
                 stable_hits = 0
                 last_signature = signature
-            if rows and stable_hits >= 2:
+                
+            if rows and stable_hits >= 3:
                 stable_rows = rows
                 break
-            if driver.find_elements(By.XPATH, no_data_xpath):
-                stable_rows = []
-                break
-            time.sleep(0.25)
+
+            time.sleep(0.5)
+            
         if SEARCH_SETTLE_SECONDS > 0:
             time.sleep(SEARCH_SETTLE_SECONDS)
         return stable_rows if stable_rows else result_rows_snapshot()
@@ -614,9 +641,14 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     for query in build_search_queries(client_name):
         attempted_queries.append(query)
         search_input.click()
+        search_input.clear()
+        # Fallback to ensure it's empty
         search_input.send_keys(Keys.CONTROL, "a")
-        search_input.send_keys(Keys.DELETE)
-        type_like_human(search_input, query.upper())
+        search_input.send_keys(Keys.BACKSPACE)
+        
+        # We send the entire query at once. Character-by-character typing can cause
+        # React's onChange handler to re-render and move the cursor, interleaving characters.
+        search_input.send_keys(query.upper())
         time.sleep(0.35)
         search_input.send_keys(Keys.ENTER)
         search_input.send_keys(Keys.TAB)
@@ -633,6 +665,10 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
                     break
             except Exception:
                 continue
+
+        # Hard wait to allow slow network requests to complete before checking results
+        logging.info("Waiting 5 seconds for results to load for '%s'...", query)
+        time.sleep(5.0)
 
         rows = wait_for_stable_results()
         if rows:
@@ -681,6 +717,10 @@ def open_invoices_tab(driver: WebDriver) -> None:
     WebDriverWait(driver, DEFAULT_TIMEOUT).until(
         lambda current: any(current.find_elements(By.CSS_SELECTOR, selector) for selector in SELECTORS.table_selectors)
     )
+    
+    # Hard wait to allow the network request for invoice rows to complete
+    logging.info("Waiting 5 seconds for invoice rows to populate...")
+    time.sleep(5.0)
 
 
 def scroll_invoice_table_horizontally(driver: WebDriver) -> None:
@@ -715,21 +755,39 @@ def extract_latest_invoice(driver: WebDriver) -> dict | None:
     best_invoice = None
 
     for table in tables:
-        headers = [normalize_text(cell.text) for cell in table.find_elements(By.XPATH, ".//thead//th")]
+        # Some tables use standard th, others use role=columnheader
+        header_cells = table.find_elements(By.XPATH, ".//thead//th | .//*[@role='columnheader'] | .//th")
+        if not header_cells:
+            # If still nothing, try the first row's td
+            header_cells = table.find_elements(By.XPATH, "(.//tr | .//*[@role='row'])[1]//*[self::td or self::th or @role='cell' or @role='columnheader']")
+
+        headers = [normalize_text(cell.text) for cell in header_cells]
         if not headers:
             continue
 
-        invoice_index = next((i for i, text in enumerate(headers) if ("invoice" in text and "#" in text) or "invoice" in text), None)
-        amount_index = next((i for i, text in enumerate(headers) if "total amount" in text), None)
-        date_index = next((i for i, text in enumerate(headers) if "date" in text or "created" in text or "issued" in text), None)
-        status_index = next((i for i, text in enumerate(headers) if "status" in text), None)
+        invoice_index = next((i for i, text in enumerate(headers) if text in ["invoice number", "invoice #", "invoice_number"]), None)
+        if invoice_index is None:
+            invoice_index = next((i for i, text in enumerate(headers) if "invoice num" in text), None)
+
+        amount_index = next((i for i, text in enumerate(headers) if text in ["total amount", "amount"]), None)
+        if amount_index is None:
+            amount_index = next((i for i, text in enumerate(headers) if "total amount" in text), None)
+
+        date_index = next((i for i, text in enumerate(headers) if text in ["invoice date", "created at", "date"]), None)
+        if date_index is None:
+            date_index = next((i for i, text in enumerate(headers) if "date" in text or "created" in text), None)
+
+        status_index = next((i for i, text in enumerate(headers) if text == "status"), None)
+        if status_index is None:
+            status_index = next((i for i, text in enumerate(headers) if "status" in text and "company" not in text), None)
 
         if invoice_index is None or amount_index is None:
+            logging.debug("Skipping table because required columns are missing. Found headers: %s", headers)
             continue
 
-        rows = table.find_elements(By.XPATH, ".//tbody/tr")
+        rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
         for row in rows:
-            cells = row.find_elements(By.XPATH, "./td")
+            cells = row.find_elements(By.XPATH, "./td | .//*[@role='cell']")
             if len(cells) <= max(invoice_index, amount_index):
                 continue
 
@@ -785,85 +843,211 @@ def export_results(results: list[dict], output_path: Path) -> None:
         json.dump(results, handle, ensure_ascii=False, indent=2)
 
 
-def process_clients(driver: WebDriver, clients: list[dict]) -> list[dict]:
+def process_global_invoices(driver: WebDriver) -> list[dict]:
     results = []
-    active_driver = driver
-
-    for index, client in enumerate(clients, start=1):
-        client_name = client["client_name"]
-        billing_cycle = client["billing_cycle"]
-        logging.info("[%s/%s] Processing %s", index, len(clients), client_name)
-
+    
+    url = "https://cmp-front.production.united-fuel.com/invoicing?limit=500"
+    logging.info("Loading global invoices base URL: %s", url)
+    driver.get(url)
+    
+    is_aborted = False
+    for page in range(1, 51):
+        logging.info("Scanning global invoices page %d (Items %d to %d)...", page, (page-1)*500, page*500)
+        
+        wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
         try:
-            found = open_matching_company(active_driver, client_name)
-            if not found:
-                logging.warning("Client not found: %s", client_name)
-                results.append(build_result(client_name, billing_cycle, None, "Not Found"))
-                continue
-
-            open_invoices_tab(active_driver)
-            invoice_payload = extract_latest_invoice(active_driver)
-
-            if invoice_payload:
-                results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
+            wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
+            logging.info("Table shell detected. Polling for data rows to render (up to 120 seconds)...")
+            
+            # Smart polling for rows
+            for _ in range(24): # 120 seconds max
+                tables = []
+                for selector in SELECTORS.table_selectors:
+                    tables.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+                
+                if tables:
+                    current_rows = tables[0].find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
+                    if len(current_rows) > 1:
+                        logging.info("Data rows rendered successfully!")
+                        break
+                time.sleep(5)
             else:
-                logging.warning("No invoice rows found for: %s", client_name)
-                save_debug_screenshot(driver, f"no_invoice_{index:03d}")
-                results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
-        except Exception as error:  # pragma: no cover
-            recoverable = isinstance(error, (NoSuchWindowException, InvalidSessionIdException))
-            if recoverable:
-                logging.warning("Browser session dropped on %s. Restarting driver and retrying once.", client_name)
-                try:
-                    active_driver.quit()
-                except Exception:
-                    pass
-                active_driver = create_driver()
-                perform_login(active_driver)
-                try:
-                    found = open_matching_company(active_driver, client_name)
-                    if found:
-                        open_invoices_tab(active_driver)
-                        invoice_payload = extract_latest_invoice(active_driver)
-                        if invoice_payload:
-                            results.append(build_result(client_name, billing_cycle, invoice_payload, "Captured"))
-                        else:
-                            results.append(build_result(client_name, billing_cycle, None, "No Invoice Found"))
-                    else:
-                        results.append(build_result(client_name, billing_cycle, None, "Not Found"))
-                    continue
-                except Exception as retry_error:
-                    logging.exception("Retry also failed for %s: %s", client_name, retry_error)
-
-            logging.exception("Failed to process %s: %s", client_name, error)
-            save_debug_screenshot(active_driver, f"error_{index:03d}")
-            results.append(build_result(client_name, billing_cycle, None, f"Error: {type(error).__name__}"))
+                logging.warning("Timeout waiting for rows to render. It might actually be empty.")
+                
+        except TimeoutException:
+            logging.warning("Table not found on page %d, stopping pagination.", page)
+            if page > 1 and len(results) > 0:
+                logging.error("Network dropped on page %d! Aborting extraction to prevent partial data corruption.", page)
+                return []
+            break
+            
+        tables = []
+        for selector in SELECTORS.table_selectors:
+            tables.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+            
+        if not tables:
+            logging.warning("No tables found on page %d.", page)
+            break
+            
+        table = tables[0]
+        
+        header_cells = table.find_elements(By.XPATH, ".//thead//th | .//*[@role='columnheader'] | .//th")
+        if not header_cells:
+            header_cells = table.find_elements(By.XPATH, "(.//tr | .//*[@role='row'])[1]//*[self::td or self::th or @role='cell' or @role='columnheader']")
+            
+        headers = [normalize_text(cell.text) for cell in header_cells]
+        if not headers:
+            logging.warning("Could not find headers in table.")
+            break
+            
+        if page == 1:
+            logging.info("Headers found: %s", headers)
+            
+        company_index = next((i for i, text in enumerate(headers) if "company name" in text), None)
+        invoice_index = next((i for i, text in enumerate(headers) if text in ["invoice number", "invoice #", "invoice_number"]), None)
+        amount_index = next((i for i, text in enumerate(headers) if text in ["total amount", "amount", "total due"]), None)
+        date_index = next((i for i, text in enumerate(headers) if text in ["invoice date", "created at", "date"]), None)
+        status_index = next((i for i, text in enumerate(headers) if text == "status" or "payment status" in text), None)
+        billing_cycle_index = next((i for i, text in enumerate(headers) if "billing cycle" in text), None)
+        due_date_index = next((i for i, text in enumerate(headers) if "due date" in text), None)
+            
+        if company_index is None or invoice_index is None or amount_index is None or status_index is None:
+            logging.error("Missing required columns. Found: %s", headers)
+            break
+            
+        rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
+        if len(rows) <= 1:
+            if page > 1 and len(results) >= 490: # If we got a full page before, page 2 shouldn't be completely empty out of nowhere
+                logging.error("Page %d has no data rows but previous page was full! Network dropped. Aborting to prevent data corruption.", page)
+                return []
+            logging.info("No data rows found on page %d. Stopping.", page)
+            break
+            
+        valid_rows_found = len(rows)
+        pending_found_this_page = 0
+        
+        js_script = """
+        var table = arguments[0];
+        var cIdx = arguments[1], iIdx = arguments[2], aIdx = arguments[3], sIdx = arguments[4], dIdx = arguments[5], bcIdx = arguments[6], ddIdx = arguments[7];
+        var rows = table.querySelectorAll('tbody tr, [role="row"]:not([role="columnheader"])');
+        var extracted = [];
+        for (var i = 0; i < rows.length; i++) {
+            var cells = rows[i].querySelectorAll('td, [role="cell"]');
+            if (cells.length > Math.max(cIdx, iIdx, aIdx, sIdx)) {
+                var company = cells[cIdx].innerText.trim();
+                var invoice = cells[iIdx].innerText.trim();
+                var amount = cells[aIdx].innerText.trim();
+                var status = cells[sIdx].innerText.trim();
+                var date = (dIdx !== null && dIdx < cells.length) ? cells[dIdx].innerText.trim() : "";
+                var billing_cycle = (bcIdx !== null && bcIdx < cells.length) ? cells[bcIdx].innerText.trim() : "";
+                var due_date = (ddIdx !== null && ddIdx < cells.length) ? cells[ddIdx].innerText.trim() : "";
+                
+                var status_upper = status.toUpperCase();
+                if (status_upper.includes("PENDING") || status_upper.includes("PARTIAL")) {
+                    extracted.push([company, invoice, amount, status, date, billing_cycle, due_date]);
+                }
+            }
+        }
+        return extracted;
+        """
+        
+        raw_rows = driver.execute_script(js_script, table, company_index, invoice_index, amount_index, status_index, date_index, billing_cycle_index, due_date_index)
+        
+        for row_data in raw_rows:
+            company_name, invoice_id, amount_text, status, date_text, billing_cycle, due_date_text = row_data
+            if not company_name or not invoice_id:
+                continue
+                
+            amount = parse_amount(amount_text)
+            date_value = parse_date(date_text)
+            due_date_value = parse_date(due_date_text) if due_date_text else None
+            
+            pending_found_this_page += 1
+            results.append({
+                "client_name": company_name,
+                "billing_cycle": billing_cycle,
+                "invoice_id": invoice_id,
+                "amount": f"{amount:.2f}" if amount is not None else "",
+                "invoice_status": status,
+                "status": "Captured",
+                "date": date_value.strftime("%Y-%m-%d") if hasattr(date_value, "strftime") else str(date_value),
+                "due_date": due_date_value.strftime("%Y-%m-%d") if hasattr(due_date_value, "strftime") else str(due_date_value),
+                "last_update": datetime.now().strftime("%Y-%m-%d"),
+            })
+                
+        logging.info("Scanned %d total rows on page %d. Found %d pending/partial (Total stored: %d).", valid_rows_found, page, pending_found_this_page, len(results))
+        if valid_rows_found <= 1:
+            break
+            
+        # --- NEW PAGINATION LOGIC: CLICK NEXT BUTTON ---
+        if page < 50:
+            try:
+                # Use a very broad selector for any button/link/div that has "Next" or an SVG that implies next, or aria-label
+                next_btns = driver.find_elements(By.XPATH, "//*[@aria-label='Go to next page' or @title='Go to next page' or @title='Next Page' or contains(@class, 'next') or contains(text(), 'Next')] | //button[contains(., 'Next')]")
+                
+                # Filter out obvious wrong matches if any, usually taking the last one works best
+                if not next_btns:
+                    logging.info("Could not find a 'Next' button on page %d. Assuming end of pages.", page)
+                    break
+                    
+                next_btn = next_btns[-1]
+                
+                # Store the ID of the first row to ensure it changes
+                first_row_id = rows[0].text if len(rows) > 0 else ""
+                
+                logging.info("Clicking 'Next >' button to load page %d...", page + 1)
+                
+                # Ultimate raw JS click (bypasses all visual overlays, toolbars, and React quirks)
+                driver.execute_script("""
+                    var event = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    arguments[0].dispatchEvent(event);
+                    arguments[0].click(); // Fallback
+                """, next_btn)
+                
+                logging.info("Waiting for table to refresh (up to 60 seconds)...")
+                
+                # Poll until the first row changes
+                for _ in range(60):
+                    time.sleep(1)
+                    try:
+                        new_rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
+                        if len(new_rows) > 1:
+                            new_first_row_id = new_rows[0].text
+                            if new_first_row_id != first_row_id:
+                                logging.info("Table refreshed successfully!")
+                                break
+                    except Exception as e:
+                        # Ignore stale elements during React renders
+                        pass
+                else:
+                    logging.warning("Table did not refresh! Aborting pagination to prevent duplicate data extraction.")
+                    is_aborted = True
+                    break
+                    
+            except Exception as e:
+                logging.warning("Failed to click Next Page button: %s. Stopping pagination.", e)
+                is_aborted = True
+                break
+        
+    if is_aborted:
+        logging.error("Extraction aborted prematurely due to network issues! Returning empty list to protect frontend data integrity.")
+        return []
 
     return results
 
-
 def main() -> int:
     configure_logging()
-
-    input_mode = os.getenv("CMP_INPUT_MODE", "zoho_sheet").strip().lower()
-    input_file = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(os.getenv("CMP_INPUT_FILE", "automation/clients.example.csv"))
-
-    if input_mode == "zoho_sheet":
-        clients = read_clients_from_zoho_workbook()
-    else:
-        if not input_file.exists():
-            raise FileNotFoundError(f"Input file not found: {input_file}")
-        clients = read_clients(input_file)
-
-    if not clients:
-        raise ValueError("No clients found in input file")
-
     driver = create_driver()
     try:
         perform_login(driver)
-        results = process_clients(driver, clients)
+        logging.info("Login complete. Starting global extraction...")
+        results = process_global_invoices(driver)
         export_results(results, OUTPUT_PATH)
-        logging.info("Extraction finished. Output saved to %s", OUTPUT_PATH)
+        logging.info("Extraction finished. Extracted %d pending invoices. Output saved to %s", len(results), OUTPUT_PATH)
         return 0
     finally:
         driver.quit()
@@ -872,7 +1056,6 @@ def main() -> int:
                 shutil.rmtree(temp_directory, ignore_errors=True)
             except Exception:
                 pass
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

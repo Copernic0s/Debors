@@ -213,7 +213,7 @@ export const aggregateByCompany = (rows) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
     const companyKey = normalizeMatchKey(company);
-    const key = `${companyKey}-${invKey}`;
+    const key = `${companyKey}`;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;
@@ -279,7 +279,6 @@ export const aggregateByCompany = (rows) => {
         current.dueDate = row.dueDate;
         current.latestId = row.id;
         current.invoiceNumber = row.invoiceNumber || current.invoiceNumber;
-        current.status = row.status || current.status;
         current.notes = row.notes || current.notes;
         if (!current.isSheetCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
           current.billingCycle = normalizedRowCycle;
@@ -314,6 +313,12 @@ export const aggregateByCompany = (rows) => {
         status = 'overdue';
         isAutoOverdue = true;
       }
+    }
+
+    // Final safety net: If the total amount is 0, it cannot be overdue or pending.
+    if (item.amount <= 0) {
+      status = 'paid';
+      isAutoOverdue = false;
     }
 
     const companyRows = rows

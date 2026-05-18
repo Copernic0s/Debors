@@ -659,6 +659,12 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
   const [activeCompany, setActiveCompany] = useState(null);
+  const handleSignedOut = useCallback(() => {
+    setActiveView('overview');
+    setCurrentDebtor(null);
+    setActiveCompany(null);
+  }, []);
+
   const {
     activityLogRefreshKey,
     handleLogout,
@@ -667,11 +673,7 @@ function App() {
     setAuthenticatedUser,
     user
   } = useAppSession({
-    onSignedOut: () => {
-      setActiveView('overview');
-      setCurrentDebtor(null);
-      setActiveCompany(null);
-    }
+    onSignedOut: handleSignedOut
   });
   const {
     accessFeatureOverrides,
