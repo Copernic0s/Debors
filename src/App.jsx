@@ -13,7 +13,6 @@ import { agentMatchesScopeValue, isManagedKevinIdentity, resolveAccessProfile } 
 import { emailService } from './services/emailService';
 import { createActivityEntry } from './services/activityLogger';
 import { mergeDebtorsWithClientSheet, mergeManualEdits } from './services/debtorDataReconciliation';
-import { applyCmpInvoiceOverrides, fetchCmpInvoiceCache } from './services/cmpInvoices';
 import { useAppSharedState } from './hooks/useAppSharedState';
 import { useManualEditsState } from './hooks/useManualEditsState';
 import { MANUAL_EDITS_TABLE } from './services/manualEditsPersistence';
