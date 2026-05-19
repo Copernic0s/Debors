@@ -216,7 +216,7 @@ export const aggregateByCompany = (rows) => {
 };
 
 export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
-  const [data, setData] = useState([]);
+  const [data, setDisplayData] = useState([]);
   const [rawZohoData, setRawZohoData] = useState([]);
   const [clientsByAgent, setClientsByAgent] = useState([]);
   const [trackerData, setTrackerData] = useState([]);
@@ -356,7 +356,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   useEffect(() => {
     if (rawZohoData.length === 0 && Object.keys(manualEdits).length === 0) return;
     const hydrated = mergeManualEdits(rawZohoData, manualEdits);
-    setData(hydrated);
+    setDisplayData(hydrated);
   }, [rawZohoData, manualEdits]);
 
   useEffect(() => { loadData(); }, [loadData]);

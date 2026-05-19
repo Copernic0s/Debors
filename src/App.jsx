@@ -659,7 +659,6 @@ function App() {
               changed.forEach(row => {
                 nextEdits[row.id] = row;
               });
-              manualEditsRef.current = nextEdits;
               return nextEdits;
             });
             persistEditedRows(changed);
@@ -671,7 +670,6 @@ function App() {
           const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
           setManualEdits(prevEdits => {
             const nextEdits = { ...prevEdits, [debtor.id]: debtor };
-            manualEditsRef.current = nextEdits;
             return nextEdits;
           });
           persistEditedRows([debtor]);
@@ -726,7 +724,6 @@ function App() {
       setManualEdits((prev) => {
         const next = { ...prev };
         delete next[id];
-        manualEditsRef.current = next;
         return next;
       });
 
@@ -790,58 +787,6 @@ function App() {
   const openCompanyProfile = (companyName) => {
     if (!companyName) return;
     setActiveCompany(companyName);
-  };
-
-  const persistEditedRows = async (rows) => {
-    if (!rows || rows.length === 0 || !user) return;
-
-    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
-    // We also filter out any null or undefined IDs.
-    const upserts = rows
-      .filter(row => row.id)
-      .map(row => ({
-        id: String(row.id),
-        company: row.company || row.clientName || null,
-        agent_id: row.agentId || null,
-        amount: Number(row.amount) || 0,
-        status: String(row.status || 'pending'),
-        due_date: row.dueDate || null,
-        last_invoiced_date: row.lastInvoicedDate || null,
-        last_no_usage_date: row.lastNoUsageDate || null,
-        billing_cycle: row.billingCycle || null,
-        invoice_number: row.invoiceNumber || null,
-        updated_at: new Date().toISOString(),
-        notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
-      }));
-
-    if (upserts.length === 0) return;
-
-    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
-
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert(upserts);
-
-      if (error) {
-        console.error('[Persistence] Supabase Error:', error);
-        throw error;
-      }
-
-      // Update local ref after successful DB update
-      setManualEdits(prev => {
-        const next = { ...prev };
-        rows.forEach(row => {
-          next[row.id] = { ...row };
-        });
-        manualEditsRef.current = next;
-        return next;
-      });
-    } catch (error) {
-      const msg = error?.message || 'Unknown network error';
-      toast.error(`Cloud Sync Failed: ${msg}`, { duration: 5000 });
-      console.error('[Persistence] Detailed Error:', error);
-    }
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
