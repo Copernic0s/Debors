@@ -5,8 +5,16 @@ const XLSX = require('xlsx');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const { getCmpStatus, tailLog, startCmpScraper } = require('./cmpRunner');
+const { ingestCmpSnapshot, verifyCmpIngestSecret } = require('./cmpIngest.cjs');
 
 app.use(cors());
+app.use(express.json({ limit: '12mb' }));
+
+const isCsByAgentSheet = (name) => {
+  const lower = String(name || '').trim().toLowerCase();
+  return lower === 'cs by agent' || lower === 'client by agent';
+};
 
 const SHEET_XLSX_URL = 'https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx';
 
@@ -365,7 +373,7 @@ app.get('/api/debtors', async (req, res) => {
     const workbook = XLSX.read(response.data, { type: 'buffer' });
     console.log('[Zoho Sync] Sheets found:', workbook.SheetNames.join(', '));
 
-    const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
+    const csSheetName = workbook.SheetNames.find((name) => isCsByAgentSheet(name));
     
     const trackerSheetName = workbook.SheetNames.find((name) => {
       const lower = name.trim().toLowerCase();
@@ -402,6 +410,40 @@ app.get('/api/debtors', async (req, res) => {
   } catch (error) {
     console.error('Error fetching/parsing Zoho sheet:', error.message);
     res.status(500).json({ error: 'Failed to ingest data from Zoho' });
+  }
+});
+
+app.get('/api/cmp/status', (_req, res) => {
+  res.json(getCmpStatus());
+});
+
+app.get('/api/cmp/log', (req, res) => {
+  const lines = Number.parseInt(String(req.query.lines || '120'), 10);
+  res.json({ tail: tailLog(Number.isFinite(lines) ? lines : 120) });
+});
+
+app.post('/api/cmp/run', (_req, res) => {
+  try {
+    const result = startCmpScraper();
+    if (!result.started) {
+      return res.status(409).json({ error: 'CMP scraper is already running' });
+    }
+    return res.json({ ok: true, ...getCmpStatus() });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to start CMP scraper' });
+  }
+});
+
+app.post('/api/cmp/ingest', async (req, res) => {
+  try {
+    if (!verifyCmpIngestSecret(req)) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const result = await ingestCmpSnapshot(req.body || {});
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('[CMP Ingest]', error);
+    return res.status(500).json({ error: error.message || 'CMP ingest failed' });
   }
 });
 

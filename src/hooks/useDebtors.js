@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchAllDataFromSheet } from '../services/zohoWorkDrive';
+import { fetchCmpInvoices, fetchCmpSyncMeta } from '../services/cmpInvoices';
+import { mapCmpInvoicesToDebtorRows, mergeZohoWithCmpRows } from '../services/cmpMerge';
 import { normalizeWeekLabel, normalizeMatchKey } from '../utils/normalizers';
 import { roundMoney } from '../utils/moneyUtils';
 import { normalizeBillingCycle } from '../constants/billingCycles';
@@ -222,6 +224,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [lastCmpSyncAt, setLastCmpSyncAt] = useState(null);
+  const [cmpInvoiceCount, setCmpInvoiceCount] = useState(0);
 
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
@@ -272,14 +276,28 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
 
     try {
       const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
-      const mergedData = mergeDebtorsWithClientSheet(sheetData, csData);
       setClientsByAgent(csData || []);
 
       if (trackerLogs) setTrackerData(trackerLogs);
 
+      let cmpRows = [];
+      try {
+        const cmpInvoices = await fetchCmpInvoices(supabase);
+        cmpRows = mapCmpInvoicesToDebtorRows(cmpInvoices, csData);
+        setCmpInvoiceCount(cmpRows.length);
+        const cmpMeta = await fetchCmpSyncMeta(supabase);
+        setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
+      } catch (cmpError) {
+        console.warn('[CMP] Load skipped:', cmpError.message);
+        setCmpInvoiceCount(0);
+      }
+
+      const zohoMerged = mergeDebtorsWithClientSheet(sheetData, csData);
+      const mergedData = mergeZohoWithCmpRows(zohoMerged, cmpRows);
+
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
-        setSyncSourceLabel('Zoho WorkDrive');
+        setSyncSourceLabel(cmpRows.length > 0 ? 'Zoho + CMP' : 'Zoho WorkDrive');
       } else {
         setRawZohoData([]);
         setSyncSourceLabel('Zoho WorkDrive');
@@ -293,7 +311,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
       setIsSyncing(false);
       syncInFlightRef.current = false;
     }
-  }, []);
+  }, [supabase]);
 
   const persistEditedRows = useCallback(async (rows) => {
     if (!rows || rows.length === 0 || !user || !supabase) return;
@@ -371,6 +389,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     isSyncing,
     syncSourceLabel,
     lastSyncAt,
+    lastCmpSyncAt,
+    cmpInvoiceCount,
     manualEdits,
     setManualEdits,
     loadData,

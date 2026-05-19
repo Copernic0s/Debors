@@ -343,7 +343,10 @@ const fetchWorkbook = async () => {
 export default async function handler(_req, res) {
   try {
     const workbook = await fetchWorkbook();
-    const csSheetName = workbook.SheetNames.find((name) => name.trim().toLowerCase() === 'cs by agent');
+    const csSheetName = workbook.SheetNames.find((name) => {
+      const lower = name.trim().toLowerCase();
+      return lower === 'cs by agent' || lower === 'client by agent';
+    });
     const trackerSheetName = workbook.SheetNames.find((name) => {
       const lower = name.trim().toLowerCase();
       return lower === 'tracker' || lower === 'traker';
