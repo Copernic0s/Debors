@@ -21,7 +21,12 @@ from typing import Any
 import pandas as pd
 import requests
 from selenium import webdriver
-from selenium.common.exceptions import SessionNotCreatedException, TimeoutException, WebDriverException
+from selenium.common.exceptions import (
+    InvalidSessionIdException,
+    SessionNotCreatedException,
+    TimeoutException,
+    WebDriverException,
+)
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
@@ -267,23 +272,75 @@ def resolve_column_index(headers: list[str], candidates: tuple[str, ...]) -> int
     return None
 
 
+def safe_current_url(driver: WebDriver) -> str:
+    try:
+        return str(driver.current_url or "")
+    except InvalidSessionIdException as error:
+        raise RuntimeError(
+            "Chrome closed or lost the debugger connection. "
+            "Keep the Profile 8 window open and run Sync All again."
+        ) from error
+
+
+def navigate_to_invoicing(driver: WebDriver) -> None:
+    write_status(running=True, phase="navigate", message="Opening CMP invoicing...")
+    logging.info("Navigating to %s", INVOICING_URL)
+
+    try:
+        current = safe_current_url(driver)
+        if "/invoicing" in current and "/auth" not in current:
+            logging.info("Already on invoicing page: %s", current)
+            return
+    except RuntimeError:
+        raise
+
+    try:
+        driver.get(INVOICING_URL)
+    except WebDriverException as error:
+        logging.warning("driver.get failed, trying in-page navigation: %s", error)
+        driver.execute_script("window.location.assign(arguments[0]);", INVOICING_URL)
+
+    manual_timeout = int(os.getenv("CMP_MANUAL_LOGIN_TIMEOUT_SECONDS", "300"))
+    start = time.time()
+    last_status_at = 0.0
+
+    while time.time() - start < manual_timeout:
+        url = safe_current_url(driver)
+        if "/invoicing" in url and "/auth" not in url:
+            logging.info("Invoicing page ready: %s", url)
+            write_status(
+                running=True,
+                phase="navigate",
+                message="CMP invoicing loaded. Starting table scan...",
+            )
+            return
+
+        now = time.time()
+        if now - last_status_at >= 5:
+            elapsed = int(now - start)
+            hint = "log in on the Chrome window" if "/auth" in url else "waiting for invoicing table"
+            write_status(
+                running=True,
+                phase="navigate",
+                message=f"Waiting for invoicing ({elapsed}s) — {hint}. URL: {url[:80]}",
+            )
+            logging.info("Waiting for invoicing (%ss): %s", elapsed, url)
+            last_status_at = now
+
+        time.sleep(1)
+
+    raise TimeoutException(
+        f"Timed out after {manual_timeout}s waiting for CMP invoicing. "
+        "Open Chrome Profile 8 on the invoicing page while logged in."
+    )
+
+
 def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[dict[str, Any]]:
     cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    write_status(running=True, phase="navigate", message="Opening CMP invoicing...")
-    driver.get(INVOICING_URL)
-
-    manual_timeout = int(os.getenv("CMP_MANUAL_LOGIN_TIMEOUT_SECONDS", "300"))
-    start = time.time()
-    while time.time() - start < manual_timeout:
-        url = driver.current_url or ""
-        if "/invoicing" in url and "/auth" not in url:
-            break
-        time.sleep(1)
-    else:
-        raise TimeoutException("Timed out waiting for CMP invoicing page (login required?)")
+    navigate_to_invoicing(driver)
 
     stop_for_age = False
     for page in range(1, MAX_PAGES + 1):

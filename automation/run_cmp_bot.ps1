@@ -35,7 +35,7 @@ if (Test-Path $chromePath) {
   )
   try {
     Start-Process -FilePath $chromePath -ArgumentList $args -WindowStyle Minimized | Out-Null
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 5
   } catch {
     Write-Host "WARNING: Could not launch Chrome. Will try attaching to an existing session."
   }
@@ -44,6 +44,22 @@ if (Test-Path $chromePath) {
 }
 
 $env:CMP_DEBUGGER_ADDRESS = "localhost:9222"
+
+# Wait until Chrome remote debugging is reachable
+$ready = $false
+for ($i = 0; $i -lt 30; $i++) {
+  try {
+    Invoke-WebRequest -Uri "http://127.0.0.1:9222/json/version" -UseBasicParsing -TimeoutSec 2 | Out-Null
+    $ready = $true
+    break
+  } catch {
+    Start-Sleep -Seconds 1
+  }
+}
+if (-not $ready) {
+  Write-Host "WARNING: Chrome debugger on port 9222 is not ready. Close all Chrome windows and run again."
+}
+
 python .\automation\cmp_invoice_extractor.py
 
 if ($LASTEXITCODE -ne 0) {
