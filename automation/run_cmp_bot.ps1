@@ -9,7 +9,7 @@ if ([string]::IsNullOrWhiteSpace($cmpUrl)) {
 }
 
 $env:CMP_INPUT_MODE = "zoho_sheet"
-$env:CMP_ZOHO_SHEET_NAME = "CS by Agent"
+$env:CMP_ZOHO_SHEET_NAME = "Client BY agent"
 $env:CMP_USER_DATA_DIR = "C:\Users\AndresMendez\AppData\Local\Google\Chrome\User Data"
 $env:CMP_PROFILE_DIR = "Profile 8"
 $env:CMP_CLONE_PROFILE = "false"
@@ -22,6 +22,11 @@ $env:CMP_SEARCH_MAX_WAIT_SECONDS = "16"
 $env:CMP_SEARCH_KEYSTROKE_DELAY = "0.08"
 $env:CMP_DEBUG_NOT_FOUND = "true"
 $env:CMP_ATTACH_TIMEOUT_SECONDS = "60"
+
+# Optional: only scrape companies assigned to this agent name (matches 'Agent' column in CS by Agent).
+# Example: $env:CMP_AGENT_FILTER = "Hector"
+# Leave empty to scrape all.
+if (-not $env:CMP_AGENT_FILTER) { $env:CMP_AGENT_FILTER = "" }
 
 # Auto-launch a dedicated Chrome window with remote debugging enabled so Selenium can attach reliably.
 # This keeps the browser visible (and interactive) but we start it minimized so it doesn't steal focus.

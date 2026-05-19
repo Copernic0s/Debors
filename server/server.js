@@ -523,6 +523,44 @@ app.get('/api/debtors', async (req, res) => {
       ? XLSX.utils.sheet_to_json(workbook.Sheets[trackerSheetName], { defval: '' }).map(mapTrackerRow)
       : [];
 
+    // ---- Merge CMP scraped invoices (local-only helper) ----
+    // The CMP bot outputs invoices_actualizados.json at the repo root. We use it as an overlay so
+    // localhost Debors reflects CMP updates immediately after a run.
+    try {
+      const cmpJsonPath = path.join(__dirname, '..', 'invoices_actualizados.json');
+      if (fs.existsSync(cmpJsonPath)) {
+        const raw = fs.readFileSync(cmpJsonPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const byCompany = new Map();
+          parsed.forEach((item) => {
+            const company = item?.client_name || item?.clientName || item?.company || '';
+            const key = normalizeMatchKey(company);
+            if (!key) return;
+            byCompany.set(key, item);
+          });
+
+          consolidatedDebtors.forEach((debtor) => {
+            const key = normalizeMatchKey(debtor.company || debtor.clientName);
+            const match = byCompany.get(key);
+            if (!match) return;
+
+            const amount = normalizeAmount(match.amount);
+            const invoiceId = String(match.invoice_id || match.invoiceId || '').trim();
+            if (invoiceId) debtor.invoiceNumber = invoiceId;
+            if (Number.isFinite(amount)) debtor.amount = amount;
+
+            // If Zoho doesn't have an invoice yet, CMP invoice should bring it into the working set.
+            if (amount > 0 && String(debtor.status || '').toLowerCase().includes('await')) {
+              debtor.status = 'Pending';
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Zoho Sync] Failed to merge CMP invoice overlay:', err.message);
+    }
+
     // Merge local shortcut tracker entries
     try {
       const localTrackerPath = path.join(__dirname, '..', 'automation', 'local_tracker.json');

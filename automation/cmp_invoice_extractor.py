@@ -44,6 +44,7 @@ ZOHO_XLSX_URL = os.getenv(
     "https://sheet.zohopublic.com/sheet/published/w0yyac483bf4377414680872e6205cd34447b?download=xlsx",
 )
 ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "CS by Agent")
+AGENT_FILTER = os.getenv("CMP_AGENT_FILTER", "").strip().lower()
 DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "90"))
 SEARCH_SETTLE_SECONDS = float(os.getenv("CMP_SEARCH_SETTLE_SECONDS", "2.5"))
 SEARCH_MAX_WAIT_SECONDS = float(os.getenv("CMP_SEARCH_MAX_WAIT_SECONDS", "10"))
@@ -245,6 +246,7 @@ def read_clients_from_zoho_workbook() -> list[dict]:
     normalized_columns = {str(column).strip().lower(): column for column in frame.columns}
     company_column = normalized_columns.get("company name")
     cycle_column = normalized_columns.get("billing cycle")
+    agent_column = normalized_columns.get("agent") or normalized_columns.get("sales rep") or normalized_columns.get("salesrep")
 
     if not company_column or not cycle_column:
         raise ValueError(
@@ -255,7 +257,11 @@ def read_clients_from_zoho_workbook() -> list[dict]:
     for _, row in frame.fillna("").iterrows():
         company = str(row[company_column]).strip()
         cycle = str(row[cycle_column]).strip()
+        agent_value = str(row[agent_column]).strip() if agent_column else ""
         if company:
+            if AGENT_FILTER:
+                if not agent_value or AGENT_FILTER not in agent_value.lower():
+                    continue
             records.append(
                 {
                     "client_name": company,
@@ -535,10 +541,6 @@ def ensure_company_screen(driver: WebDriver) -> None:
 def open_matching_company(driver: WebDriver, client_name: str) -> bool:
     ensure_company_screen(driver)
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
-    search_input = wait_for_any(driver, SELECTORS.search_inputs)
-    search_input.click()
-    search_input.send_keys(Keys.CONTROL, "a")
-    search_input.send_keys(Keys.DELETE)
     normalized_target = normalize_company_name(client_name)
     target_tokens = set(normalized_target.split())
 
@@ -608,6 +610,40 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             time.sleep(SEARCH_SETTLE_SECONDS)
         return stable_rows if stable_rows else result_rows_snapshot()
 
+    def wait_until_grid_reflects_query(query: str) -> list[dict]:
+        """
+        CMP sometimes takes several seconds to refresh the results grid after typing.
+        We wait until either:
+        1) the grid shows a "no data" / empty placeholder, OR
+        2) the grid contains at least one row that includes any meaningful token from the query.
+
+        Returns the latest snapshot (possibly empty).
+        """
+        query_norm = normalize_company_name(query)
+        query_tokens = [t for t in query_norm.split() if len(t) >= 3]
+        start = time.time()
+        last_rows: list[dict] = []
+
+        while time.time() - start < SEARCH_MAX_WAIT_SECONDS:
+            rows = result_rows_snapshot()
+            last_rows = rows
+
+            # "No results" placeholder cases
+            if len(rows) == 1:
+                text = (rows[0].get("rowText") or "").lower()
+                if "no data" in text or "no results" in text or "nothing found" in text:
+                    return []
+
+            # Any token match in the grid
+            if rows and query_tokens:
+                hay = " ".join([normalize_company_name(r.get("rowText", "")) for r in rows[:5]])
+                if any(token in hay for token in query_tokens):
+                    return rows
+
+            time.sleep(0.5)
+
+        return last_rows
+
     def best_match_from_rows(rows_for_match: list[dict]):
         best_row_index = None
         best_score = -1
@@ -635,21 +671,25 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             best_row_index = rows_for_match[0].get("index")
         return best_row_index, best_score
 
-    baseline_signature = "||".join([normalize_text(row.get("rowText", "")) for row in result_rows_snapshot()[:3]])
-
     attempted_queries: list[str] = []
     for query in build_search_queries(client_name):
         attempted_queries.append(query)
+
+        # IMPORTANT: reacquire the search input each loop. CMP is a SPA and can re-render,
+        # making previously-captured elements stale.
+        search_input = wait_for_any(driver, SELECTORS.search_inputs)
         search_input.click()
-        search_input.clear()
-        # Fallback to ensure it's empty
+        try:
+            search_input.clear()
+        except Exception:
+            pass
         search_input.send_keys(Keys.CONTROL, "a")
         search_input.send_keys(Keys.BACKSPACE)
         
         # We send the entire query at once. Character-by-character typing can cause
         # React's onChange handler to re-render and move the cursor, interleaving characters.
         search_input.send_keys(query.upper())
-        time.sleep(0.35)
+        time.sleep(0.25)
         search_input.send_keys(Keys.ENTER)
         search_input.send_keys(Keys.TAB)
 
@@ -666,16 +706,12 @@ def open_matching_company(driver: WebDriver, client_name: str) -> bool:
             except Exception:
                 continue
 
-        # Hard wait to allow slow network requests to complete before checking results
-        logging.info("Waiting 5 seconds for results to load for '%s'...", query)
-        time.sleep(5.0)
+        # Wait until grid reflects the query (or an explicit "no results").
+        rows = wait_until_grid_reflects_query(query)
+        if not rows:
+            continue
 
         rows = wait_for_stable_results()
-        if rows:
-            current_signature = "||".join([normalize_text(row.get("rowText", "")) for row in rows[:3]])
-            if current_signature == baseline_signature:
-                logging.debug("Search grid did not refresh for query '%s' on '%s'", query, client_name)
-                continue
         if not rows:
             continue
 
