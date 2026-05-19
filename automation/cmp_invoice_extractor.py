@@ -31,6 +31,24 @@ from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
+def load_dotenv_file() -> None:
+    env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+load_dotenv_file()
 INVOICING_URL = os.getenv(
     "CMP_INVOICING_URL",
     "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500",

@@ -1,3 +1,7 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
@@ -411,6 +415,16 @@ app.get('/api/debtors', async (req, res) => {
     console.error('Error fetching/parsing Zoho sheet:', error.message);
     res.status(500).json({ error: 'Failed to ingest data from Zoho' });
   }
+});
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    supabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+    serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    cmpIngestSecret: Boolean(process.env.CMP_INGEST_SECRET),
+    port: PORT
+  });
 });
 
 app.get('/api/cmp/status', (_req, res) => {
