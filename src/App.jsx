@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
-import { RefreshCw, Users } from 'lucide-react';
+import { RefreshCw, Users, Clock } from 'lucide-react';
+import CmpSyncPanel from './components/CmpSyncPanel';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -463,6 +464,12 @@ function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const accessProfile = useMemo(() => resolveAccessProfile(user), [user]);
+  const isAndresProfile = String(user?.email || '').toLowerCase().includes('andres');
+  const isLocalHost = import.meta.env.DEV && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const cmpRunnerApiBase = useMemo(() => {
+    if (!isAndresProfile || !isLocalHost) return null;
+    return `http://${window.location.hostname}:3001`;
+  }, [isAndresProfile, isLocalHost]);
 
   const {
     data,
@@ -472,12 +479,102 @@ function App() {
     isSyncing,
     syncSourceLabel,
     lastSyncAt,
+    lastCmpSyncAt,
+    cmpInvoiceCount,
     loadData,
     persistEditedRows,
     manualEdits,
     setManualEdits,
     setData
   } = useDebtors({ supabase, user, tableName: TABLE_NAME });
+
+  const [cmpStatus, setCmpStatus] = useState({
+    running: false,
+    phase: 'idle',
+    message: '',
+    page: 0,
+    invoicesFound: 0,
+    error: null
+  });
+  const [syncAllBusy, setSyncAllBusy] = useState(false);
+  const cmpWasRunningRef = React.useRef(false);
+
+  const refreshCmpStatus = React.useCallback(async () => {
+    if (!cmpRunnerApiBase) return;
+    try {
+      const response = await fetch(`${cmpRunnerApiBase}/api/cmp/status`);
+      const payload = await response.json();
+      if (!response.ok || !payload) return;
+      setCmpStatus(payload);
+
+      const wasRunning = cmpWasRunningRef.current;
+      const nowRunning = Boolean(payload.running);
+      cmpWasRunningRef.current = nowRunning;
+
+      if (wasRunning && !nowRunning) {
+        const code = payload.lastExitCode;
+        if (typeof code === 'number' && code !== 0) {
+          toast.error(`CMP sync failed (exit ${code}). Open Log for details.`, { duration: 6500 });
+        } else {
+          toast.success('CMP sync finished. Refreshing data...', { duration: 4000 });
+          loadData({ silent: true });
+        }
+      }
+    } catch {
+      // runner offline
+    }
+  }, [cmpRunnerApiBase, loadData]);
+
+  useEffect(() => {
+    if (!cmpRunnerApiBase) return undefined;
+    refreshCmpStatus();
+    const interval = window.setInterval(refreshCmpStatus, 3000);
+    return () => window.clearInterval(interval);
+  }, [cmpRunnerApiBase, refreshCmpStatus]);
+
+  const showCmpLog = React.useCallback(async () => {
+    if (!cmpRunnerApiBase) return;
+    try {
+      const response = await fetch(`${cmpRunnerApiBase}/api/cmp/log?lines=120`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'Failed to read log');
+      toast(String(payload?.tail || 'No log yet.').trim(), { duration: 8000 });
+    } catch (error) {
+      toast.error(error?.message || 'Could not read CMP log');
+    }
+  }, [cmpRunnerApiBase]);
+
+  const runCmpScraper = React.useCallback(async () => {
+    if (!cmpRunnerApiBase) {
+      throw new Error('CMP runner only works on localhost with server on port 3001.');
+    }
+    const response = await fetch(`${cmpRunnerApiBase}/api/cmp/run`, { method: 'POST' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error || `Could not start CMP (${response.status})`);
+    }
+    refreshCmpStatus();
+  }, [cmpRunnerApiBase, refreshCmpStatus]);
+
+  const handleSyncAll = React.useCallback(async () => {
+    if (!isAndresProfile || !cmpRunnerApiBase) {
+      loadData({ notifyUser: true });
+      return;
+    }
+
+    setSyncAllBusy(true);
+    try {
+      toast.loading('Sync All: loading Zoho...', { id: 'sync-all' });
+      await loadData({ silent: true });
+      toast.loading('Sync All: starting CMP in Chrome (Profile 8)...', { id: 'sync-all' });
+      await runCmpScraper();
+      toast.success('CMP started. Watch status below.', { id: 'sync-all', duration: 4500 });
+    } catch (error) {
+      toast.error(error?.message || 'Sync All failed', { id: 'sync-all', duration: 6000 });
+    } finally {
+      setSyncAllBusy(false);
+    }
+  }, [cmpRunnerApiBase, isAndresProfile, loadData, runCmpScraper]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
@@ -516,11 +613,11 @@ function App() {
       const pressedSyncShortcut = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 's';
       if (!pressedSyncShortcut) return;
       event.preventDefault();
-      loadData({ notifyUser: true });
+      handleSyncAll();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [loadData]);
+  }, [handleSyncAll]);
 
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -562,7 +659,6 @@ function App() {
               changed.forEach(row => {
                 nextEdits[row.id] = row;
               });
-              manualEditsRef.current = nextEdits;
               return nextEdits;
             });
             persistEditedRows(changed);
@@ -574,7 +670,6 @@ function App() {
           const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
           setManualEdits(prevEdits => {
             const nextEdits = { ...prevEdits, [debtor.id]: debtor };
-            manualEditsRef.current = nextEdits;
             return nextEdits;
           });
           persistEditedRows([debtor]);
@@ -629,7 +724,6 @@ function App() {
       setManualEdits((prev) => {
         const next = { ...prev };
         delete next[id];
-        manualEditsRef.current = next;
         return next;
       });
 
@@ -693,58 +787,6 @@ function App() {
   const openCompanyProfile = (companyName) => {
     if (!companyName) return;
     setActiveCompany(companyName);
-  };
-
-  const persistEditedRows = async (rows) => {
-    if (!rows || rows.length === 0 || !user) return;
-
-    // Optimization: Filter out virtual rows (CS-...) that don't exist in Supabase
-    // We also filter out any null or undefined IDs.
-    const upserts = rows
-      .filter(row => row.id)
-      .map(row => ({
-        id: String(row.id),
-        company: row.company || row.clientName || null,
-        agent_id: row.agentId || null,
-        amount: Number(row.amount) || 0,
-        status: String(row.status || 'pending'),
-        due_date: row.dueDate || null,
-        last_invoiced_date: row.lastInvoicedDate || null,
-        last_no_usage_date: row.lastNoUsageDate || null,
-        billing_cycle: row.billingCycle || null,
-        invoice_number: row.invoiceNumber || null,
-        updated_at: new Date().toISOString(),
-        notes: (row.notes || '').replace(/\[streak:\d+\]/, '').trim() + (row.noUsageCount > 0 ? ` [streak:${row.noUsageCount}]` : '')
-      }));
-
-    if (upserts.length === 0) return;
-
-    console.log('[Persistence] Upserting rows:', upserts.length, upserts);
-
-    try {
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .upsert(upserts);
-
-      if (error) {
-        console.error('[Persistence] Supabase Error:', error);
-        throw error;
-      }
-
-      // Update local ref after successful DB update
-      setManualEdits(prev => {
-        const next = { ...prev };
-        rows.forEach(row => {
-          next[row.id] = { ...row };
-        });
-        manualEditsRef.current = next;
-        return next;
-      });
-    } catch (error) {
-      const msg = error?.message || 'Unknown network error';
-      toast.error(`Cloud Sync Failed: ${msg}`, { duration: 5000 });
-      console.error('[Persistence] Detailed Error:', error);
-    }
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
@@ -1142,8 +1184,13 @@ function App() {
                 <Clock size={12} color="var(--brand)" />
                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{timeString}</span>
               </div>
-              <SyncButton onClick={() => loadData({ notifyUser: true })} title="Sync (Ctrl+Shift+S)">
-                <span>Sync</span>
+              <SyncButton
+                onClick={handleSyncAll}
+                title={isAndresProfile && isLocalHost ? 'Sync All (Zoho + CMP)' : 'Sync Zoho (Ctrl+Shift+S)'}
+                disabled={syncAllBusy || isSyncing}
+              >
+                <RefreshCw size={14} style={{ animation: (syncAllBusy || isSyncing) ? 'spin 1s linear infinite' : 'none' }} />
+                <span>{isAndresProfile && isLocalHost ? 'Sync All' : 'Sync'}</span>
               </SyncButton>
               <LogoutButton onClick={() => supabase.auth.signOut()}>
                 Logout
@@ -1151,6 +1198,18 @@ function App() {
             </ActionButtons>
           </TopbarRight>
         </Topbar>
+
+        {isAndresProfile && isLocalHost && (
+          <CmpSyncPanel
+            runnerApiBase={cmpRunnerApiBase}
+            cmpStatus={cmpStatus}
+            onRefreshStatus={refreshCmpStatus}
+            onShowLog={showCmpLog}
+            lastCmpSyncAt={lastCmpSyncAt}
+            cmpInvoiceCount={cmpInvoiceCount}
+            syncAllBusy={syncAllBusy}
+          />
+        )}
 
         <ContentScroll>
           {overviewContent}
