@@ -50,7 +50,7 @@ const tailLog = (lines = 120) => {
   return content.split(/\r?\n/).slice(-lines).join('\n');
 };
 
-const startCmpScraper = () => {
+const startCmpScraper = (depth = 'fast') => {
   if (cmpChild && cmpChild.exitCode === null) {
     return { started: false, reason: 'already_running' };
   }
@@ -59,10 +59,27 @@ const startCmpScraper = () => {
     throw new Error(`CMP script not found: ${PS_SCRIPT}`);
   }
 
+  let historyDays = '15';
+  let maxPages = '2';
+  let isFastSync = 'true';
+
+  if (depth === 'deep') {
+    historyDays = '365';
+    maxPages = '40';
+    isFastSync = 'false';
+  } else if (depth === 'normal') {
+    historyDays = '120';
+    maxPages = '40';
+    isFastSync = 'false';
+  }
+
   const env = {
     ...process.env,
     CMP_INGEST_URL: process.env.CMP_INGEST_URL || `http://127.0.0.1:${process.env.PORT || 3001}/api/cmp/ingest`,
-    CMP_INGEST_SECRET: process.env.CMP_INGEST_SECRET || ''
+    CMP_INGEST_SECRET: process.env.CMP_INGEST_SECRET || '',
+    CMP_HISTORY_DAYS: historyDays,
+    CMP_MAX_PAGES: maxPages,
+    CMP_FAST_SYNC: isFastSync
   };
 
   cmpChild = spawn(

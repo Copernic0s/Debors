@@ -436,9 +436,10 @@ app.get('/api/cmp/log', (req, res) => {
   res.json({ tail: tailLog(Number.isFinite(lines) ? lines : 120) });
 });
 
-app.post('/api/cmp/run', (_req, res) => {
+app.post('/api/cmp/run', (req, res) => {
   try {
-    const result = startCmpScraper();
+    const depth = req.body?.depth || 'fast';
+    const result = startCmpScraper(depth);
     if (!result.started) {
       return res.status(409).json({ error: 'CMP scraper is already running' });
     }

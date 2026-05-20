@@ -598,10 +598,11 @@ def post_ingest(invoices: list[dict[str, Any]], sync_run_id: str) -> None:
     if INGEST_SECRET:
         headers["Authorization"] = f"Bearer {INGEST_SECRET}"
 
+    is_fast_sync = os.getenv("CMP_FAST_SYNC", "false").lower() == "true"
     response = requests.post(
         INGEST_URL,
         headers=headers,
-        json={"syncRunId": sync_run_id, "invoices": invoices},
+        json={"syncRunId": sync_run_id, "invoices": invoices, "isFastSync": is_fast_sync},
         timeout=120,
     )
     if not response.ok:

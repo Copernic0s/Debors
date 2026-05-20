@@ -3,16 +3,16 @@ Set-Location $root
 
 $ErrorActionPreference = "Stop"
 
-$env:CMP_INVOICING_URL = "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500"
-$env:CMP_ZOHO_SHEET_NAME = "Client BY agent"
-$env:CMP_USER_DATA_DIR = Join-Path $root "automation\chrome_user_data"
-$env:CMP_PROFILE_DIR = "Default"
-$env:CMP_CLONE_PROFILE = "false"
-$env:CMP_HEADLESS = "false"
-$env:CMP_REQUIRE_EXACT_PROFILE = "true"
-$env:CMP_HISTORY_DAYS = "60"
-$env:CMP_MAX_PAGES = "40"
-$env:CMP_ATTACH_TIMEOUT_SECONDS = "60"
+if (-not $env:CMP_INVOICING_URL) { $env:CMP_INVOICING_URL = "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500" }
+if (-not $env:CMP_ZOHO_SHEET_NAME) { $env:CMP_ZOHO_SHEET_NAME = "Client BY agent" }
+if (-not $env:CMP_USER_DATA_DIR) { $env:CMP_USER_DATA_DIR = Join-Path $root "automation\chrome_user_data" }
+if (-not $env:CMP_PROFILE_DIR) { $env:CMP_PROFILE_DIR = "Default" }
+if (-not $env:CMP_CLONE_PROFILE) { $env:CMP_CLONE_PROFILE = "false" }
+if (-not $env:CMP_HEADLESS) { $env:CMP_HEADLESS = "false" }
+if (-not $env:CMP_REQUIRE_EXACT_PROFILE) { $env:CMP_REQUIRE_EXACT_PROFILE = "true" }
+if (-not $env:CMP_HISTORY_DAYS) { $env:CMP_HISTORY_DAYS = "60" }
+if (-not $env:CMP_MAX_PAGES) { $env:CMP_MAX_PAGES = "40" }
+if (-not $env:CMP_ATTACH_TIMEOUT_SECONDS) { $env:CMP_ATTACH_TIMEOUT_SECONDS = "60" }
 # Set to "true" if you want to see the Chrome window while scraping (debug).
 # Default is hidden/minimized so you can keep working.
 if (-not $env:CMP_SHOW_BROWSER) { $env:CMP_SHOW_BROWSER = "true" }
