@@ -13,6 +13,7 @@ import sys
 import time
 import unicodedata
 import uuid
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -369,6 +370,31 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
     )
 
 
+def build_invoicing_page_url(page: int) -> str:
+    """
+    CMP supports paging via query param (?page=N&limit=500).
+    Navigating by URL is more reliable than clicking Next, because the paging UI
+    can be implemented as non-button elements or can change between builds.
+    """
+    parsed = urlparse(INVOICING_URL)
+    qs = parse_qs(parsed.query)
+    qs["page"] = [str(max(1, int(page)))]
+    if "limit" not in qs:
+        qs["limit"] = ["500"]
+    new_query = urlencode(qs, doseq=True)
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment)
+    )
+
+
+def goto_invoicing_page(driver: WebDriver, page: int) -> None:
+    target = build_invoicing_page_url(page)
+    try:
+        driver.get(target)
+    except WebDriverException:
+        driver.execute_script("window.location.assign(arguments[0]);", target)
+
+
 def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[dict[str, Any]]:
     cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     results: list[dict[str, Any]] = []
@@ -380,6 +406,10 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
     for page in range(1, MAX_PAGES + 1):
         if stop_for_age:
             break
+
+        # Ensure we are on the expected paging URL. This avoids brittle "Next" selectors.
+        if page > 1:
+            goto_invoicing_page(driver, page)
 
         write_status(
             running=True,
@@ -504,16 +534,12 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
         if page >= MAX_PAGES:
             break
 
-        next_btns = driver.find_elements(
-            By.XPATH,
-            "//*[@aria-label='Go to next page' or @title='Go to next page' or contains(@class,'next')] | //button[contains(., 'Next')]",
-        )
-        if not next_btns:
-            break
-
         first_row_sig = rows[0].text if rows else ""
-        next_btn = next_btns[-1]
-        driver.execute_script("arguments[0].click();", next_btn)
+        # Navigate by URL to next page. If we get redirected to /auth for any reason,
+        # try switching back to an existing authenticated invoicing tab.
+        goto_invoicing_page(driver, page + 1)
+        if "/auth" in safe_current_url(driver):
+            switch_to_invoicing_tab(driver)
 
         refreshed = False
         for _ in range(60):
