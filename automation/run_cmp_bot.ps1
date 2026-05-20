@@ -1,7 +1,7 @@
-$ErrorActionPreference = "Stop"
-
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+
+$ErrorActionPreference = "Stop"
 
 $env:CMP_INVOICING_URL = "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500"
 $env:CMP_ZOHO_SHEET_NAME = "Client BY agent"
@@ -16,6 +16,16 @@ $env:CMP_ATTACH_TIMEOUT_SECONDS = "60"
 
 if (-not $env:CMP_INGEST_URL) {
   $env:CMP_INGEST_URL = "http://127.0.0.1:3001/api/cmp/ingest"
+}
+
+# If Chrome is already running, launching a new window will be attached to the existing
+# process and Chrome will ignore flags like --remote-debugging-port. That makes Selenium
+# unable to attach (9222 not reachable). We aggressively close Chrome first.
+try {
+  Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+} catch {
+  # ignore
 }
 
 $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -60,7 +70,9 @@ for ($i = 0; $i -lt 30; $i++) {
   }
 }
 if (-not $ready) {
-  Write-Host "WARNING: Chrome debugger on port 9222 is not ready. Close all Chrome windows and run again."
+  Write-Host "ERROR: Chrome debugger on port 9222 is not ready."
+  Write-Host "Tip: Make sure Chrome is fully closed and that Profile 8 can launch. Then run Sync All again."
+  exit 2
 }
 
 python .\automation\cmp_invoice_extractor.py
