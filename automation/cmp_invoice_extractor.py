@@ -282,6 +282,30 @@ def safe_current_url(driver: WebDriver) -> str:
         ) from error
 
 
+def switch_to_invoicing_tab(driver: WebDriver) -> bool:
+    """
+    When attached to an existing Chrome profile (remote debugger),
+    there may already be an authenticated CMP tab open.
+    If navigation gets redirected to /auth, try to locate an existing /invoicing tab
+    and switch to it instead of forcing a new navigation.
+    """
+    try:
+        handles = list(driver.window_handles)
+    except WebDriverException:
+        return False
+
+    for handle in handles:
+        try:
+            driver.switch_to.window(handle)
+            url = safe_current_url(driver)
+            if "/invoicing" in url and "/auth" not in url:
+                logging.info("Switched to existing invoicing tab: %s", url)
+                return True
+        except WebDriverException:
+            continue
+    return False
+
+
 def navigate_to_invoicing(driver: WebDriver) -> None:
     write_status(running=True, phase="navigate", message="Opening CMP invoicing...")
     logging.info("Navigating to %s", INVOICING_URL)
@@ -293,6 +317,11 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
             return
     except RuntimeError:
         raise
+
+    # If we're attached to a real Chrome profile, prefer an already-open invoicing tab
+    # to avoid triggering fresh auth redirects.
+    if switch_to_invoicing_tab(driver):
+        return
 
     try:
         driver.get(INVOICING_URL)
@@ -314,6 +343,11 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
                 message="CMP invoicing loaded. Starting table scan...",
             )
             return
+
+        # Sometimes the currently selected tab gets redirected to /auth even though
+        # another tab in the same profile is still authenticated. Try switching.
+        if "/auth" in url and switch_to_invoicing_tab(driver):
+            continue
 
         now = time.time()
         if now - last_status_at >= 5:
