@@ -24,15 +24,18 @@ if (-not (Test-Path $chromePath)) {
 }
 
 if (Test-Path $chromePath) {
+  # IMPORTANT: Start-Process ultimately receives a single command-line string.
+  # If we pass args that contain spaces without quoting (e.g. "User Data", "Profile 8"),
+  # Chrome will parse them incorrectly and may open the wrong profile (which looks logged out).
   $args = @(
     "--remote-debugging-port=9222",
-    "--user-data-dir=$env:CMP_USER_DATA_DIR",
-    "--profile-directory=$env:CMP_PROFILE_DIR",
+    "--user-data-dir=`"$env:CMP_USER_DATA_DIR`"",
+    "--profile-directory=`"$env:CMP_PROFILE_DIR`"",
     "--no-first-run",
     "--no-default-browser-check",
     "--window-position=2000,2000",
-  $env:CMP_INVOICING_URL
-  )
+    "`"$env:CMP_INVOICING_URL`""
+  ) -join " "
   try {
     Start-Process -FilePath $chromePath -ArgumentList $args -WindowStyle Minimized | Out-Null
     Start-Sleep -Seconds 5
