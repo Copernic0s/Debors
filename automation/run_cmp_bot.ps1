@@ -13,6 +13,9 @@ $env:CMP_REQUIRE_EXACT_PROFILE = "true"
 $env:CMP_HISTORY_DAYS = "60"
 $env:CMP_MAX_PAGES = "40"
 $env:CMP_ATTACH_TIMEOUT_SECONDS = "60"
+# Set to "true" if you want to see the Chrome window while scraping (debug).
+# Default is hidden/minimized so you can keep working.
+if (-not $env:CMP_SHOW_BROWSER) { $env:CMP_SHOW_BROWSER = "false" }
 
 if (-not $env:CMP_INGEST_URL) {
   $env:CMP_INGEST_URL = "http://127.0.0.1:3001/api/cmp/ingest"
@@ -43,11 +46,12 @@ if (Test-Path $chromePath) {
     "--profile-directory=`"$env:CMP_PROFILE_DIR`"",
     "--no-first-run",
     "--no-default-browser-check",
-    "--window-position=2000,2000",
+    ($(if ($env:CMP_SHOW_BROWSER -eq "true") { "--window-position=20,20" } else { "--window-position=2000,2000" })),
     "`"$env:CMP_INVOICING_URL`""
   ) -join " "
   try {
-    Start-Process -FilePath $chromePath -ArgumentList $args -WindowStyle Minimized | Out-Null
+    $winStyle = if ($env:CMP_SHOW_BROWSER -eq "true") { "Normal" } else { "Minimized" }
+    Start-Process -FilePath $chromePath -ArgumentList $args -WindowStyle $winStyle | Out-Null
     Start-Sleep -Seconds 5
   } catch {
     Write-Host "WARNING: Could not launch Chrome. Will try attaching to an existing session."
