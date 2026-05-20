@@ -50,19 +50,9 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
     }
   }
 
-  if (!isFastSync) {
-    // Delete any old cmp_invoices where id starts with 'CMP-' but they were NOT in the current sync run.
-    const { error: deleteError } = await supabase
-      .from('cmp_invoices')
-      .delete()
-      .like('id', 'CMP-%')
-      .neq('sync_run_id', runId);
-    if (deleteError) {
-      console.error(`[CMP Ingest] Warning: Failed to clean up old cmp_invoices: ${deleteError.message}`);
-    }
-  } else {
-    console.log(`[CMP Ingest] Fast Sync mode: Skipped cleaning up older invoices.`);
-  }
+  // Preserve all historical invoices in the database to maintain history across sync runs.
+  console.log(`[CMP Ingest] Preserved all historical invoices in the database.`);
+
 
   return { syncRunId: runId, count: rows.length, syncedAt };
 };

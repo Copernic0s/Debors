@@ -633,11 +633,11 @@ function App() {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
       if (isAggregatedRow) {
-        const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
+        const targetCompanyKey = normalizeMatchKey(currentDebtor.company || currentDebtor.clientName);
         setData((prev) => {
           const changed = [];
           const next = prev.map((item) => {
-            const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+            const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
             if (!sameCompany) return item;
 
             const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -660,14 +660,33 @@ function App() {
             return updatedRow;
           });
           
-          if (changed.length > 0) {
-            setManualEdits(prevEdits => {
-              const nextEdits = { ...prevEdits };
-              changed.forEach(row => {
-                nextEdits[row.id] = row;
-              });
-              return nextEdits;
+          setManualEdits(prevEdits => {
+            const nextEdits = { ...prevEdits };
+            Object.keys(nextEdits).forEach((editId) => {
+              const edit = nextEdits[editId];
+              const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
+              if (sameComp) {
+                const updatedEdit = {
+                  ...edit,
+                  company: debtor.company || debtor.clientName,
+                  clientName: debtor.company || debtor.clientName,
+                  dueDate: debtor.dueDate,
+                  status: debtor.status,
+                  agentId: debtor.agentId,
+                  billingCycle: debtor.billingCycle,
+                  invoiceNumber: debtor.invoiceNumber,
+                  notes: debtor.notes
+                };
+                nextEdits[editId] = updatedEdit;
+                if (!changed.some(c => c.id === editId)) {
+                  changed.push(updatedEdit);
+                }
+              }
             });
+            return nextEdits;
+          });
+
+          if (changed.length > 0) {
             persistEditedRows(changed);
           }
           return next;
@@ -729,9 +748,9 @@ function App() {
       }
 
       if (targetCompany) {
-        const normalizedCompany = targetCompany.trim().toLowerCase();
+        const targetCompanyKey = normalizeMatchKey(targetCompany);
         const idsToDelete = Object.values(manualEdits)
-          .filter(edit => String(edit.company || edit.clientName || '').trim().toLowerCase() === normalizedCompany)
+          .filter(edit => normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey)
           .map(edit => edit.id);
 
         if (idsToDelete.length > 0) {
@@ -855,26 +874,83 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    const idToUpdate = row.latestId || row.id;
-    if (!idToUpdate) return;
-
+    const isAggregatedRow = String(row.id || '').startsWith('CMP-');
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
+    if (isAggregatedRow) {
+      const targetCompanyKey = normalizeMatchKey(row.company || row.clientName);
+      setData((prev) => {
+        const changed = [];
+        const next = prev.map((item) => {
+          const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
+          if (!sameCompany) return item;
 
-        const updatedRow = {
-          ...item,
-          status: normalizedStatus
-        };
-        changed.push(updatedRow);
-        return updatedRow;
+          const updatedRow = {
+            ...item,
+            status: normalizedStatus
+          };
+          changed.push(updatedRow);
+          return updatedRow;
+        });
+
+        setManualEdits((prevEdits) => {
+          const nextEdits = { ...prevEdits };
+          Object.keys(nextEdits).forEach((editId) => {
+            const edit = nextEdits[editId];
+            const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
+            if (sameComp) {
+              const updatedEdit = {
+                ...edit,
+                status: normalizedStatus
+              };
+              nextEdits[editId] = updatedEdit;
+              if (!changed.some(c => c.id === editId)) {
+                changed.push(updatedEdit);
+              }
+            }
+          });
+          return nextEdits;
+        });
+
+        if (changed.length > 0) {
+          persistEditedRows(changed);
+        }
+        return next;
       });
-      persistEditedRows(changed);
-      return next;
-    });
+    } else {
+      const idToUpdate = row.latestId || row.id;
+      if (!idToUpdate) return;
+      setData((prev) => {
+        const changed = [];
+        const next = prev.map((item) => {
+          if (item.id !== idToUpdate) return item;
+
+          const updatedRow = {
+            ...item,
+            status: normalizedStatus
+          };
+          changed.push(updatedRow);
+          return updatedRow;
+        });
+
+        setManualEdits((prevEdits) => {
+          const nextEdits = { ...prevEdits };
+          if (nextEdits[idToUpdate]) {
+            nextEdits[idToUpdate] = {
+              ...nextEdits[idToUpdate],
+              status: normalizedStatus
+            };
+            changed.push(nextEdits[idToUpdate]);
+          }
+          return nextEdits;
+        });
+
+        if (changed.length > 0) {
+          persistEditedRows(changed);
+        }
+        return next;
+      });
+    }
 
     toast.success('Payment status updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -952,7 +1028,7 @@ function App() {
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
     agentData.forEach((item) => {
-      const key = String(item.company || item.clientName || '').trim().toLowerCase();
+      const key = normalizeMatchKey(item.company || item.clientName);
       if (!key) return;
       const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
       const previous = map.get(key) || false;
@@ -975,9 +1051,9 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
+    const targetKey = normalizeMatchKey(activeCompany);
     const scopedRows = data.filter((item) => {
-      const company = String(item.company || item.clientName || '').trim().toLowerCase();
-      const byCompany = company === activeCompany.trim().toLowerCase();
+      const byCompany = normalizeMatchKey(item.company || item.clientName) === targetKey;
       if (!byCompany) return false;
       const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;

@@ -109,7 +109,7 @@ const normalizeDate = (value) => {
 
 const normalizeStatus = (value, dueDate) => {
   const raw = normalizeText(value, 'pending').toLowerCase();
-  if (raw.includes('partial')) return 'pending';
+  if (raw.includes('partial') || raw.includes('unpaid')) return 'pending';
   if (raw.includes('paid') || raw.includes('pagado') || raw.includes('cobrado')) return 'paid';
   if (raw.includes('overdue') || raw.includes('mora') || raw.includes('vencido')) return 'overdue';
   if (raw.includes('pending')) return 'pending';

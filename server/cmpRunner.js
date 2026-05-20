@@ -60,16 +60,16 @@ const startCmpScraper = (depth = 'fast') => {
   }
 
   let historyDays = '15';
-  let maxPages = '2';
+  let maxPages = '5';
   let isFastSync = 'true';
 
   if (depth === 'deep') {
     historyDays = '365';
-    maxPages = '40';
+    maxPages = '250';
     isFastSync = 'false';
   } else if (depth === 'normal') {
     historyDays = '120';
-    maxPages = '40';
+    maxPages = '100';
     isFastSync = 'false';
   }
 

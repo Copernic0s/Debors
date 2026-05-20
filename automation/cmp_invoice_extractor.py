@@ -163,11 +163,15 @@ def parse_date_value(raw_value: str) -> datetime | None:
 
 def normalize_debtor_status(raw_status: str, due_date: datetime | None) -> str:
     raw = normalize_text(raw_status)
+    if "partial" in raw or "unpaid" in raw:
+        if due_date and due_date.date() < datetime.now().date():
+            return "overdue"
+        return "pending"
     if "paid" in raw or "cobrado" in raw:
         return "paid"
     if "overdue" in raw or "mora" in raw:
         return "overdue"
-    if "partial" in raw or "pending" in raw:
+    if "pending" in raw:
         if due_date and due_date.date() < datetime.now().date():
             return "overdue"
         return "pending"
