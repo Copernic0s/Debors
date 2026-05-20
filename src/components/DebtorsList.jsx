@@ -388,11 +388,19 @@ export default function DebtorsList({
       return 0;
     }
 
+    if (sortConfig.key === 'invoiceNumber') {
+      const aVal = String(a.invoiceNumber || '');
+      const bVal = String(b.invoiceNumber || '');
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    }
+
     if (sortConfig.key === 'company') {
       const aCompany = String(a.company || a.clientName || '');
       const bCompany = String(b.company || b.clientName || '');
       if (aCompany < bCompany) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aCompany > bCompany) return sortConfig.direction === 'asc' ? 1 : -1;
+      if (bCompany > aCompany) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     }
 
@@ -460,6 +468,7 @@ export default function DebtorsList({
           <thead>
             <tr>
               <Th onClick={() => handleSort('company')}>Company {sortConfig.key === 'company' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('invoiceNumber')}>Invoice # {sortConfig.key === 'invoiceNumber' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
@@ -494,6 +503,20 @@ export default function DebtorsList({
                       {normalizeBillingCycle(item.billingCycle)}
                     </span>
                   </div>
+                </Td>
+                <Td>
+                  <span style={{ 
+                    fontFamily: 'monospace', 
+                    fontSize: '0.825rem', 
+                    background: item.invoiceNumber ? 'rgba(249, 115, 22, 0.08)' : 'rgba(255,255,255,0.03)',
+                    color: item.invoiceNumber ? 'var(--brand)' : 'var(--text-muted)',
+                    padding: '0.25rem 0.55rem',
+                    borderRadius: '6px',
+                    border: '1px solid ' + (item.invoiceNumber ? 'rgba(249, 115, 22, 0.15)' : 'var(--glass-border)'),
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {item.invoiceNumber || 'No Invoice'}
+                  </span>
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -573,7 +596,7 @@ export default function DebtorsList({
                     {!readOnly && (
                       <>
                         <IconActionButton
-                          type="button"
+                           type="button"
                           onClick={() => onEdit?.(item)}
                           title="Edit Details"
                         >
@@ -594,7 +617,7 @@ export default function DebtorsList({
               </Tr>
             )) : (
               <tr>
-                <td colSpan="7">
+                <td colSpan="8">
                   <EmptyStateContainer>
                     <Inbox size={64} />
                     <h3>No Debtors Found</h3>

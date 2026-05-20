@@ -105,7 +105,7 @@ export const aggregateByCompany = (rows) => {
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
     const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const companyKey = normalizeMatchKey(company);
-    const key = `${companyKey}-${invKey}`;
+    const key = companyKey;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
     const amountToAdd = isPaid ? 0 : amount;
@@ -161,7 +161,6 @@ export const aggregateByCompany = (rows) => {
       }
     }
 
-    if (row.invoiceNumber) current.invoiceCount += 1;
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
 
     if (row.dueDate) {
