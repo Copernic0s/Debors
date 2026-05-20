@@ -318,6 +318,57 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
       const zohoMerged = mergeDebtorsWithClientSheet(sheetData, csData);
       const mergedData = mergeZohoWithCmpRows(zohoMerged, cmpRows);
 
+      // Auto-cleanup stale manual overrides (if Zoho/CMP shows invoice is paid, remove pending/overdue manual edits)
+      const paidInvoices = new Set();
+      
+      cmpRows.forEach(row => {
+        if (String(row.status || '').toLowerCase() === 'paid') {
+          const companyKey = normalizeMatchKey(row.company || row.clientName);
+          const invKey = normalizeMatchKey(row.invoiceNumber);
+          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+        }
+      });
+      
+      zohoMerged.forEach(row => {
+        if (String(row.status || '').toLowerCase() === 'paid') {
+          const companyKey = normalizeMatchKey(row.company || row.clientName);
+          const invKey = normalizeMatchKey(row.invoiceNumber);
+          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+        }
+      });
+
+      const staleEditIds = [];
+      const currentManualEdits = manualEditsRef.current || {};
+      
+      Object.values(currentManualEdits).forEach(edit => {
+        if (edit.__deleted) return;
+        const companyKey = normalizeMatchKey(edit.company || edit.clientName);
+        const invKey = normalizeMatchKey(edit.invoiceNumber);
+        const editStatus = String(edit.status || '').toLowerCase();
+        
+        if (companyKey && invKey && (editStatus === 'pending' || editStatus === 'overdue')) {
+          if (paidInvoices.has(`${companyKey}|${invKey}`)) {
+            staleEditIds.push(edit.id);
+          }
+        }
+      });
+
+      if (staleEditIds.length > 0) {
+        console.log(`[Sync] Programmatically cleaning up ${staleEditIds.length} stale manual overrides...`);
+        supabase.from(tableName).delete().in('id', staleEditIds).then(({ error }) => {
+          if (error) {
+            console.error('[Sync] Failed to clean up stale overrides:', error.message);
+          } else {
+            setManualEdits(prev => {
+              const next = { ...prev };
+              staleEditIds.forEach(id => delete next[id]);
+              manualEditsRef.current = next;
+              return next;
+            });
+          }
+        });
+      }
+
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
         setSyncSourceLabel(cmpRows.length > 0 ? 'Zoho + CMP' : 'Zoho WorkDrive');
