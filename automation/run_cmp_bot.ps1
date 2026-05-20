@@ -39,7 +39,7 @@ if (Test-Path $chromePath) {
     "--profile-directory=$env:CMP_PROFILE_DIR",
     "--no-first-run",
     "--no-default-browser-check",
-    (if ($env:CMP_SHOW_BROWSER -eq "true") { "--window-position=20,20" } else { "--window-position=2000,2000" }),
+    ($(if ($env:CMP_SHOW_BROWSER -eq "true") { "--window-position=20,20" } else { "--window-position=2000,2000" })),
     $env:CMP_INVOICING_URL
   )
   try {
