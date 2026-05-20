@@ -633,11 +633,11 @@ function App() {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
       if (isAggregatedRow) {
-        const targetCompany = String(currentDebtor.company || currentDebtor.clientName || '').trim().toLowerCase();
+        const targetCompanyKey = normalizeMatchKey(currentDebtor.company || currentDebtor.clientName);
         setData((prev) => {
           const changed = [];
           const next = prev.map((item) => {
-            const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+            const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
             if (!sameCompany) return item;
 
             const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
@@ -664,7 +664,7 @@ function App() {
             const nextEdits = { ...prevEdits };
             Object.keys(nextEdits).forEach((editId) => {
               const edit = nextEdits[editId];
-              const sameComp = String(edit.company || edit.clientName || '').trim().toLowerCase() === targetCompany;
+              const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
               if (sameComp) {
                 const updatedEdit = {
                   ...edit,
@@ -748,9 +748,9 @@ function App() {
       }
 
       if (targetCompany) {
-        const normalizedCompany = targetCompany.trim().toLowerCase();
+        const targetCompanyKey = normalizeMatchKey(targetCompany);
         const idsToDelete = Object.values(manualEdits)
-          .filter(edit => String(edit.company || edit.clientName || '').trim().toLowerCase() === normalizedCompany)
+          .filter(edit => normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey)
           .map(edit => edit.id);
 
         if (idsToDelete.length > 0) {
@@ -878,11 +878,11 @@ function App() {
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
     if (isAggregatedRow) {
-      const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+      const targetCompanyKey = normalizeMatchKey(row.company || row.clientName);
       setData((prev) => {
         const changed = [];
         const next = prev.map((item) => {
-          const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+          const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
           if (!sameCompany) return item;
 
           const updatedRow = {
@@ -897,7 +897,7 @@ function App() {
           const nextEdits = { ...prevEdits };
           Object.keys(nextEdits).forEach((editId) => {
             const edit = nextEdits[editId];
-            const sameComp = String(edit.company || edit.clientName || '').trim().toLowerCase() === targetCompany;
+            const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
             if (sameComp) {
               const updatedEdit = {
                 ...edit,
@@ -1028,7 +1028,7 @@ function App() {
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
     const map = new Map();
     agentData.forEach((item) => {
-      const key = String(item.company || item.clientName || '').trim().toLowerCase();
+      const key = normalizeMatchKey(item.company || item.clientName);
       if (!key) return;
       const isInDebt = String(item.status || '').toLowerCase() !== 'paid';
       const previous = map.get(key) || false;
@@ -1051,9 +1051,9 @@ function App() {
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
+    const targetKey = normalizeMatchKey(activeCompany);
     const scopedRows = data.filter((item) => {
-      const company = String(item.company || item.clientName || '').trim().toLowerCase();
-      const byCompany = company === activeCompany.trim().toLowerCase();
+      const byCompany = normalizeMatchKey(item.company || item.clientName) === targetKey;
       if (!byCompany) return false;
       const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
