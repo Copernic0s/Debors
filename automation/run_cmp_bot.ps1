@@ -15,7 +15,7 @@ $env:CMP_MAX_PAGES = "40"
 $env:CMP_ATTACH_TIMEOUT_SECONDS = "60"
 # Set to "true" if you want to see the Chrome window while scraping (debug).
 # Default is hidden/minimized so you can keep working.
-if (-not $env:CMP_SHOW_BROWSER) { $env:CMP_SHOW_BROWSER = "false" }
+if (-not $env:CMP_SHOW_BROWSER) { $env:CMP_SHOW_BROWSER = "true" }
 
 if (-not $env:CMP_INGEST_URL) {
   $env:CMP_INGEST_URL = "http://127.0.0.1:3001/api/cmp/ingest"
