@@ -660,14 +660,33 @@ function App() {
             return updatedRow;
           });
           
-          if (changed.length > 0) {
-            setManualEdits(prevEdits => {
-              const nextEdits = { ...prevEdits };
-              changed.forEach(row => {
-                nextEdits[row.id] = row;
-              });
-              return nextEdits;
+          setManualEdits(prevEdits => {
+            const nextEdits = { ...prevEdits };
+            Object.keys(nextEdits).forEach((editId) => {
+              const edit = nextEdits[editId];
+              const sameComp = String(edit.company || edit.clientName || '').trim().toLowerCase() === targetCompany;
+              if (sameComp) {
+                const updatedEdit = {
+                  ...edit,
+                  company: debtor.company || debtor.clientName,
+                  clientName: debtor.company || debtor.clientName,
+                  dueDate: debtor.dueDate,
+                  status: debtor.status,
+                  agentId: debtor.agentId,
+                  billingCycle: debtor.billingCycle,
+                  invoiceNumber: debtor.invoiceNumber,
+                  notes: debtor.notes
+                };
+                nextEdits[editId] = updatedEdit;
+                if (!changed.some(c => c.id === editId)) {
+                  changed.push(updatedEdit);
+                }
+              }
             });
+            return nextEdits;
+          });
+
+          if (changed.length > 0) {
             persistEditedRows(changed);
           }
           return next;
@@ -855,26 +874,83 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
-    const idToUpdate = row.latestId || row.id;
-    if (!idToUpdate) return;
-
+    const isAggregatedRow = String(row.id || '').startsWith('CMP-');
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
+    if (isAggregatedRow) {
+      const targetCompany = String(row.company || row.clientName || '').trim().toLowerCase();
+      setData((prev) => {
+        const changed = [];
+        const next = prev.map((item) => {
+          const sameCompany = String(item.company || item.clientName || '').trim().toLowerCase() === targetCompany;
+          if (!sameCompany) return item;
 
-        const updatedRow = {
-          ...item,
-          status: normalizedStatus
-        };
-        changed.push(updatedRow);
-        return updatedRow;
+          const updatedRow = {
+            ...item,
+            status: normalizedStatus
+          };
+          changed.push(updatedRow);
+          return updatedRow;
+        });
+
+        setManualEdits((prevEdits) => {
+          const nextEdits = { ...prevEdits };
+          Object.keys(nextEdits).forEach((editId) => {
+            const edit = nextEdits[editId];
+            const sameComp = String(edit.company || edit.clientName || '').trim().toLowerCase() === targetCompany;
+            if (sameComp) {
+              const updatedEdit = {
+                ...edit,
+                status: normalizedStatus
+              };
+              nextEdits[editId] = updatedEdit;
+              if (!changed.some(c => c.id === editId)) {
+                changed.push(updatedEdit);
+              }
+            }
+          });
+          return nextEdits;
+        });
+
+        if (changed.length > 0) {
+          persistEditedRows(changed);
+        }
+        return next;
       });
-      persistEditedRows(changed);
-      return next;
-    });
+    } else {
+      const idToUpdate = row.latestId || row.id;
+      if (!idToUpdate) return;
+      setData((prev) => {
+        const changed = [];
+        const next = prev.map((item) => {
+          if (item.id !== idToUpdate) return item;
+
+          const updatedRow = {
+            ...item,
+            status: normalizedStatus
+          };
+          changed.push(updatedRow);
+          return updatedRow;
+        });
+
+        setManualEdits((prevEdits) => {
+          const nextEdits = { ...prevEdits };
+          if (nextEdits[idToUpdate]) {
+            nextEdits[idToUpdate] = {
+              ...nextEdits[idToUpdate],
+              status: normalizedStatus
+            };
+            changed.push(nextEdits[idToUpdate]);
+          }
+          return nextEdits;
+        });
+
+        if (changed.length > 0) {
+          persistEditedRows(changed);
+        }
+        return next;
+      });
+    }
 
     toast.success('Payment status updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }

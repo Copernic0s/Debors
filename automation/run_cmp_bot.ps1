@@ -1,7 +1,27 @@
+param(
+  [string]$Depth = ""
+)
+
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $ErrorActionPreference = "Stop"
+
+if ($Depth) {
+  if ($Depth -eq "deep") {
+    $env:CMP_HISTORY_DAYS = "365"
+    $env:CMP_MAX_PAGES = "250"
+    $env:CMP_FAST_SYNC = "false"
+  } elseif ($Depth -eq "fast") {
+    $env:CMP_HISTORY_DAYS = "15"
+    $env:CMP_MAX_PAGES = "5"
+    $env:CMP_FAST_SYNC = "true"
+  } elseif ($Depth -eq "normal" -or $Depth -eq "standard") {
+    $env:CMP_HISTORY_DAYS = "120"
+    $env:CMP_MAX_PAGES = "100"
+    $env:CMP_FAST_SYNC = "false"
+  }
+}
 
 if (-not $env:CMP_INVOICING_URL) { $env:CMP_INVOICING_URL = "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500" }
 if (-not $env:CMP_ZOHO_SHEET_NAME) { $env:CMP_ZOHO_SHEET_NAME = "Client BY agent" }
@@ -10,8 +30,8 @@ if (-not $env:CMP_PROFILE_DIR) { $env:CMP_PROFILE_DIR = "Default" }
 if (-not $env:CMP_CLONE_PROFILE) { $env:CMP_CLONE_PROFILE = "false" }
 if (-not $env:CMP_HEADLESS) { $env:CMP_HEADLESS = "false" }
 if (-not $env:CMP_REQUIRE_EXACT_PROFILE) { $env:CMP_REQUIRE_EXACT_PROFILE = "true" }
-if (-not $env:CMP_HISTORY_DAYS) { $env:CMP_HISTORY_DAYS = "60" }
-if (-not $env:CMP_MAX_PAGES) { $env:CMP_MAX_PAGES = "40" }
+if (-not $env:CMP_HISTORY_DAYS) { $env:CMP_HISTORY_DAYS = "120" }
+if (-not $env:CMP_MAX_PAGES) { $env:CMP_MAX_PAGES = "100" }
 if (-not $env:CMP_ATTACH_TIMEOUT_SECONDS) { $env:CMP_ATTACH_TIMEOUT_SECONDS = "60" }
 # Set to "true" if you want to see the Chrome window while scraping (debug).
 # Default is hidden/minimized so you can keep working.
