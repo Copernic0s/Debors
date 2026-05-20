@@ -450,7 +450,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
                 By.XPATH,
                 "(.//tr | .//*[@role='row'])[1]//*[self::td or self::th or @role='cell' or @role='columnheader']",
             )
-        headers = [normalize_text(cell.text) for cell in header_cells]
+        headers = [normalize_text(cell.get_attribute("textContent") or "") for cell in header_cells]
         if page == 1:
             logging.info("CMP headers: %s", headers)
 
@@ -551,7 +551,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
         if page >= MAX_PAGES:
             break
 
-        first_row_sig = rows[0].text if rows else ""
+        first_row_sig = (rows[0].get_attribute("textContent") or "") if rows else ""
         # Navigate by URL to next page. If we get redirected to /auth for any reason,
         # try switching back to an existing authenticated invoicing tab or wait for login.
         goto_invoicing_page(driver, page + 1)
@@ -571,7 +571,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
                 new_rows = driver.find_elements(
                     By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']"
                 )
-                if len(new_rows) > 1 and new_rows[0].text != first_row_sig:
+                if len(new_rows) > 1 and (new_rows[0].get_attribute("textContent") or "") != first_row_sig:
                     refreshed = True
                     break
             except WebDriverException:

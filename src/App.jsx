@@ -17,6 +17,7 @@ import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { calculateMetrics } from './data/mockData';
 import { useDebtors, aggregateByCompany } from './hooks/useDebtors';
 import { roundMoney } from './utils/moneyUtils';
+import { normalizeMatchKey } from './utils/normalizers';
 import { resolveAccessProfile } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import './index.css';
@@ -714,7 +715,8 @@ function App() {
     try {
       let targetCompany = null;
       if (String(id).startsWith('CMP-')) {
-        const found = data.find(d => d.id === id);
+        const targetCompanyKey = String(id).replace('CMP-', '').trim();
+        const found = data.find(d => normalizeMatchKey(d.company || d.clientName) === targetCompanyKey);
         if (found) {
           targetCompany = found.company || found.clientName;
         }
@@ -771,14 +773,14 @@ function App() {
 
   const handleDeleteDebtor = (id) => {
     if (String(id).startsWith('CMP-')) {
-      const targetCompany = String(id).replace('CMP-', '').trim().toLowerCase();
+      const targetCompanyKey = String(id).replace('CMP-', '').trim();
 
       const rowsToDelete = data.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() === targetCompany
+        normalizeMatchKey(d.company || d.clientName) === targetCompanyKey
       );
 
       setData((prev) => prev.filter((d) =>
-        String(d.company || d.clientName || '').trim().toLowerCase() !== targetCompany
+        normalizeMatchKey(d.company || d.clientName) !== targetCompanyKey
       ));
 
       setManualEdits((prev) => {
