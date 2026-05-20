@@ -6,7 +6,7 @@ const buildRowId = (companyName, invoiceNumber) => {
   return `CMP-${company}-${invoice}`;
 };
 
-const ingestCmpSnapshot = async ({ invoices = [], syncRunId }) => {
+const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
@@ -50,14 +50,18 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId }) => {
     }
   }
 
-  // Delete any old cmp_invoices where id starts with 'CMP-' but they were NOT in the current sync run.
-  const { error: deleteError } = await supabase
-    .from('cmp_invoices')
-    .delete()
-    .like('id', 'CMP-%')
-    .neq('sync_run_id', runId);
-  if (deleteError) {
-    console.error(`[CMP Ingest] Warning: Failed to clean up old cmp_invoices: ${deleteError.message}`);
+  if (!isFastSync) {
+    // Delete any old cmp_invoices where id starts with 'CMP-' but they were NOT in the current sync run.
+    const { error: deleteError } = await supabase
+      .from('cmp_invoices')
+      .delete()
+      .like('id', 'CMP-%')
+      .neq('sync_run_id', runId);
+    if (deleteError) {
+      console.error(`[CMP Ingest] Warning: Failed to clean up old cmp_invoices: ${deleteError.message}`);
+    }
+  } else {
+    console.log(`[CMP Ingest] Fast Sync mode: Skipped cleaning up older invoices.`);
   }
 
   return { syncRunId: runId, count: rows.length, syncedAt };

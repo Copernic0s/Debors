@@ -545,11 +545,17 @@ function App() {
     }
   }, [cmpRunnerApiBase]);
 
-  const runCmpScraper = React.useCallback(async () => {
+  const runCmpScraper = React.useCallback(async (depth = 'fast') => {
     if (!cmpRunnerApiBase) {
       throw new Error('CMP runner only works on localhost with server on port 3001.');
     }
-    const response = await fetch(`${cmpRunnerApiBase}/api/cmp/run`, { method: 'POST' });
+    const response = await fetch(`${cmpRunnerApiBase}/api/cmp/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ depth })
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(payload?.error || `Could not start CMP (${response.status})`);
@@ -557,7 +563,7 @@ function App() {
     refreshCmpStatus();
   }, [cmpRunnerApiBase, refreshCmpStatus]);
 
-  const handleSyncAll = React.useCallback(async () => {
+  const handleSyncAll = React.useCallback(async (depth = 'fast') => {
     if (!isAndresProfile || !cmpRunnerApiBase) {
       loadData({ notifyUser: true });
       return;
@@ -567,9 +573,9 @@ function App() {
     try {
       toast.loading('Sync All: loading Zoho...', { id: 'sync-all' });
       await loadData({ silent: true });
-      toast.loading('Sync All: starting CMP in Chrome (Profile 8)...', { id: 'sync-all' });
-      await runCmpScraper();
-      toast.success('CMP started. Watch status below.', { id: 'sync-all', duration: 4500 });
+      toast.loading(`Sync All: starting CMP ${depth} sync in Chrome (Profile 8)...`, { id: 'sync-all' });
+      await runCmpScraper(depth);
+      toast.success(`CMP ${depth} sync started. Watch status below.`, { id: 'sync-all', duration: 4500 });
     } catch (error) {
       toast.error(error?.message || 'Sync All failed', { id: 'sync-all', duration: 6000 });
     } finally {
@@ -1240,6 +1246,7 @@ function App() {
             lastCmpSyncAt={lastCmpSyncAt}
             cmpInvoiceCount={cmpInvoiceCount}
             syncAllBusy={syncAllBusy}
+            onRunSync={handleSyncAll}
           />
         )}
 
