@@ -36,22 +36,28 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId }) => {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  const { error: deleteError } = await supabase.from('cmp_invoices').delete().like('id', 'CMP-%');
-  if (deleteError) {
-    throw new Error(`Failed to clear cmp_invoices: ${deleteError.message}`);
-  }
+  // We no longer delete all cmp_invoices before inserting to prevent leaving the database empty on errors.
+  // Instead, we will do an upsert, and then clean up any older records that weren't in this sync run.
 
-  if (rows.length === 0) {
-    return { syncRunId: runId, count: 0, syncedAt };
-  }
-
-  const chunkSize = 500;
-  for (let index = 0; index < rows.length; index += chunkSize) {
-    const chunk = rows.slice(index, index + chunkSize);
-    const { error: insertError } = await supabase.from('cmp_invoices').insert(chunk);
-    if (insertError) {
-      throw new Error(`Failed to insert cmp_invoices: ${insertError.message}`);
+  if (rows.length > 0) {
+    const chunkSize = 500;
+    for (let index = 0; index < rows.length; index += chunkSize) {
+      const chunk = rows.slice(index, index + chunkSize);
+      const { error: insertError } = await supabase.from('cmp_invoices').upsert(chunk);
+      if (insertError) {
+        throw new Error(`Failed to upsert cmp_invoices: ${insertError.message}`);
+      }
     }
+  }
+
+  // Delete any old cmp_invoices where id starts with 'CMP-' but they were NOT in the current sync run.
+  const { error: deleteError } = await supabase
+    .from('cmp_invoices')
+    .delete()
+    .like('id', 'CMP-%')
+    .neq('sync_run_id', runId);
+  if (deleteError) {
+    console.error(`[CMP Ingest] Warning: Failed to clean up old cmp_invoices: ${deleteError.message}`);
   }
 
   return { syncRunId: runId, count: rows.length, syncedAt };

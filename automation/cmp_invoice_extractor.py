@@ -256,13 +256,30 @@ def create_driver() -> WebDriver:
 def wait_for_invoicing_table(driver: WebDriver) -> None:
     wait = WebDriverWait(driver, DEFAULT_TIMEOUT)
     wait.until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
-    for _ in range(24):
+    
+    last_row_count = -1
+    stable_count = 0
+    
+    for _ in range(30):
         tables = driver.find_elements(By.CSS_SELECTOR, "table, [role='table']")
         if tables:
             rows = tables[0].find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
-            if len(rows) > 1:
+            current_count = len(rows)
+            if current_count > 1:
                 return
-        time.sleep(5)
+            
+            # If the row count is stable (usually 0 or 1 for empty table) for 3 consecutive checks (~6s),
+            # it means the table is loaded and empty.
+            if current_count == last_row_count:
+                stable_count += 1
+                if stable_count >= 3:
+                    logging.info("Table is empty (no invoices found) and has stabilized.")
+                    return
+            else:
+                stable_count = 0
+                
+            last_row_count = current_count
+        time.sleep(2)
 
 
 def resolve_column_index(headers: list[str], candidates: tuple[str, ...]) -> int | None:
@@ -536,10 +553,16 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
 
         first_row_sig = rows[0].text if rows else ""
         # Navigate by URL to next page. If we get redirected to /auth for any reason,
-        # try switching back to an existing authenticated invoicing tab.
+        # try switching back to an existing authenticated invoicing tab or wait for login.
         goto_invoicing_page(driver, page + 1)
         if "/auth" in safe_current_url(driver):
-            switch_to_invoicing_tab(driver)
+            if switch_to_invoicing_tab(driver):
+                # If we successfully switched to another authenticated tab, navigate it to the target page.
+                goto_invoicing_page(driver, page + 1)
+            else:
+                # If no other authenticated tab is open, wait for the user to log in on the current tab, then navigate.
+                navigate_to_invoicing(driver)
+                goto_invoicing_page(driver, page + 1)
 
         refreshed = False
         for _ in range(60):

@@ -5,8 +5,8 @@ $ErrorActionPreference = "Stop"
 
 $env:CMP_INVOICING_URL = "https://cmp-front.production.united-fuel.com/invoicing?page=1&limit=500"
 $env:CMP_ZOHO_SHEET_NAME = "Client BY agent"
-$env:CMP_USER_DATA_DIR = "C:\Users\AndresMendez\AppData\Local\Google\Chrome\User Data"
-$env:CMP_PROFILE_DIR = "Profile 8"
+$env:CMP_USER_DATA_DIR = Join-Path $root "automation\chrome_user_data"
+$env:CMP_PROFILE_DIR = "Default"
 $env:CMP_CLONE_PROFILE = "false"
 $env:CMP_HEADLESS = "false"
 $env:CMP_REQUIRE_EXACT_PROFILE = "true"
@@ -21,15 +21,8 @@ if (-not $env:CMP_INGEST_URL) {
   $env:CMP_INGEST_URL = "http://127.0.0.1:3001/api/cmp/ingest"
 }
 
-# If Chrome is already running, launching a new window will be attached to the existing
-# process and Chrome will ignore flags like --remote-debugging-port. That makes Selenium
-# unable to attach (9222 not reachable). We aggressively close Chrome first.
-try {
-  Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
-} catch {
-  # ignore
-}
+# No longer killing all chrome processes to avoid disrupting the user.
+# Chrome will run in an isolated user data directory, so it won't conflict with existing sessions.
 
 $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 if (-not (Test-Path $chromePath)) {
@@ -37,18 +30,18 @@ if (-not (Test-Path $chromePath)) {
 }
 
 if (Test-Path $chromePath) {
-  # IMPORTANT: Start-Process ultimately receives a single command-line string.
-  # If we pass args that contain spaces without quoting (e.g. "User Data", "Profile 8"),
-  # Chrome will parse them incorrectly and may open the wrong profile (which looks logged out).
+  # PASSING ARGUMENTS AS AN ARRAY:
+  # PowerShell's Start-Process automatically quotes arguments with spaces when passed as an array.
+  # This prevents quoting bugs when passing to Windows API.
   $args = @(
     "--remote-debugging-port=9222",
-    "--user-data-dir=`"$env:CMP_USER_DATA_DIR`"",
-    "--profile-directory=`"$env:CMP_PROFILE_DIR`"",
+    "--user-data-dir=$env:CMP_USER_DATA_DIR",
+    "--profile-directory=$env:CMP_PROFILE_DIR",
     "--no-first-run",
     "--no-default-browser-check",
-    ($(if ($env:CMP_SHOW_BROWSER -eq "true") { "--window-position=20,20" } else { "--window-position=2000,2000" })),
-    "`"$env:CMP_INVOICING_URL`""
-  ) -join " "
+    (if ($env:CMP_SHOW_BROWSER -eq "true") { "--window-position=20,20" } else { "--window-position=2000,2000" }),
+    $env:CMP_INVOICING_URL
+  )
   try {
     $winStyle = if ($env:CMP_SHOW_BROWSER -eq "true") { "Normal" } else { "Minimized" }
     Start-Process -FilePath $chromePath -ArgumentList $args -WindowStyle $winStyle | Out-Null
