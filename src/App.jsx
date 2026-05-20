@@ -712,20 +712,50 @@ function App() {
   const handleResetDebtor = async (id) => {
     if (!user || !id) return;
     try {
-      // 1. Delete from Supabase to effectively remove the override
-      const { error } = await supabase
-        .from(TABLE_NAME)
-        .delete()
-        .eq('id', String(id));
+      let targetCompany = null;
+      if (String(id).startsWith('CMP-')) {
+        const found = data.find(d => d.id === id);
+        if (found) {
+          targetCompany = found.company || found.clientName;
+        }
+      }
 
-      if (error) throw error;
+      if (targetCompany) {
+        const normalizedCompany = targetCompany.trim().toLowerCase();
+        const idsToDelete = Object.values(manualEdits)
+          .filter(edit => String(edit.company || edit.clientName || '').trim().toLowerCase() === normalizedCompany)
+          .map(edit => edit.id);
 
-      // 2. Remove from local state
-      setManualEdits((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+        if (idsToDelete.length > 0) {
+          const { error } = await supabase
+            .from(TABLE_NAME)
+            .delete()
+            .in('id', idsToDelete);
+
+          if (error) throw error;
+
+          setManualEdits((prev) => {
+            const next = { ...prev };
+            idsToDelete.forEach(toDelId => {
+              delete next[toDelId];
+            });
+            return next;
+          });
+        }
+      } else {
+        const { error } = await supabase
+          .from(TABLE_NAME)
+          .delete()
+          .eq('id', String(id));
+
+        if (error) throw error;
+
+        setManualEdits((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
 
       toast.success('Override removed. Restoring Zoho data...', {
         icon: '🔄',

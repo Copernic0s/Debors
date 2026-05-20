@@ -8,17 +8,40 @@ import { normalizeBillingCycle } from '../constants/billingCycles';
 import { BILLING_CYCLES } from '../constants/billingCycles';
 
 const mergeManualEdits = (rows, editsById) => {
+  const editsByInvKey = new Map();
+  
+  Object.values(editsById).forEach(edit => {
+    if (edit.__deleted) return;
+    const companyKey = normalizeMatchKey(edit.company || edit.clientName);
+    const invNumber = String(edit.invoiceNumber || '').trim();
+    if (companyKey && invNumber) {
+      const invKey = normalizeMatchKey(invNumber);
+      editsByInvKey.set(`${companyKey}|${invKey}`, edit);
+    }
+  });
+
   const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
     .map((row) => {
-      const patch = editsById[row.id];
+      const companyKey = normalizeMatchKey(row.company || row.clientName);
+      const invNumber = String(row.invoiceNumber || '').trim();
+      const invKey = invNumber ? normalizeMatchKey(invNumber) : '';
+      
+      let patch = editsById[row.id];
+      if (!patch && companyKey && invKey) {
+        patch = editsByInvKey.get(`${companyKey}|${invKey}`);
+      }
+      
       if (!patch) return row;
+      
+      patch.__applied = true;
       return { ...row, ...patch };
     });
 
   const existingIds = new Set(merged.map((r) => r.id));
   Object.values(editsById).forEach((edit) => {
-    if ((edit.__isNew || !existingIds.has(edit.id)) && !edit.__deleted) {
+    if (edit.__deleted || edit.__applied) return;
+    if (edit.__isNew || !existingIds.has(edit.id)) {
       merged.unshift({ 
         ...edit,
         source: edit.source === 'manual_entry' ? 'invoice' : (edit.source || 'invoice')
