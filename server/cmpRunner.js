@@ -26,6 +26,10 @@ const getCmpStatus = () => {
   const running = Boolean(cmpChild && cmpChild.exitCode === null);
 
   return {
+    pid: process.pid,
+    rootDir: ROOT_DIR,
+    logPath: LOG_PATH,
+    statusPath: STATUS_PATH,
     running,
     startedAt,
     lastExitAt,
