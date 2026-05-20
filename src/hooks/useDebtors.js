@@ -8,17 +8,40 @@ import { normalizeBillingCycle } from '../constants/billingCycles';
 import { BILLING_CYCLES } from '../constants/billingCycles';
 
 const mergeManualEdits = (rows, editsById) => {
+  const editsByInvKey = new Map();
+  
+  Object.values(editsById).forEach(edit => {
+    if (edit.__deleted) return;
+    const companyKey = normalizeMatchKey(edit.company || edit.clientName);
+    const invNumber = String(edit.invoiceNumber || '').trim();
+    if (companyKey && invNumber) {
+      const invKey = normalizeMatchKey(invNumber);
+      editsByInvKey.set(`${companyKey}|${invKey}`, edit);
+    }
+  });
+
   const merged = rows
     .filter((row) => !editsById[row.id]?.__deleted)
     .map((row) => {
-      const patch = editsById[row.id];
+      const companyKey = normalizeMatchKey(row.company || row.clientName);
+      const invNumber = String(row.invoiceNumber || '').trim();
+      const invKey = invNumber ? normalizeMatchKey(invNumber) : '';
+      
+      let patch = editsById[row.id];
+      if (!patch && companyKey && invKey) {
+        patch = editsByInvKey.get(`${companyKey}|${invKey}`);
+      }
+      
       if (!patch) return row;
+      
+      patch.__applied = true;
       return { ...row, ...patch };
     });
 
   const existingIds = new Set(merged.map((r) => r.id));
   Object.values(editsById).forEach((edit) => {
-    if ((edit.__isNew || !existingIds.has(edit.id)) && !edit.__deleted) {
+    if (edit.__deleted || edit.__applied) return;
+    if (edit.__isNew || !existingIds.has(edit.id)) {
       merged.unshift({ 
         ...edit,
         source: edit.source === 'manual_entry' ? 'invoice' : (edit.source || 'invoice')
@@ -294,6 +317,57 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
 
       const zohoMerged = mergeDebtorsWithClientSheet(sheetData, csData);
       const mergedData = mergeZohoWithCmpRows(zohoMerged, cmpRows);
+
+      // Auto-cleanup stale manual overrides (if Zoho/CMP shows invoice is paid, remove pending/overdue manual edits)
+      const paidInvoices = new Set();
+      
+      cmpRows.forEach(row => {
+        if (String(row.status || '').toLowerCase() === 'paid') {
+          const companyKey = normalizeMatchKey(row.company || row.clientName);
+          const invKey = normalizeMatchKey(row.invoiceNumber);
+          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+        }
+      });
+      
+      zohoMerged.forEach(row => {
+        if (String(row.status || '').toLowerCase() === 'paid') {
+          const companyKey = normalizeMatchKey(row.company || row.clientName);
+          const invKey = normalizeMatchKey(row.invoiceNumber);
+          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+        }
+      });
+
+      const staleEditIds = [];
+      const currentManualEdits = manualEditsRef.current || {};
+      
+      Object.values(currentManualEdits).forEach(edit => {
+        if (edit.__deleted) return;
+        const companyKey = normalizeMatchKey(edit.company || edit.clientName);
+        const invKey = normalizeMatchKey(edit.invoiceNumber);
+        const editStatus = String(edit.status || '').toLowerCase();
+        
+        if (companyKey && invKey && (editStatus === 'pending' || editStatus === 'overdue')) {
+          if (paidInvoices.has(`${companyKey}|${invKey}`)) {
+            staleEditIds.push(edit.id);
+          }
+        }
+      });
+
+      if (staleEditIds.length > 0) {
+        console.log(`[Sync] Programmatically cleaning up ${staleEditIds.length} stale manual overrides...`);
+        supabase.from(tableName).delete().in('id', staleEditIds).then(({ error }) => {
+          if (error) {
+            console.error('[Sync] Failed to clean up stale overrides:', error.message);
+          } else {
+            setManualEdits(prev => {
+              const next = { ...prev };
+              staleEditIds.forEach(id => delete next[id]);
+              manualEditsRef.current = next;
+              return next;
+            });
+          }
+        });
+      }
 
       if (mergedData && mergedData.length > 0) {
         setRawZohoData(mergedData);
