@@ -540,7 +540,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             len(results),
         )
 
-        if page_dates and max(page_dates) < cutoff:
+        if page_dates and min(page_dates) < cutoff:
             logging.info("Reached invoices older than %d days. Stopping pagination.", HISTORY_DAYS)
             break
 
