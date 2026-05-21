@@ -545,7 +545,7 @@ function App() {
     }
   }, [cmpRunnerApiBase]);
 
-  const runCmpScraper = React.useCallback(async (depth = 'fast') => {
+  const runCmpScraper = React.useCallback(async (depth = 'normal') => {
     if (!cmpRunnerApiBase) {
       throw new Error('CMP runner only works on localhost with server on port 3001.');
     }
@@ -563,7 +563,7 @@ function App() {
     refreshCmpStatus();
   }, [cmpRunnerApiBase, refreshCmpStatus]);
 
-  const handleSyncAll = React.useCallback(async (depth = 'fast') => {
+  const handleSyncAll = React.useCallback(async (depth = 'normal') => {
     if (!isAndresProfile || !cmpRunnerApiBase) {
       loadData({ notifyUser: true });
       return;
@@ -573,7 +573,7 @@ function App() {
     try {
       toast.loading('Sync All: loading Zoho...', { id: 'sync-all' });
       await loadData({ silent: true });
-      toast.loading(`Sync All: starting CMP ${depth} sync in Chrome (Profile 8)...`, { id: 'sync-all' });
+      toast.loading(`Sync All: starting CMP ${depth} sync in Chrome...`, { id: 'sync-all' });
       await runCmpScraper(depth);
       toast.success(`CMP ${depth} sync started. Watch status below.`, { id: 'sync-all', duration: 4500 });
     } catch (error) {
@@ -1299,7 +1299,7 @@ function App() {
                 <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-main)', fontVariantNumeric: 'tabular-nums' }}>{timeString}</span>
               </div>
               <SyncButton
-                onClick={handleSyncAll}
+                onClick={() => handleSyncAll()}
                 title={isAndresProfile && isLocalHost ? 'Sync All (Zoho + CMP)' : 'Sync Zoho (Ctrl+Shift+S)'}
                 disabled={syncAllBusy || isSyncing}
               >

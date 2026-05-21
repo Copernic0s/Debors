@@ -209,7 +209,7 @@ export default function CmpSyncPanel({
 
       <Message>
         {syncAllBusy
-          ? 'Sync All: refreshing Zoho, then CMP scraper runs in Chrome (Profile 8, minimized).'
+          ? 'Sync All: refreshing Zoho, then CMP scraper runs in Chrome.'
           : cmpStatus?.message || 'Chrome runs in the background. Status updates every few seconds.'}
       </Message>
 

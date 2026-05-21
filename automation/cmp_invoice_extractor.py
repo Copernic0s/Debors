@@ -25,6 +25,7 @@ from selenium import webdriver
 from selenium.common.exceptions import (
     InvalidSessionIdException,
     SessionNotCreatedException,
+    StaleElementReferenceException,
     TimeoutException,
     WebDriverException,
 )
@@ -265,10 +266,21 @@ def wait_for_invoicing_table(driver: WebDriver) -> None:
     stable_count = 0
     
     for _ in range(30):
-        tables = driver.find_elements(By.CSS_SELECTOR, "table, [role='table']")
-        if tables:
-            rows = tables[0].find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
-            current_count = len(rows)
+        try:
+            current_count = int(
+                driver.execute_script(
+                    """
+                    const table = document.querySelector('table, [role="table"]');
+                    if (!table) return -1;
+                    return table.querySelectorAll('tbody tr, [role="row"]').length;
+                    """
+                )
+            )
+        except (StaleElementReferenceException, WebDriverException):
+            time.sleep(1)
+            continue
+
+        if current_count >= 0:
             if current_count > 1:
                 return
             
@@ -335,8 +347,11 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
     try:
         current = safe_current_url(driver)
         if "/invoicing" in current and "/auth" not in current:
-            logging.info("Already on invoicing page: %s", current)
-            return
+            canonical = build_invoicing_page_url(1)
+            logging.info("Already on invoicing page: %s. Resetting to %s", current, canonical)
+            goto_invoicing_page(driver, 1)
+            if "/auth" not in safe_current_url(driver):
+                return
     except RuntimeError:
         raise
 
@@ -423,11 +438,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
 
     navigate_to_invoicing(driver)
 
-    stop_for_age = False
     for page in range(1, MAX_PAGES + 1):
-        if stop_for_age:
-            break
-
         # Ensure we are on the expected paging URL. This avoids brittle "Next" selectors.
         if page > 1:
             goto_invoicing_page(driver, page)
@@ -496,6 +507,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
 
         page_dates: list[datetime] = []
         page_matched = 0
+        raw_row_count = len(raw_rows or [])
 
         for row in raw_rows or []:
             company, invoice_no, amount_text, status_raw, inv_date_text, due_text = row
@@ -537,16 +549,21 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             )
             page_matched += 1
 
+        date_summary = ""
+        if page_dates:
+            date_summary = f" Date range: {min(page_dates).date()} to {max(page_dates).date()}."
         logging.info(
-            "Page %d: %d portfolio matches (total %d).",
+            "Page %d: %d raw rows, %d portfolio matches (total %d).%s",
             page,
+            raw_row_count,
             page_matched,
             len(results),
+            date_summary,
         )
 
-        if page_dates and min(page_dates) < cutoff:
-            logging.info("Reached invoices older than %d days. Stopping pagination.", HISTORY_DAYS)
-            break
+        # CMP pages are not guaranteed to be sorted strictly by invoice date.
+        # A single old invoice on page 1 used to stop the sync and skip newer invoices
+        # on later pages, which is especially visible on Thursday's second billing cycle.
 
         rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
         if len(rows) <= 1:
