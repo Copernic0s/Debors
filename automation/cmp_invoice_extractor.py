@@ -32,6 +32,7 @@ from selenium.common.exceptions import (
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
@@ -431,6 +432,154 @@ def goto_invoicing_page(driver: WebDriver, page: int) -> None:
         driver.execute_script("window.location.assign(arguments[0]);", target)
 
 
+def clear_visible_table_filters(driver: WebDriver) -> None:
+    """
+    CMP keeps some table filters/search values in the browser session.
+    If a previous manual search was left in place (for example one company name),
+    the bot only sees that subset and uploads an incomplete snapshot.
+    """
+    selectors = (
+        "input:not([type]), input[type='text'], input[type='search'], "
+        "textarea, [contenteditable='true']"
+    )
+    try:
+        filter_controls = driver.find_elements(By.CSS_SELECTOR, selectors)
+    except WebDriverException:
+        return
+
+    cleared: list[str] = []
+    for control in filter_controls:
+        try:
+            if not control.is_displayed() or not control.is_enabled():
+                continue
+            value = str(control.get_attribute("value") or control.get_attribute("textContent") or "")
+            if not value.strip():
+                continue
+            label = (
+                control.get_attribute("placeholder")
+                or control.get_attribute("aria-label")
+                or control.get_attribute("name")
+                or control.get_attribute("id")
+                or "filter"
+            )
+            control.click()
+            control.send_keys(Keys.CONTROL, "a")
+            control.send_keys(Keys.BACKSPACE)
+            control.send_keys(Keys.ENTER)
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                const setValue = Object.getOwnPropertyDescriptor(
+                  el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+                  'value'
+                )?.set;
+                if (setValue && 'value' in el) setValue.call(el, '');
+                else el.textContent = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                control,
+            )
+            control.send_keys(Keys.ENTER)
+            cleared.append(f"{label}='{value[:60]}'")
+        except WebDriverException:
+            continue
+
+    if cleared:
+        logging.info("Cleared CMP filters/search before scraping: %s", "; ".join(cleared))
+        time.sleep(3)
+        for _ in range(10):
+            time.sleep(1)
+            try:
+                remaining = driver.find_elements(By.CSS_SELECTOR, selectors)
+                active_values = [
+                    str(item.get_attribute("value") or item.get_attribute("textContent") or "").strip()
+                    for item in remaining
+                    if item.is_displayed() and item.is_enabled()
+                ]
+                if not any(active_values):
+                    return
+            except WebDriverException:
+                return
+        logging.warning("Some CMP filter/search controls still have values after clearing.")
+
+
+def read_first_row_signature(driver: WebDriver) -> str:
+    try:
+        return str(
+            driver.execute_script(
+                """
+                const row = document.querySelector('table tbody tr, [role="table"] [role="row"]');
+                return row ? row.textContent : '';
+                """
+            )
+            or ""
+        )
+    except WebDriverException:
+        return ""
+
+
+def wait_for_table_change(driver: WebDriver, first_row_sig: str, timeout_seconds: int = 45) -> bool:
+    start = time.time()
+    while time.time() - start < timeout_seconds:
+        time.sleep(1)
+        current_sig = read_first_row_signature(driver)
+        if current_sig and current_sig != first_row_sig:
+            return True
+    return False
+
+
+def click_next_page_button(driver: WebDriver) -> bool:
+    button_xpaths = [
+        "//button[not(@disabled) and not(@aria-disabled='true') and "
+        "(contains(translate(@aria-label,'NEXT','next'),'next') or "
+        "contains(translate(@title,'NEXT','next'),'next') or "
+        "contains(translate(normalize-space(.),'NEXT','next'),'next'))]",
+        "//a[not(@aria-disabled='true') and "
+        "(contains(translate(@aria-label,'NEXT','next'),'next') or "
+        "contains(translate(@title,'NEXT','next'),'next') or "
+        "contains(translate(normalize-space(.),'NEXT','next'),'next'))]",
+        "//*[self::button or self::a][not(@disabled) and not(@aria-disabled='true')]"
+        "[.//*[contains(@class,'chevron-right') or contains(@class,'arrow-right')]]",
+    ]
+
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(0.5)
+    for xpath in button_xpaths:
+        try:
+            candidates = driver.find_elements(By.XPATH, xpath)
+        except WebDriverException:
+            continue
+        for candidate in candidates:
+            try:
+                if not candidate.is_displayed() or not candidate.is_enabled():
+                    continue
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", candidate)
+                time.sleep(0.2)
+                driver.execute_script("arguments[0].click();", candidate)
+                return True
+            except WebDriverException:
+                continue
+    return False
+
+
+def advance_to_next_invoicing_page(driver: WebDriver, page: int, first_row_sig: str) -> bool:
+    if click_next_page_button(driver):
+        if wait_for_table_change(driver, first_row_sig):
+            return True
+        logging.warning("Next button clicked for page %d but table did not refresh.", page + 1)
+
+    goto_invoicing_page(driver, page + 1)
+    if "/auth" in safe_current_url(driver):
+        if switch_to_invoicing_tab(driver):
+            goto_invoicing_page(driver, page + 1)
+        else:
+            navigate_to_invoicing(driver)
+            goto_invoicing_page(driver, page + 1)
+
+    return wait_for_table_change(driver, first_row_sig)
+
+
 def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[dict[str, Any]]:
     cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     results: list[dict[str, Any]] = []
@@ -439,10 +588,6 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
     navigate_to_invoicing(driver)
 
     for page in range(1, MAX_PAGES + 1):
-        # Ensure we are on the expected paging URL. This avoids brittle "Next" selectors.
-        if page > 1:
-            goto_invoicing_page(driver, page)
-
         write_status(
             running=True,
             phase="scraping",
@@ -451,6 +596,9 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             invoices_found=len(results),
         )
         wait_for_invoicing_table(driver)
+        if page == 1:
+            clear_visible_table_filters(driver)
+            wait_for_invoicing_table(driver)
 
         tables = driver.find_elements(By.CSS_SELECTOR, "table, [role='table']")
         if not tables:
@@ -572,32 +720,8 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
         if page >= MAX_PAGES:
             break
 
-        first_row_sig = (rows[0].get_attribute("textContent") or "") if rows else ""
-        # Navigate by URL to next page. If we get redirected to /auth for any reason,
-        # try switching back to an existing authenticated invoicing tab or wait for login.
-        goto_invoicing_page(driver, page + 1)
-        if "/auth" in safe_current_url(driver):
-            if switch_to_invoicing_tab(driver):
-                # If we successfully switched to another authenticated tab, navigate it to the target page.
-                goto_invoicing_page(driver, page + 1)
-            else:
-                # If no other authenticated tab is open, wait for the user to log in on the current tab, then navigate.
-                navigate_to_invoicing(driver)
-                goto_invoicing_page(driver, page + 1)
-
-        refreshed = False
-        for _ in range(60):
-            time.sleep(1)
-            try:
-                new_rows = driver.find_elements(
-                    By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']"
-                )
-                if len(new_rows) > 1 and (new_rows[0].get_attribute("textContent") or "") != first_row_sig:
-                    refreshed = True
-                    break
-            except WebDriverException:
-                pass
-        if not refreshed:
+        first_row_sig = read_first_row_signature(driver)
+        if not advance_to_next_invoicing_page(driver, page, first_row_sig):
             logging.warning("Pagination did not refresh; stopping.")
             break
 
