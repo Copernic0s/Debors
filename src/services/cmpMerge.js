@@ -36,7 +36,11 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
       source: 'cmp',
       invoiceDate: row.invoice_date || null,
       cmpStatusRaw: row.cmp_status_raw || null,
-      syncedAt: row.synced_at || null
+      syncedAt: row.synced_at || null,
+      pdfStoragePath: row.pdf_storage_path || null,
+      pdfStatus: row.pdf_status || (row.pdf_storage_path ? 'available' : 'missing'),
+      pdfDownloadedAt: row.pdf_downloaded_at || null,
+      pdfError: row.pdf_error || null
     };
   });
 };

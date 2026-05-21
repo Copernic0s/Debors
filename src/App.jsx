@@ -20,6 +20,7 @@ import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
 import { resolveAccessProfile } from './constants/accessControl';
 import { emailService } from './services/emailService';
+import { openCmpInvoicePdf, requestCmpInvoicePdf } from './services/cmpInvoices';
 import './index.css';
 
 const TABLE_NAME = 'manual_edits';
@@ -498,6 +499,7 @@ function App() {
     error: null
   });
   const [syncAllBusy, setSyncAllBusy] = useState(false);
+  const [pdfBusyIds, setPdfBusyIds] = useState({});
   const cmpWasRunningRef = React.useRef(false);
 
   const refreshCmpStatus = React.useCallback(async () => {
@@ -582,6 +584,34 @@ function App() {
       setSyncAllBusy(false);
     }
   }, [cmpRunnerApiBase, isAndresProfile, loadData, runCmpScraper]);
+
+  const handleOpenPdf = React.useCallback(async (row) => {
+    try {
+      await openCmpInvoicePdf(supabase, row);
+    } catch (error) {
+      toast.error(error?.message || 'Could not open PDF');
+    }
+  }, []);
+
+  const handleRequestPdf = React.useCallback(async (row) => {
+    const rowId = row?.id;
+    if (!rowId) return;
+
+    setPdfBusyIds((prev) => ({ ...prev, [rowId]: true }));
+    try {
+      await requestCmpInvoicePdf(cmpRunnerApiBase, row);
+      toast.success('PDF request started');
+      await loadData({ silent: true });
+    } catch (error) {
+      toast.error(error?.message || 'Could not request PDF');
+    } finally {
+      setPdfBusyIds((prev) => {
+        const next = { ...prev };
+        delete next[rowId];
+        return next;
+      });
+    }
+  }, [cmpRunnerApiBase, loadData]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
@@ -1162,6 +1192,10 @@ function App() {
             onQuickUpdateBillingCycle={quickUpdateBillingCycle}
             onQuickUpdateStatus={quickUpdatePaymentStatus}
             onQuickUpdateAmount={quickUpdateTotalDue}
+            onOpenPdf={handleOpenPdf}
+            onRequestPdf={handleRequestPdf}
+            canRequestPdf={Boolean(cmpRunnerApiBase)}
+            pdfBusyIds={pdfBusyIds}
             onEdit={(debtor) => {
               setCurrentDebtor(debtor);
               setIsModalOpen(true);

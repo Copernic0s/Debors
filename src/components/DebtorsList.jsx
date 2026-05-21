@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Search, ChevronDown, ChevronUp, Edit2, Trash2, Inbox, PlusCircle } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Edit2, Trash2, Inbox, PlusCircle, FileText, Download, Loader2 } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import { BILLING_CYCLE_OPTIONS, BILLING_CYCLES, normalizeBillingCycle } from '../constants/billingCycles';
 
@@ -133,6 +133,12 @@ const Th = styled.th`
   @media (max-width: 768px) {
     white-space: nowrap;
     padding: 0.8rem;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
   }
 `;
 
@@ -349,6 +355,10 @@ export default function DebtorsList({
   onQuickUpdateBillingCycle,
   onQuickUpdateStatus,
   onQuickUpdateAmount,
+  onOpenPdf,
+  onRequestPdf,
+  canRequestPdf = false,
+  pdfBusyIds = {},
   readOnly = false
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -593,6 +603,27 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    {item.invoiceNumber && (item.source === 'cmp' || item.sourceType === 'invoice') && (
+                      item.pdfStoragePath ? (
+                        <IconActionButton
+                          type="button"
+                          onClick={() => onOpenPdf?.(item)}
+                          title="Open PDF"
+                          style={{ color: 'var(--ok)', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                        >
+                          <FileText size={14} />
+                        </IconActionButton>
+                      ) : (
+                        <IconActionButton
+                          type="button"
+                          onClick={() => onRequestPdf?.(item)}
+                          title={canRequestPdf ? 'Get PDF from CMP' : 'PDF not downloaded yet'}
+                          disabled={!canRequestPdf || Boolean(pdfBusyIds[item.id])}
+                        >
+                          {pdfBusyIds[item.id] ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+                        </IconActionButton>
+                      )
+                    )}
                     {!readOnly && (
                       <>
                         <IconActionButton
@@ -662,6 +693,10 @@ export default function DebtorsList({
           setDeleteDialog({ isOpen: false, item: null });
         }}
       />
+      <style>{`
+        .spin { animation: pdfSpin 1s linear infinite; }
+        @keyframes pdfSpin { 100% { transform: rotate(360deg); } }
+      `}</style>
     </Container>
   );
 }
