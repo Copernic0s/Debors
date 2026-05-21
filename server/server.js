@@ -6,6 +6,8 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const XLSX = require('xlsx');
+const { spawn } = require('child_process');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -460,6 +462,95 @@ app.post('/api/cmp/ingest', async (req, res) => {
     console.error('[CMP Ingest]', error);
     return res.status(500).json({ error: error.message || 'CMP ingest failed' });
   }
+});
+
+app.post('/api/cmp/pdf', async (req, res) => {
+  const invoiceNumber = String(req.body?.invoiceNumber || '').trim();
+  const companyName = String(req.body?.companyName || '').trim();
+
+  if (!invoiceNumber || !companyName) {
+    return res.status(400).json({ error: 'invoiceNumber and companyName are required' });
+  }
+
+  if (getCmpStatus().running) {
+    return res.status(409).json({ error: 'CMP sync is running. Request the PDF after the scraper finishes.' });
+  }
+
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!supabaseUrl || !serviceKey) {
+    return res.status(500).json({ error: 'Missing Supabase service credentials for PDF upload' });
+  }
+
+  const supabase = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+
+  await supabase
+    .from('cmp_invoices')
+    .update({ pdf_status: 'fetching', pdf_error: null })
+    .eq('invoice_number', invoiceNumber);
+
+  const scriptPath = path.join(__dirname, '..', 'automation', 'cmp_pdf_fetcher.py');
+  const child = spawn(
+    'python',
+    [scriptPath, '--invoice-number', invoiceNumber, '--company-name', companyName],
+    {
+      cwd: path.resolve(__dirname, '..'),
+      env: {
+        ...process.env,
+        CMP_DEBUGGER_ADDRESS: process.env.CMP_DEBUGGER_ADDRESS || 'localhost:9222'
+      },
+      windowsHide: true
+    }
+  );
+
+  let stdout = '';
+  let stderr = '';
+  child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+  child.on('close', async (code) => {
+    try {
+      if (code !== 0) {
+        let message = stderr.trim() || `PDF worker exited with code ${code}`;
+        try {
+          const parsed = JSON.parse(message.split(/\r?\n/).pop());
+          message = parsed.error || message;
+        } catch {
+          // Keep raw worker output.
+        }
+        await supabase
+          .from('cmp_invoices')
+          .update({ pdf_status: 'failed', pdf_error: message })
+          .eq('invoice_number', invoiceNumber);
+        return res.status(500).json({ error: message });
+      }
+
+      const result = JSON.parse(stdout.trim().split(/\r?\n/).pop() || '{}');
+      if (!result.storagePath) {
+        throw new Error('PDF worker did not return a storage path');
+      }
+
+      await supabase
+        .from('cmp_invoices')
+        .update({
+          pdf_storage_path: result.storagePath,
+          pdf_status: 'available',
+          pdf_downloaded_at: new Date().toISOString(),
+          pdf_error: null
+        })
+        .eq('invoice_number', invoiceNumber);
+
+      return res.json({ ok: true, pdfStoragePath: result.storagePath });
+    } catch (error) {
+      await supabase
+        .from('cmp_invoices')
+        .update({ pdf_status: 'failed', pdf_error: error.message || 'PDF worker failed' })
+        .eq('invoice_number', invoiceNumber);
+      return res.status(500).json({ error: error.message || 'PDF worker failed' });
+    }
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
