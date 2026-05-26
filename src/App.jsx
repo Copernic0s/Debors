@@ -18,7 +18,7 @@ import { calculateMetrics } from './data/mockData';
 import { useDebtors, aggregateByCompany } from './hooks/useDebtors';
 import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
-import { resolveAccessProfile } from './constants/accessControl';
+import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
 import { openCmpInvoicePdf, requestCmpInvoicePdf } from './services/cmpInvoices';
 import './index.css';
@@ -489,6 +489,51 @@ function App() {
     setManualEdits,
     setData
   } = useDebtors({ supabase, user, tableName: TABLE_NAME });
+
+  const isHectorProfile = String(user?.email || '').toLowerCase() === 'hector.lomeli@theunitedtransports.com';
+
+  const accessibleData = React.useMemo(() => {
+    if (isHectorProfile) {
+      const hectorScopes = ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
+      return data.filter((item) => hectorScopes.some((scope) => agentMatchesScopeValue(scope, item.agentId)));
+    }
+    if (accessProfile.canViewAllData) return data;
+    return data.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [data, accessProfile, isHectorProfile]);
+
+  const accessibleClientsByAgent = React.useMemo(() => {
+    if (isHectorProfile) {
+      const hectorScopes = ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
+      return clientsByAgent.filter((item) => hectorScopes.some((scope) => agentMatchesScopeValue(scope, item.agentId)));
+    }
+    if (accessProfile.canViewAllData) return clientsByAgent;
+    return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
+  }, [clientsByAgent, accessProfile, isHectorProfile]);
+
+  const accessibleTrackerData = React.useMemo(() => {
+    if (isHectorProfile) {
+      const hectorScopes = ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
+      return trackerData.filter((item) => hectorScopes.some((scope) => agentMatchesScopeValue(scope, item.agent || item.agentId)));
+    }
+    if (accessProfile.canViewAllData) return trackerData;
+    return trackerData.filter((item) => userCanAccessAgent(accessProfile, item.agent || item.agentId));
+  }, [trackerData, accessProfile, isHectorProfile]);
+
+  const matchesSelectedAgent = React.useCallback(
+    (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
+    [selectedAgent]
+  );
+
+  useEffect(() => {
+    if (accessProfile.canViewAllData) return;
+    const scopedAgents = Array.from(
+      new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))
+    );
+    if (scopedAgents.length === 0) return;
+    if (selectedAgent === 'all' || !scopedAgents.some((a) => agentMatchesScopeValue(a, selectedAgent))) {
+      setSelectedAgent(scopedAgents[0]);
+    }
+  }, [accessProfile, accessibleData, selectedAgent]);
 
   const [cmpStatus, setCmpStatus] = useState({
     running: false,
@@ -1018,12 +1063,12 @@ function App() {
 
 
 
-  const weekOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [data]);
-  const agentOptions = React.useMemo(() => Array.from(new Set(data.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [data]);
+  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
-    return data.map(row => {
+    return accessibleData.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
 
@@ -1040,16 +1085,16 @@ function App() {
       }
       return { ...row, status, isAutoOverdue };
     });
-  }, [data, lastTick]);
+  }, [accessibleData, lastTick]);
 
   const scopedInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
-    const matchesAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+    const matchesAgent = matchesSelectedAgent(item.agentId);
     const matchesWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
     const status = String(item.status || '').toLowerCase();
     const isOpen = status === 'pending' || status === 'overdue';
     const matchesStatus = statusScope === 'all' || isOpen;
     return matchesAgent && matchesWeek && matchesStatus;
-  }), [hydratedWithSmartStatus, selectedAgent, selectedWeek, statusScope]);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek, statusScope]);
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
@@ -1082,10 +1127,10 @@ function App() {
     if (!activeCompany) return null;
 
     const targetKey = normalizeMatchKey(activeCompany);
-    const scopedRows = data.filter((item) => {
+    const scopedRows = accessibleData.filter((item) => {
       const byCompany = normalizeMatchKey(item.company || item.clientName) === targetKey;
       if (!byCompany) return false;
-      const byAgent = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+      const byAgent = matchesSelectedAgent(item.agentId);
       const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
       return byAgent && byWeek;
     });
@@ -1132,7 +1177,7 @@ function App() {
         String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
       )
     };
-  }, [activeCompany, data, selectedAgent, selectedWeek]);
+  }, [activeCompany, accessibleData, matchesSelectedAgent, selectedWeek]);
 
 
 
@@ -1163,8 +1208,12 @@ function App() {
 
           <AgentToolbar>
             <FiltersRow>
-              <AgentSelect value={selectedAgent} onChange={(e) => setSelectedAgent(e.target.value)}>
-                <option value="all">All agents</option>
+              <AgentSelect
+                value={selectedAgent}
+                onChange={(e) => setSelectedAgent(e.target.value)}
+                disabled={!accessProfile.canViewAllData}
+              >
+                {accessProfile.canViewAllData && <option value="all">All agents</option>}
                 {agentOptions.map((agentName) => (
                   <option key={agentName} value={agentName}>{agentName}</option>
                 ))}
@@ -1217,15 +1266,15 @@ function App() {
 
       {activeView === 'tracker' && (
         <ContentScroll>
-          <SupportTracker data={trackerData} />
+          <SupportTracker data={accessibleTrackerData} />
         </ContentScroll>
       )}
 
       {activeView === 'invoice_entry' && (
         <ContentScroll>
           <InvoiceEntry 
-            clientsByAgent={clientsByAgent} 
-            existingData={data} 
+            clientsByAgent={accessibleClientsByAgent} 
+            existingData={accessibleData} 
             onSaveInvoice={(invoice) => {
               // Optimistically update local data state so it shows in Overview immediately
               setData(prev => {
