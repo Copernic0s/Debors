@@ -475,6 +475,7 @@ function App() {
 
   const {
     data,
+    rawZohoData,
     clientsByAgent,
     trackerData,
     loading,
@@ -709,21 +710,42 @@ function App() {
 
       if (isAggregatedRow) {
         const targetCompanyKey = normalizeMatchKey(currentDebtor.company || currentDebtor.clientName);
-        setData((prev) => {
-          const changed = [];
-          const next = prev.map((item) => {
-            const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
-            if (!sameCompany) return item;
 
-            const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
-            const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
-            if (!inAgentScope || !inWeekScope) return item;
+        const changedRows = [];
+        const nextRawZohoData = rawZohoData.map((item) => {
+          const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
+          if (!sameCompany) return item;
 
-            const updatedRow = {
-              ...item,
+          const inAgentScope = selectedAgent === 'all' || String(item.agentId || '').trim() === selectedAgent;
+          const inWeekScope = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+          if (!inAgentScope || !inWeekScope) return item;
+
+          const updatedRow = {
+            ...item,
+            company: debtor.company || debtor.clientName,
+            clientName: debtor.company || debtor.clientName,
+            amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
+            dueDate: debtor.dueDate,
+            status: debtor.status,
+            agentId: debtor.agentId,
+            billingCycle: debtor.billingCycle,
+            invoiceNumber: debtor.invoiceNumber,
+            notes: debtor.notes
+          };
+          changedRows.push(updatedRow);
+          return updatedRow;
+        });
+
+        const changedEdits = [];
+        const nextManualEdits = { ...manualEdits };
+        Object.keys(nextManualEdits).forEach((editId) => {
+          const edit = nextManualEdits[editId];
+          const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
+          if (sameComp) {
+            const updatedEdit = {
+              ...edit,
               company: debtor.company || debtor.clientName,
               clientName: debtor.company || debtor.clientName,
-              amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0,
               dueDate: debtor.dueDate,
               status: debtor.status,
               agentId: debtor.agentId,
@@ -731,51 +753,29 @@ function App() {
               invoiceNumber: debtor.invoiceNumber,
               notes: debtor.notes
             };
-            changed.push(updatedRow);
-            return updatedRow;
-          });
-          
-          setManualEdits(prevEdits => {
-            const nextEdits = { ...prevEdits };
-            Object.keys(nextEdits).forEach((editId) => {
-              const edit = nextEdits[editId];
-              const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
-              if (sameComp) {
-                const updatedEdit = {
-                  ...edit,
-                  company: debtor.company || debtor.clientName,
-                  clientName: debtor.company || debtor.clientName,
-                  dueDate: debtor.dueDate,
-                  status: debtor.status,
-                  agentId: debtor.agentId,
-                  billingCycle: debtor.billingCycle,
-                  invoiceNumber: debtor.invoiceNumber,
-                  notes: debtor.notes
-                };
-                nextEdits[editId] = updatedEdit;
-                if (!changed.some(c => c.id === editId)) {
-                  changed.push(updatedEdit);
-                }
-              }
-            });
-            return nextEdits;
-          });
-
-          if (changed.length > 0) {
-            persistEditedRows(changed);
+            nextManualEdits[editId] = updatedEdit;
+            changedEdits.push(updatedEdit);
           }
-          return next;
         });
+
+        setData(nextRawZohoData);
+        setManualEdits(nextManualEdits);
+
+        const uniqueChanged = new Map();
+        changedRows.forEach((r) => uniqueChanged.set(r.id, r));
+        changedEdits.forEach((e) => uniqueChanged.set(e.id, e));
+        const toPersist = Array.from(uniqueChanged.values());
+
+        if (toPersist.length > 0) {
+          persistEditedRows(toPersist);
+        }
       } else {
-        setData((prev) => {
-          const next = prev.map((d) => (d.id === debtor.id ? debtor : d));
-          setManualEdits(prevEdits => {
-            const nextEdits = { ...prevEdits, [debtor.id]: debtor };
-            return nextEdits;
-          });
-          persistEditedRows([debtor]);
-          return next;
-        });
+        const nextRawZohoData = rawZohoData.map((d) => (d.id === debtor.id ? debtor : d));
+        const nextManualEdits = { ...manualEdits, [debtor.id]: debtor };
+
+        setData(nextRawZohoData);
+        setManualEdits(nextManualEdits);
+        persistEditedRows([debtor]);
       }
 
       toast.success('Debt updated successfully', {
@@ -788,20 +788,19 @@ function App() {
         id: newId,
         amount: Number.isFinite(roundMoney(debtor.amount)) ? roundMoney(debtor.amount) : 0
       };
-      setData([newDebtor, ...data]);
-      setManualEdits((prev) => {
-        const nextEdit = {
-          ...newDebtor,
-          __isNew: true,
-          __deleted: false
-        };
-        const next = {
-          ...prev,
-          [newId]: nextEdit
-        };
-        persistEditedRows([nextEdit]);
-        return next;
+      const nextEdit = {
+        ...newDebtor,
+        __isNew: true,
+        __deleted: false
+      };
+
+      setData([newDebtor, ...rawZohoData]);
+      setManualEdits({
+        ...manualEdits,
+        [newId]: nextEdit
       });
+      persistEditedRows([nextEdit]);
+
       toast.success('New debtor added', {
         style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
       });
@@ -879,36 +878,39 @@ function App() {
         normalizeMatchKey(d.company || d.clientName) === targetCompanyKey
       );
 
-      setData((prev) => prev.filter((d) =>
+      const nextRawZohoData = rawZohoData.filter((d) =>
         normalizeMatchKey(d.company || d.clientName) !== targetCompanyKey
-      ));
+      );
 
-      setManualEdits((prev) => {
-        const next = { ...prev };
-        const changed = [];
-        rowsToDelete.forEach((d) => {
-          const edit = { ...(next[d.id] || {}), id: d.id, __deleted: true };
-          next[d.id] = edit;
-          changed.push(edit);
-        });
+      const changed = [];
+      const nextManualEdits = { ...manualEdits };
+      rowsToDelete.forEach((d) => {
+        const edit = { ...(nextManualEdits[d.id] || {}), id: d.id, __deleted: true };
+        nextManualEdits[d.id] = edit;
+        changed.push(edit);
+      });
+
+      setData(nextRawZohoData);
+      setManualEdits(nextManualEdits);
+
+      if (changed.length > 0) {
         persistEditedRows(changed);
-        return next;
-      });
+      }
     } else {
-      setData((prev) => prev.filter((d) => d.id !== id));
-      setManualEdits((prev) => {
-        const edit = {
-          ...(prev[id] || {}),
-          id,
-          __deleted: true
-        };
-        const next = {
-          ...prev,
-          [id]: edit
-        };
-        persistEditedRows([edit]);
-        return next;
-      });
+      const nextRawZohoData = rawZohoData.filter((d) => d.id !== id);
+      const edit = {
+        ...(manualEdits[id] || {}),
+        id,
+        __deleted: true
+      };
+      const nextManualEdits = {
+        ...manualEdits,
+        [id]: edit
+      };
+
+      setData(nextRawZohoData);
+      setManualEdits(nextManualEdits);
+      persistEditedRows([edit]);
     }
     toast.success('Record deleted', {
       icon: '🗑️',
@@ -927,21 +929,40 @@ function App() {
 
     const normalizedNextCycle = normalizeBillingCycle(nextCycle);
 
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
+    const changedRows = [];
+    const nextRawZohoData = rawZohoData.map((item) => {
+      if (item.id !== idToUpdate) return item;
 
-        const updatedRow = {
-          ...item,
-          billingCycle: normalizedNextCycle
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
+      const updatedRow = {
+        ...item,
+        billingCycle: normalizedNextCycle
+      };
+      changedRows.push(updatedRow);
+      return updatedRow;
     });
+
+    const changedEdits = [];
+    const nextManualEdits = { ...manualEdits };
+    if (nextManualEdits[idToUpdate]) {
+      const updatedEdit = {
+        ...nextManualEdits[idToUpdate],
+        billingCycle: normalizedNextCycle
+      };
+      nextManualEdits[idToUpdate] = updatedEdit;
+      changedEdits.push(updatedEdit);
+    }
+
+    setData(nextRawZohoData);
+    setManualEdits(nextManualEdits);
+
+    const uniqueChanged = new Map();
+    changedRows.forEach((r) => uniqueChanged.set(r.id, r));
+    changedEdits.forEach((e) => uniqueChanged.set(e.id, e));
+    const toPersist = Array.from(uniqueChanged.values());
+
+    if (toPersist.length > 0) {
+      persistEditedRows(toPersist);
+    }
 
     toast.success('Billing cycle updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
@@ -954,77 +975,84 @@ function App() {
 
     if (isAggregatedRow) {
       const targetCompanyKey = normalizeMatchKey(row.company || row.clientName);
-      setData((prev) => {
-        const changed = [];
-        const next = prev.map((item) => {
-          const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
-          if (!sameCompany) return item;
 
-          const updatedRow = {
-            ...item,
+      const changedRows = [];
+      const nextRawZohoData = rawZohoData.map((item) => {
+        const sameCompany = normalizeMatchKey(item.company || item.clientName) === targetCompanyKey;
+        if (!sameCompany) return item;
+
+        const updatedRow = {
+          ...item,
+          status: normalizedStatus
+        };
+        changedRows.push(updatedRow);
+        return updatedRow;
+      });
+
+      const changedEdits = [];
+      const nextManualEdits = { ...manualEdits };
+      Object.keys(nextManualEdits).forEach((editId) => {
+        const edit = nextManualEdits[editId];
+        const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
+        if (sameComp) {
+          const updatedEdit = {
+            ...edit,
             status: normalizedStatus
           };
-          changed.push(updatedRow);
-          return updatedRow;
-        });
-
-        setManualEdits((prevEdits) => {
-          const nextEdits = { ...prevEdits };
-          Object.keys(nextEdits).forEach((editId) => {
-            const edit = nextEdits[editId];
-            const sameComp = normalizeMatchKey(edit.company || edit.clientName) === targetCompanyKey;
-            if (sameComp) {
-              const updatedEdit = {
-                ...edit,
-                status: normalizedStatus
-              };
-              nextEdits[editId] = updatedEdit;
-              if (!changed.some(c => c.id === editId)) {
-                changed.push(updatedEdit);
-              }
-            }
-          });
-          return nextEdits;
-        });
-
-        if (changed.length > 0) {
-          persistEditedRows(changed);
+          nextManualEdits[editId] = updatedEdit;
+          changedEdits.push(updatedEdit);
         }
-        return next;
       });
+
+      setData(nextRawZohoData);
+      setManualEdits(nextManualEdits);
+
+      const uniqueChanged = new Map();
+      changedRows.forEach((r) => uniqueChanged.set(r.id, r));
+      changedEdits.forEach((e) => uniqueChanged.set(e.id, e));
+      const toPersist = Array.from(uniqueChanged.values());
+
+      if (toPersist.length > 0) {
+        persistEditedRows(toPersist);
+      }
     } else {
       const idToUpdate = row.latestId || row.id;
       if (!idToUpdate) return;
-      setData((prev) => {
-        const changed = [];
-        const next = prev.map((item) => {
-          if (item.id !== idToUpdate) return item;
 
-          const updatedRow = {
-            ...item,
-            status: normalizedStatus
-          };
-          changed.push(updatedRow);
-          return updatedRow;
-        });
+      const changedRows = [];
+      const nextRawZohoData = rawZohoData.map((item) => {
+        if (item.id !== idToUpdate) return item;
 
-        setManualEdits((prevEdits) => {
-          const nextEdits = { ...prevEdits };
-          if (nextEdits[idToUpdate]) {
-            nextEdits[idToUpdate] = {
-              ...nextEdits[idToUpdate],
-              status: normalizedStatus
-            };
-            changed.push(nextEdits[idToUpdate]);
-          }
-          return nextEdits;
-        });
-
-        if (changed.length > 0) {
-          persistEditedRows(changed);
-        }
-        return next;
+        const updatedRow = {
+          ...item,
+          status: normalizedStatus
+        };
+        changedRows.push(updatedRow);
+        return updatedRow;
       });
+
+      const changedEdits = [];
+      const nextManualEdits = { ...manualEdits };
+      if (nextManualEdits[idToUpdate]) {
+        const updatedEdit = {
+          ...nextManualEdits[idToUpdate],
+          status: normalizedStatus
+        };
+        nextManualEdits[idToUpdate] = updatedEdit;
+        changedEdits.push(updatedEdit);
+      }
+
+      setData(nextRawZohoData);
+      setManualEdits(nextManualEdits);
+
+      const uniqueChanged = new Map();
+      changedRows.forEach((r) => uniqueChanged.set(r.id, r));
+      changedEdits.forEach((e) => uniqueChanged.set(e.id, e));
+      const toPersist = Array.from(uniqueChanged.values());
+
+      if (toPersist.length > 0) {
+        persistEditedRows(toPersist);
+      }
     }
 
     toast.success('Payment status updated', {
@@ -1039,21 +1067,40 @@ function App() {
     const parsedAmount = roundMoney(nextAmount);
     if (!Number.isFinite(parsedAmount) || parsedAmount < 0) return;
 
-    setData((prev) => {
-      const changed = [];
-      const next = prev.map((item) => {
-        if (item.id !== idToUpdate) return item;
+    const changedRows = [];
+    const nextRawZohoData = rawZohoData.map((item) => {
+      if (item.id !== idToUpdate) return item;
 
-        const updatedRow = {
-          ...item,
-          amount: parsedAmount
-        };
-        changed.push(updatedRow);
-        return updatedRow;
-      });
-      persistEditedRows(changed);
-      return next;
+      const updatedRow = {
+        ...item,
+        amount: parsedAmount
+      };
+      changedRows.push(updatedRow);
+      return updatedRow;
     });
+
+    const changedEdits = [];
+    const nextManualEdits = { ...manualEdits };
+    if (nextManualEdits[idToUpdate]) {
+      const updatedEdit = {
+        ...nextManualEdits[idToUpdate],
+        amount: parsedAmount
+      };
+      nextManualEdits[idToUpdate] = updatedEdit;
+      changedEdits.push(updatedEdit);
+    }
+
+    setData(nextRawZohoData);
+    setManualEdits(nextManualEdits);
+
+    const uniqueChanged = new Map();
+    changedRows.forEach((r) => uniqueChanged.set(r.id, r));
+    changedEdits.forEach((e) => uniqueChanged.set(e.id, e));
+    const toPersist = Array.from(uniqueChanged.values());
+
+    if (toPersist.length > 0) {
+      persistEditedRows(toPersist);
+    }
 
     toast.success('Total due updated', {
       style: { background: 'var(--surface-3)', color: 'var(--text-main)', border: '1px solid var(--border-color)' }
