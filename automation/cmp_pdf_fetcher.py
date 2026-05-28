@@ -49,7 +49,78 @@ def normalize_key(value: str) -> str:
 
 
 def make_driver() -> webdriver.Chrome:
+    import subprocess
     debugger = os.getenv("CMP_DEBUGGER_ADDRESS", "localhost:9222").strip()
+    
+    # 1. Check if Chrome debugger is already running on the target port
+    host_port = debugger.split(":")
+    port = "9222"
+    if len(host_port) > 1:
+        port = host_port[1]
+    
+    debugger_url = f"http://127.0.0.1:{port}/json/version"
+    chrome_ready = False
+    try:
+        r = requests.get(debugger_url, timeout=2)
+        if r.status_code == 200:
+            chrome_ready = True
+    except requests.RequestException:
+        pass
+
+    # 2. If not running, launch Chrome automatically
+    if not chrome_ready:
+        chrome_paths = [
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        ]
+        pf = os.environ.get("ProgramFiles")
+        if pf:
+            chrome_paths.append(os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"))
+        pf86 = os.environ.get("ProgramFiles(x86)")
+        if pf86:
+            chrome_paths.append(os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"))
+            
+        found_chrome = None
+        for path in chrome_paths:
+            if os.path.exists(path):
+                found_chrome = path
+                break
+                
+        if not found_chrome:
+            raise RuntimeError("Chrome executable not found on standard Windows paths. Please launch Chrome on port 9222 manually.")
+            
+        user_data_dir = os.getenv("CMP_USER_DATA_DIR") or str(ROOT_DIR / "automation" / "chrome_user_data")
+        profile_dir = os.getenv("CMP_PROFILE_DIR") or "Default"
+        invoicing_url = os.getenv("CMP_INVOICING_URL") or DEFAULT_INVOICING_URL
+        
+        chrome_args = [
+            found_chrome,
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={user_data_dir}",
+            f"--profile-directory={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-position=20,20",
+            invoicing_url
+        ]
+        
+        subprocess.Popen(chrome_args, creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0)
+        
+        # Wait up to 15 seconds for debugger to become active
+        for _ in range(15):
+            time.sleep(1)
+            try:
+                r = requests.get(debugger_url, timeout=1)
+                if r.status_code == 200:
+                    chrome_ready = True
+                    break
+            except requests.RequestException:
+                pass
+                
+        if not chrome_ready:
+            raise RuntimeError("Launched Chrome but debugger was not reachable on port " + port)
+
+    # 3. Connect Selenium driver
     options = Options()
     options.debugger_address = debugger
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
