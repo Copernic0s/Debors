@@ -34,14 +34,22 @@
   - Ordenamos las coincidencias restantes en base a la longitud de su texto (`len(text)`) en orden ascendente. Esto garantiza que la opción exacta `"PDF"` (con longitud 3) sea seleccionada con absoluta prioridad sobre opciones más largas.
 - **Resultado**: La descarga del PDF ahora se ejecuta de manera sumamente precisa y robusta sin importar la estructura exacta de etiquetas HTML del menú desplegable.
 
+### 5. Corrección del Clicker de Acciones de la Fila (Summary Button Fix)
+- **Fallo identificado**: El worker de Python fallaba arrojando la excepción `Summary action button was not found`. El selector XPath previo de la fila fallaba al buscar títulos que no existían o al apuntar a `position()=last()` (el cual correspondía al botón de eliminar/papelera).
+- **Solución**: Rediseñamos la detección del botón de descarga en `automation/cmp_pdf_fetcher.py`:
+  - Introdujimos selectores CSS prioritarios específicos para buscar íconos SVG de descarga (`button svg.lucide-file-down`, `button svg[class*='file-down']`, `button svg.lucide-download`).
+  - Navegamos hacia el elemento `<button>` ancestro del SVG y ejecutamos el clic de manera síncrona a través de inyección JavaScript.
+  - Agregamos XPaths de respaldo mejorados (`position()=last() - 2` y títulos generales) en caso de que la estructura cambie.
+- **Resultado**: El scraper localiza de forma precisa el primer icono del costado derecho de la fila de facturas, abre el menú de opciones, selecciona el item PDF y realiza la descarga con éxito.
+
 ---
 
 ## 🛠️ Archivos Modificados
 
 - `src/utils/moneyUtils.js` (Refactorización de redondeo matemático).
-- `automation/cmp_pdf_fetcher.py` (Lanzador síncrono auto-reparable y selector de menú robusto).
+- `automation/cmp_pdf_fetcher.py` (Lanzador síncrono auto-reparable, selección robusta del botón de fila CSS/XPath y selector de menú robusto).
 
 ---
 
 ## 📌 Próximos Pasos
-1. Validar que al hacer clic en el botón, el bot abra el popover, haga clic en el item exacto de "PDF" y complete la carga a Supabase Storage con éxito.
+1. Continuar monitoreando el correcto funcionamiento en producción y sincronización general del flujo de facturas CMP.
