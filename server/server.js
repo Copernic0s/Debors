@@ -486,73 +486,144 @@ app.post('/api/cmp/pdf', async (req, res) => {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  await supabase
-    .from('cmp_invoices')
-    .update({ pdf_status: 'fetching', pdf_error: null })
-    .eq('invoice_number', invoiceNumber);
+  try {
+    const result = await executePdfFetch(supabase, invoiceNumber, companyName);
+    return res.json({ ok: true, pdfStoragePath: result.storagePath });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'PDF worker failed' });
+  }
+});
 
-  const scriptPath = path.join(__dirname, '..', 'automation', 'cmp_pdf_fetcher.py');
-  const child = spawn(
-    'python',
-    [scriptPath, '--invoice-number', invoiceNumber, '--company-name', companyName],
-    {
-      cwd: path.resolve(__dirname, '..'),
-      env: {
-        ...process.env,
-        CMP_DEBUGGER_ADDRESS: process.env.CMP_DEBUGGER_ADDRESS || 'localhost:9222'
-      },
-      windowsHide: true
-    }
-  );
-
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-
-  child.on('close', async (code) => {
+// DRY Helper function to spawn the python crawler and upload the PDF
+const executePdfFetch = (supabase, invoiceNumber, companyName) => {
+  return new Promise(async (resolve, reject) => {
     try {
-      if (code !== 0) {
-        let message = stderr.trim() || `PDF worker exited with code ${code}`;
-        try {
-          const parsed = JSON.parse(message.split(/\r?\n/).pop());
-          message = parsed.error || message;
-        } catch {
-          // Keep raw worker output.
+      console.log(`[PDF Worker] Starting fetch for invoice ${invoiceNumber} (${companyName})...`);
+      
+      await supabase
+        .from('cmp_invoices')
+        .update({ pdf_status: 'fetching', pdf_error: null })
+        .eq('invoice_number', invoiceNumber);
+
+      const scriptPath = path.join(__dirname, '..', 'automation', 'cmp_pdf_fetcher.py');
+      const child = spawn(
+        'python',
+        [scriptPath, '--invoice-number', invoiceNumber, '--company-name', companyName],
+        {
+          cwd: path.resolve(__dirname, '..'),
+          env: {
+            ...process.env,
+            CMP_DEBUGGER_ADDRESS: process.env.CMP_DEBUGGER_ADDRESS || 'localhost:9222'
+          },
+          windowsHide: true
         }
-        await supabase
-          .from('cmp_invoices')
-          .update({ pdf_status: 'failed', pdf_error: message })
-          .eq('invoice_number', invoiceNumber);
-        return res.status(500).json({ error: message });
-      }
+      );
 
-      const result = JSON.parse(stdout.trim().split(/\r?\n/).pop() || '{}');
-      if (!result.storagePath) {
-        throw new Error('PDF worker did not return a storage path');
-      }
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
 
-      await supabase
-        .from('cmp_invoices')
-        .update({
-          pdf_storage_path: result.storagePath,
-          pdf_status: 'available',
-          pdf_downloaded_at: new Date().toISOString(),
-          pdf_error: null
-        })
-        .eq('invoice_number', invoiceNumber);
+      child.on('close', async (code) => {
+        try {
+          if (code !== 0) {
+            let message = stderr.trim() || `PDF worker exited with code ${code}`;
+            try {
+              const parsed = JSON.parse(message.split(/\r?\n/).pop());
+              message = parsed.error || message;
+            } catch {}
+            
+            await supabase
+              .from('cmp_invoices')
+              .update({ pdf_status: 'failed', pdf_error: message })
+              .eq('invoice_number', invoiceNumber);
+              
+            return reject(new Error(message));
+          }
 
-      return res.json({ ok: true, pdfStoragePath: result.storagePath });
+          const result = JSON.parse(stdout.trim().split(/\r?\n/).pop() || '{}');
+          if (!result.storagePath) {
+            throw new Error('PDF worker did not return a storage path');
+          }
+
+          await supabase
+            .from('cmp_invoices')
+            .update({
+              pdf_storage_path: result.storagePath,
+              pdf_status: 'available',
+              pdf_downloaded_at: new Date().toISOString(),
+              pdf_error: null
+            })
+            .eq('invoice_number', invoiceNumber);
+
+          resolve({ storagePath: result.storagePath });
+        } catch (error) {
+          await supabase
+            .from('cmp_invoices')
+            .update({ pdf_status: 'failed', pdf_error: error.message || 'PDF worker failed' })
+            .eq('invoice_number', invoiceNumber);
+          reject(error);
+        }
+      });
     } catch (error) {
-      await supabase
-        .from('cmp_invoices')
-        .update({ pdf_status: 'failed', pdf_error: error.message || 'PDF worker failed' })
-        .eq('invoice_number', invoiceNumber);
-      return res.status(500).json({ error: error.message || 'PDF worker failed' });
+      reject(error);
     }
   });
-});
+};
+
+// Queue polling background worker
+let queueWorkerActive = false;
+const startCmpPdfQueueWorker = (supabase) => {
+  console.log('[Queue Worker] Initializing background CMP PDF download queue listener...');
+  
+  setInterval(async () => {
+    if (queueWorkerActive) return; // Prevent overlapping runs
+    
+    // Skip if the main scraper bot is running (to avoid port/chrome conflicts)
+    if (getCmpStatus().running) return;
+
+    queueWorkerActive = true;
+    try {
+      // Find the oldest queued invoice
+      const { data: queuedInvoices, error } = await supabase
+        .from('cmp_invoices')
+        .select('invoice_number, company_name')
+        .eq('pdf_status', 'queued')
+        .order('synced_at', { ascending: true }) // FIFO order
+        .limit(1);
+
+      if (error) {
+        console.error('[Queue Worker] Error fetching queue:', error.message);
+      } else if (queuedInvoices && queuedInvoices.length > 0) {
+        const item = queuedInvoices[0];
+        console.log(`[Queue Worker] Picked up queued invoice ${item.invoice_number} for ${item.company_name}`);
+        try {
+          await executePdfFetch(supabase, item.invoice_number, item.company_name);
+          console.log(`[Queue Worker] Successfully processed invoice ${item.invoice_number}`);
+        } catch (fetchError) {
+          console.error(`[Queue Worker] Failed to process invoice ${item.invoice_number}:`, fetchError.message);
+        }
+      }
+    } catch (err) {
+      console.error('[Queue Worker] Error in worker loop:', err);
+    } finally {
+      queueWorkerActive = false;
+    }
+  }, 30000); // Check every 30 seconds
+};
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend listening on port ${PORT}`);
+  
+  // Start the queue worker on startup if Supabase config is present
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (supabaseUrl && serviceKey) {
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    startCmpPdfQueueWorker(supabase);
+  } else {
+    console.warn('[Queue Worker] Skip startup: missing Supabase environment credentials');
+  }
 });
