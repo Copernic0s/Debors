@@ -17,10 +17,11 @@
     {
       "id": "TASK-002",
       "title": "Habilitar Descarga y Almacenamiento de PDF Invoices",
-      "status": "in_progress",
+      "status": "completed",
       "priority": "high",
       "description": "Configurar columnas de base de datos Supabase y almacenamiento en la nube para PDFs de facturas",
-      "dependencies": []
+      "dependencies": [],
+      "notes": "Flujo de descarga y clicks físicos de Selenium (y ActionChains) en Radix UI de CMP totalmente resueltos y funcionales."
     },
     {
       "id": "TASK-003",
