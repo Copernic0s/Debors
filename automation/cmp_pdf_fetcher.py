@@ -179,6 +179,30 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
     
     clicked = False
     
+    # Helper to execute native or action click on a button
+    def trigger_click(btn_element: Any) -> bool:
+        # Try native .click() first (highly recognized by React/Radix-UI)
+        try:
+            btn_element.click()
+            return True
+        except Exception:
+            pass
+        # Fallback 1: ActionChains hover and click
+        try:
+            from selenium.webdriver.common.action_chains import ActionChains
+            actions = ActionChains(driver)
+            actions.move_to_element(btn_element).click().perform()
+            return True
+        except Exception:
+            pass
+        # Fallback 2: JS Click executor
+        try:
+            driver.execute_script("arguments[0].click();", btn_element)
+            return True
+        except Exception:
+            pass
+        return False
+
     # 1. Try CSS selectors targeting standard download/file-down icons inside buttons
     css_selectors = [
         "button svg.lucide-file-down",
@@ -199,9 +223,9 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
                 if el.tag_name.lower() in ("svg", "path"):
                     btn = el.find_element(By.XPATH, "./ancestor::button")
                 if btn.is_displayed() and btn.is_enabled():
-                    driver.execute_script("arguments[0].click();", btn)
-                    clicked = True
-                    break
+                    if trigger_click(btn):
+                        clicked = True
+                        break
             if clicked:
                 break
         except WebDriverException:
@@ -220,9 +244,9 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
                 buttons = row.find_elements(By.XPATH, xpath)
                 for button in buttons:
                     if button.is_displayed() and button.is_enabled():
-                        driver.execute_script("arguments[0].click();", button)
-                        clicked = True
-                        break
+                        if trigger_click(button):
+                            clicked = True
+                            break
                 if clicked:
                     break
             except WebDriverException:
