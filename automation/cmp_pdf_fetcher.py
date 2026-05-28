@@ -143,16 +143,90 @@ def find_search_input(driver: webdriver.Chrome):
     raise TimeoutException("CMP search input was not found")
 
 
+def clear_all_filters(driver: webdriver.Chrome) -> None:
+    selectors = (
+        "input:not([type]), input[type='text'], input[type='search'], "
+        "textarea, [contenteditable='true']"
+    )
+    try:
+        filter_controls = driver.find_elements(By.CSS_SELECTOR, selectors)
+    except WebDriverException:
+        return
+
+    for control in filter_controls:
+        try:
+            if not control.is_displayed() or not control.is_enabled():
+                continue
+            value = str(control.get_attribute("value") or control.get_attribute("textContent") or "")
+            if not value.strip():
+                continue
+            control.click()
+            control.send_keys(Keys.CONTROL, "a")
+            control.send_keys(Keys.BACKSPACE)
+            control.send_keys(Keys.ENTER)
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                const setValue = Object.getOwnPropertyDescriptor(
+                  el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+                  'value'
+                )?.set;
+                if (setValue && 'value' in el) setValue.call(el, '');
+                else el.textContent = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                control,
+            )
+            control.send_keys(Keys.ENTER)
+        except WebDriverException:
+            continue
+    time.sleep(2)
+
+
 def search_invoice(driver: webdriver.Chrome, invoice_number: str) -> None:
     driver.get(os.getenv("CMP_INVOICING_URL", DEFAULT_INVOICING_URL))
     WebDriverWait(driver, 90).until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
+    
+    # 1. Clear any existing filters/searches first to avoid conflicts
+    clear_all_filters(driver)
+    
+    # 2. Find search input and type the invoice number
     search = find_search_input(driver)
     search.click()
     search.send_keys(Keys.CONTROL, "a")
     search.send_keys(Keys.BACKSPACE)
     search.send_keys(invoice_number)
+    
+    # Dispatch standard input/change events to ensure React registers it perfectly
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const val = arguments[1];
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (setValue) setValue.call(el, val);
+        else el.value = val;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        """,
+        search,
+        invoice_number
+    )
     search.send_keys(Keys.ENTER)
-    time.sleep(4)
+    
+    # Wait for the table rows to update and contain the invoice number
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        try:
+            rows = driver.find_elements(By.XPATH, "//table//tbody/tr | //*[@role='table']//*[@role='row']")
+            if rows:
+                first_row_text = str(rows[0].text or rows[0].get_attribute("textContent") or "").lower()
+                if invoice_number.lower() in first_row_text:
+                    break
+        except WebDriverException:
+            pass
+        time.sleep(0.5)
+
 
 
 def locate_invoice_row(driver: webdriver.Chrome, invoice_number: str, company_name: str):
@@ -342,7 +416,12 @@ def main() -> int:
         print(json.dumps({"ok": False, "error": str(error)}), file=sys.stderr)
         return 1
     finally:
-        # Do not quit attached Chrome; it belongs to the runner session.
+        # Clear search filter before leaving so subsequent runs or the scraper don't find empty tables
+        if driver:
+            try:
+                clear_all_filters(driver)
+            except Exception:
+                pass
         driver = None
 
 
