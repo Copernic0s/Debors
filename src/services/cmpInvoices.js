@@ -64,3 +64,28 @@ export const requestCmpInvoicePdf = async (runnerApiBase, row) => {
   }
   return payload;
 };
+
+export const queueCmpInvoicePdf = async (supabase, row) => {
+  if (!supabase) {
+    throw new Error('Supabase client is required to queue PDF download');
+  }
+
+  const invoiceNumber = String(row?.invoiceNumber || '').trim();
+  if (!invoiceNumber) {
+    throw new Error('Invoice number is required to queue PDF download');
+  }
+
+  const { data, error } = await supabase
+    .from('cmp_invoices')
+    .update({
+      pdf_status: 'queued',
+      pdf_error: null
+    })
+    .eq('invoice_number', invoiceNumber);
+
+  if (error) {
+    throw new Error(error.message || 'Failed to queue PDF download');
+  }
+
+  return data;
+};

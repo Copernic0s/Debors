@@ -20,7 +20,7 @@ import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
 import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
 import { emailService } from './services/emailService';
-import { openCmpInvoicePdf, requestCmpInvoicePdf } from './services/cmpInvoices';
+import { openCmpInvoicePdf, requestCmpInvoicePdf, queueCmpInvoicePdf } from './services/cmpInvoices';
 import './index.css';
 
 const TABLE_NAME = 'manual_edits';
@@ -645,8 +645,13 @@ function App() {
 
     setPdfBusyIds((prev) => ({ ...prev, [rowId]: true }));
     try {
-      await requestCmpInvoicePdf(cmpRunnerApiBase, row);
-      toast.success('PDF request started');
+      if (cmpRunnerApiBase) {
+        await requestCmpInvoicePdf(cmpRunnerApiBase, row);
+        toast.success('PDF request started');
+      } else {
+        await queueCmpInvoicePdf(supabase, row);
+        toast.success('PDF requested (queued in cloud)');
+      }
       await loadData({ silent: true });
     } catch (error) {
       toast.error(error?.message || 'Could not request PDF');
@@ -657,7 +662,7 @@ function App() {
         return next;
       });
     }
-  }, [cmpRunnerApiBase, loadData]);
+  }, [cmpRunnerApiBase, loadData, supabase]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
@@ -1290,7 +1295,7 @@ function App() {
             onQuickUpdateAmount={quickUpdateTotalDue}
             onOpenPdf={handleOpenPdf}
             onRequestPdf={handleRequestPdf}
-            canRequestPdf={Boolean(cmpRunnerApiBase)}
+            canRequestPdf={Boolean(supabase)}
             pdfBusyIds={pdfBusyIds}
             onEdit={(debtor) => {
               setCurrentDebtor(debtor);
