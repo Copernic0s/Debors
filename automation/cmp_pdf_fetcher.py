@@ -248,7 +248,14 @@ def locate_invoice_row(driver: webdriver.Chrome, invoice_number: str, company_na
     raise TimeoutException(f"Invoice {invoice_number} was not found in CMP search results")
 
 
-def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
+def click_summary_pdf(driver: webdriver.Chrome, row: Any, invoice_number: str) -> Path:
+    # 1. Clean up any existing downloaded PDFs for this invoice to prevent "before" matching conflicts
+    for path in DOWNLOAD_DIR.glob(f"*{invoice_number}*"):
+        try:
+            path.unlink()
+        except Exception:
+            pass
+
     before = {path.name for path in DOWNLOAD_DIR.glob("*")}
     
     clicked = False
@@ -408,7 +415,7 @@ def main() -> int:
         driver = make_driver()
         search_invoice(driver, args.invoice_number)
         row = locate_invoice_row(driver, args.invoice_number, args.company_name)
-        pdf_path = click_summary_pdf(driver, row)
+        pdf_path = click_summary_pdf(driver, row, args.invoice_number)
         storage_path = upload_pdf(pdf_path, args.invoice_number, args.company_name)
         print(json.dumps({"ok": True, "storagePath": storage_path, "downloadPath": str(pdf_path)}))
         return 0
