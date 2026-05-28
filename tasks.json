@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "last_updated": "2026-05-28",
+    "description": "Roadmap de tareas del proyecto Debors"
+  },
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Implementar Harness Engineering",
+      "status": "completed",
+      "priority": "high",
+      "description": "Crear estructura de arnés: harness.md, init script, tasks.json, progress/, multi-agente",
+      "dependencies": [],
+      "notes": "Estructura de arnés inicial y validación de pruebas completada"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Habilitar Descarga y Almacenamiento de PDF Invoices",
+      "status": "in_progress",
+      "priority": "high",
+      "description": "Configurar columnas de base de datos Supabase y almacenamiento en la nube para PDFs de facturas",
+      "dependencies": []
+    },
+    {
+      "id": "TASK-003",
+      "title": "Integración continua con GitHub Actions",
+      "status": "completed",
+      "priority": "medium",
+      "description": "Workflow de deploy a GitHub Pages existente en .github/workflows/",
+      "dependencies": [],
+      "notes": "Ya implementado, verificar que siga funcionando"
+    },
+    {
+      "id": "TASK-004",
+      "title": "Sincronización CMP - Zoho Gap Analysis",
+      "status": "pending",
+      "priority": "high",
+      "description": "Resolver diferencias entre facturas CMP y Zoho WorkDrive",
+      "dependencies": [],
+      "notes": "Ver automation/zoho_cmp_gap_report.json"
+    },
+    {
+      "id": "TASK-005",
+      "title": "Mejorar manejo de errores en frontend",
+      "status": "pending",
+      "priority": "low",
+      "description": "Centralizar manejo de errores y mejorar feedback al usuario",
+      "dependencies": []
+    },
+    {
+      "id": "TASK-006",
+      "title": "Dashboard de métricas avanzadas",
+      "status": "pending",
+      "priority": "low",
+      "description": "Agregar gráficos de tendencias y proyecciones al Dashboard",
+      "dependencies": []
+    }
+  ]
+}

@@ -38,7 +38,7 @@ export const parseMoneyValue = (value) => {
 
 export const roundMoney = (value) => {
   const parsed = parseMoneyValue(value);
-  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.round((parsed + Number.EPSILON) * 100) / 100 : Number.NaN;
 };
 
 export const formatCurrency = (value) => {
