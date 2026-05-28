@@ -1,4 +1,4 @@
-# Sesión: Corrección de Tests y Diagnóstico de PDFs (Con Autoreparación)
+# Sesión: Corrección de Tests y Diagnóstico de PDFs (Con Autoreparación y Menú Robusto)
 
 **Fecha:** 2026-05-28
 **Agente:** Antigravity (Líder / Orquestador)
@@ -25,17 +25,23 @@
   - Antes de inicializar Selenium, el script consulta la API de estado del debugger de Chrome (`http://127.0.0.1:9222/json/version`).
   - Si el puerto no está activo/respondiendo, el script localiza automáticamente el ejecutable de Chrome en las rutas estándar de Windows (archivos de programa de 32/64 bits) y **lo levanta en segundo plano con la depuración remota activada** en el puerto `9222` apuntando al perfil de automatización.
   - Espera activamente (polling de hasta 15 segundos) hasta que el puerto responda e inmediatamente inicia el flujo de descarga del PDF.
-- **Resultado**: La descarga y solicitud de PDFs ahora es **completamente independiente y auto-reparable**. Si Chrome no está abierto en modo depuración local, el bot lo abrirá por sí mismo de forma transparente.
+
+### 4. Soporte Robusto para la Selección de Menú Popover de PDF
+- **Fallo identificado**: El popover de la columna "Actions" en CMP abre una lista que contiene el botón "PDF" (bajo el encabezado "Summary") y "Excel as PDF" (bajo el encabezado "Services"). El selector XPath original no encontraba el botón porque estaba estructurado en elementos de lista (`<li>`) o enlaces (`<a>`) que no encajaban en los filtros restrictivos originales.
+- **Solución**: Reconstruimos el algoritmo de selección en `automation/cmp_pdf_fetcher.py`:
+  - Ampliamos el filtro XPath para capturar etiquetas genéricas del popover (`a`, `li`, `button`, `span`, `div`, `@role='menuitem'`) que contengan `"pdf"`.
+  - Excluimos explícitamente cualquier opción que contenga `"excel"` en su texto (previniendo clics accidentales en "Excel as PDF").
+  - Ordenamos las coincidencias restantes en base a la longitud de su texto (`len(text)`) en orden ascendente. Esto garantiza que la opción exacta `"PDF"` (con longitud 3) sea seleccionada con absoluta prioridad sobre opciones más largas.
+- **Resultado**: La descarga del PDF ahora se ejecuta de manera sumamente precisa y robusta sin importar la estructura exacta de etiquetas HTML del menú desplegable.
 
 ---
 
 ## 🛠️ Archivos Modificados
 
 - `src/utils/moneyUtils.js` (Refactorización de redondeo matemático).
-- `automation/cmp_pdf_fetcher.py` (Lanzador síncrono auto-reparable de Chrome en puerto 9222).
+- `automation/cmp_pdf_fetcher.py` (Lanzador síncrono auto-reparable y selector de menú robusto).
 
 ---
 
 ## 📌 Próximos Pasos
-1. Iniciar el servidor local (`cd server && npm start`) e interactuar con el botón de solicitud de PDF desde el panel.
-2. Confirmar que Chrome se levante automáticamente y descargue/suba el PDF a Supabase Storage.
+1. Validar que al hacer clic en el botón, el bot abra el popover, haga clic en el item exacto de "PDF" y complete la carga a Supabase Storage con éxito.
