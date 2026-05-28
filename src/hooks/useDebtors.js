@@ -103,7 +103,11 @@ export const aggregateByCompany = (rows) => {
     if (!company) return;
 
     const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
-    const invKey = String(row.invoiceNumber || row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const rawInv = String(row.invoiceNumber || '').trim();
+    const invKey = rawInv
+      ? rawInv.toLowerCase().replace(/^inv[-_]*/i, '').replace(/^0+/, '').replace(/[^a-z0-9]/g, '')
+      : String(row.weekLabel || row.id || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
     const companyKey = normalizeMatchKey(company);
     const key = companyKey;
     const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
@@ -176,6 +180,10 @@ export const aggregateByCompany = (rows) => {
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
         current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
+        current.pdfStoragePath = row.pdfStoragePath;
+        current.pdfStatus = row.pdfStatus;
+        current.pdfDownloadedAt = row.pdfDownloadedAt;
+        current.pdfError = row.pdfError;
       }
     }
 
@@ -216,6 +224,7 @@ export const aggregateByCompany = (rows) => {
     const persistentNoUsageCount = Number(item.noUsageCount) || 0;
 
     if (consecutiveNoUsage || persistentNoUsageCount >= 3) {
+      status = 'inactive';
       item.status = 'inactive';
     }
 
