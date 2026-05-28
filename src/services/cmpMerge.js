@@ -50,11 +50,20 @@ export const mergeZohoWithCmpRows = (zohoRows, cmpDebtorRows) => {
     cmpDebtorRows.map((row) => normalizeMatchKey(row.company || row.clientName)).filter(Boolean)
   );
 
+  const normalizeInvoiceNum = (inv) => {
+    return String(inv || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^inv[-_]*/i, '')
+      .replace(/^0+/, '')
+      .replace(/[^a-z0-9]/g, '');
+  };
+
   const cmpInvoiceKeys = new Set(
     cmpDebtorRows
       .map((row) => {
         const companyKey = normalizeMatchKey(row.company || row.clientName);
-        const invoiceKey = normalizeMatchKey(row.invoiceNumber);
+        const invoiceKey = normalizeInvoiceNum(row.invoiceNumber);
         return companyKey && invoiceKey ? `${companyKey}|${invoiceKey}` : '';
       })
       .filter(Boolean)
@@ -71,12 +80,18 @@ export const mergeZohoWithCmpRows = (zohoRows, cmpDebtorRows) => {
       return !hasCmpForCompany;
     }
 
-    const invoiceKey = `${companyKey}|${normalizeMatchKey(row.invoiceNumber)}`;
+    const invoiceKey = `${companyKey}|${normalizeInvoiceNum(row.invoiceNumber)}`;
     if (row.invoiceNumber && cmpInvoiceKeys.has(invoiceKey)) {
       return false;
     }
 
-    if (row.source === 'debt' || row.invoiceNumber) {
+    // Keep unique Zoho invoices (where the normalized invoice number doesn't match CMP)
+    if (row.invoiceNumber) {
+      return true;
+    }
+
+    // If it's a debt row but has no invoice number, discard it if we already have CMP invoices for this company to avoid duplicate placeholders/empty entries
+    if (row.source === 'debt') {
       return false;
     }
 
