@@ -197,19 +197,34 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
     if not clicked:
         raise TimeoutException("Summary action button was not found")
 
-    time.sleep(1)
-    pdf_items = driver.find_elements(
+    time.sleep(1.5)
+    candidates = driver.find_elements(
         By.XPATH,
-        "//*[self::button or @role='menuitem' or self::div or self::span]"
-        "[contains(translate(normalize-space(.),'PDF','pdf'),'pdf')]",
+        "//*[self::a or self::button or self::li or self::span or self::div or @role='menuitem']"
+        "[contains(translate(normalize-space(.), 'PDF', 'pdf'), 'pdf')]"
     )
-    for item in pdf_items:
+    
+    pdf_items = []
+    for item in candidates:
         try:
-            if item.is_displayed() and item.is_enabled():
-                driver.execute_script("arguments[0].click();", item)
-                return wait_for_download(before)
+            if not item.is_displayed() or not item.is_enabled():
+                continue
+            text = str(item.text or item.get_attribute("textContent") or "").strip().lower()
+            if "excel" in text:
+                # Skip Excel as PDF and similar options
+                continue
+            if "pdf" in text:
+                pdf_items.append((item, len(text)))
         except WebDriverException:
             continue
+
+    if pdf_items:
+        # Sort by text length to select the shortest/most exact match (e.g. "PDF" over longer variants)
+        pdf_items.sort(key=lambda x: x[1])
+        target_item = pdf_items[0][0]
+        driver.execute_script("arguments[0].click();", target_item)
+        return wait_for_download(before)
+
     raise TimeoutException("PDF menu item was not found")
 
 
