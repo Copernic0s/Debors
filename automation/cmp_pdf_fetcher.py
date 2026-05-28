@@ -176,24 +176,58 @@ def locate_invoice_row(driver: webdriver.Chrome, invoice_number: str, company_na
 
 def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
     before = {path.name for path in DOWNLOAD_DIR.glob("*")}
-    xpaths = [
-        ".//button[contains(translate(@title,'SUMMARY','summary'),'summary')]",
-        ".//button[.//*[contains(@class,'file') or contains(@class,'document')]]",
-        ".//button[position()=last()]",
-    ]
+    
     clicked = False
-    for xpath in xpaths:
+    
+    # 1. Try CSS selectors targeting standard download/file-down icons inside buttons
+    css_selectors = [
+        "button svg.lucide-file-down",
+        "button svg[class*='file-down']",
+        "button svg.lucide-download",
+        "button svg[class*='download']",
+        "button[title*='summary' i]",
+        "button[title*='download' i]",
+        "button[title*='pdf' i]",
+        "button[id*='radix'] svg.lucide-file-down",
+    ]
+    
+    for sel in css_selectors:
         try:
-            buttons = row.find_elements(By.XPATH, xpath)
-            for button in buttons:
-                if button.is_displayed() and button.is_enabled():
-                    driver.execute_script("arguments[0].click();", button)
+            elements = row.find_elements(By.CSS_SELECTOR, sel)
+            for el in elements:
+                btn = el
+                if el.tag_name.lower() in ("svg", "path"):
+                    btn = el.find_element(By.XPATH, "./ancestor::button")
+                if btn.is_displayed() and btn.is_enabled():
+                    driver.execute_script("arguments[0].click();", btn)
                     clicked = True
                     break
             if clicked:
                 break
         except WebDriverException:
             continue
+
+    # 2. Fall back to standard XPaths if CSS selectors did not match
+    if not clicked:
+        xpaths = [
+            ".//button[contains(translate(@title,'SUMMARY','summary'),'summary')]",
+            ".//button[.//*[contains(@class,'file') or contains(@class,'document')]]",
+            ".//button[position()=last() - 2]", # Third from last (usually download is first, edit second, delete last)
+            ".//button[position()=last()]",
+        ]
+        for xpath in xpaths:
+            try:
+                buttons = row.find_elements(By.XPATH, xpath)
+                for button in buttons:
+                    if button.is_displayed() and button.is_enabled():
+                        driver.execute_script("arguments[0].click();", button)
+                        clicked = True
+                        break
+                if clicked:
+                    break
+            except WebDriverException:
+                continue
+
     if not clicked:
         raise TimeoutException("Summary action button was not found")
 
