@@ -280,8 +280,9 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any) -> None:
         # Sort by text length to select the shortest/most exact match (e.g. "PDF" over longer variants)
         pdf_items.sort(key=lambda x: x[1])
         target_item = pdf_items[0][0]
-        driver.execute_script("arguments[0].click();", target_item)
-        return wait_for_download(before)
+        if trigger_click(target_item):
+            return wait_for_download(before)
+        raise TimeoutException("Failed to click the PDF menu item")
 
     raise TimeoutException("PDF menu item was not found")
 
