@@ -61,6 +61,20 @@ const getSpecialAgentScopeFallback = (email) => {
   return [];
 };
 
+const getEmailLocalPartScopeFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  const normalized = normalizeScopeValue(localPart);
+  if (!normalized) return [];
+
+  const label = normalized
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+  return label ? [label] : [];
+};
+
 export const resolveAccessProfile = (user) => {
   const email = String(user?.email || '').trim().toLowerCase();
   const operationsEmails = new Set(
@@ -98,8 +112,11 @@ export const resolveAccessProfile = (user) => {
   const fallbackAgentIds = getSpecialAgentScopeFallback(email)
     .map(normalizeScopeValue)
     .filter(Boolean);
+  const emailDerivedFallback = metadataAgentIds.length === 0 && configuredAgentIds.length === 0 && fallbackAgentIds.length === 0
+    ? getEmailLocalPartScopeFallback(email).map(normalizeScopeValue).filter(Boolean)
+    : [];
   const agentScope = Array.from(
-    new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds])
+    new Set([...metadataAgentIds, ...configuredAgentIds, ...fallbackAgentIds, ...emailDerivedFallback])
   );
 
   const normalizedRole =

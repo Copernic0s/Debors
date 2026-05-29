@@ -48,6 +48,7 @@
 - `SupportTracker` was removed from the visible Debtors navigation and content flow.
 - `InvoiceEntry` is now controlled by an explicit email allowlist instead of general manager access.
 - If you need to grant access later, use `VITE_INVOICE_ENTRY_ALLOWED_EMAILS`.
+- New non-manager users need an agent scope, or the overview will load empty. Added a fallback that derives a scope from the email local part when no explicit scope exists, so a user like `guidiana.puentes@theunitedtransports.com` can resolve to `Guidiana Puentes`.
 
 ## Notes For Chrome Stability
 
