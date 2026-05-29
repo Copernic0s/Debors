@@ -21,6 +21,14 @@
 2. Investigate why the Chrome session used by the CMP bot sometimes gets stuck or appears frozen.
 3. Design a workaround so the bot can recover without requiring the Chrome window to stay in front and manually supervised.
 
+## 2026-05-29 Update
+
+- Added live Supabase realtime refresh for CMP invoice updates so the UI can react without manual F5.
+- Added visible row states for `queued` and `fetching` PDFs in the debtors table.
+- Added browser background-throttling flags and a second focused retry path in the PDF fetcher.
+- Added toast-based notifications for queued, downloading, ready, failed, and slow PDF states.
+- The remaining hard problem is the Chrome session becoming stale or frozen when the window is not actively watched.
+
 ## Notes For Chrome Stability
 
 - Current behavior suggests the browser session can become stale or blocked during long-running scraping.
@@ -38,4 +46,3 @@
 - `src/services/cmpInvoices.js`
 - `src/services/cmpMerge.js`
 - `supabase/cmp_invoices.sql`
-
