@@ -30,6 +30,18 @@
 - The remaining hard problem is the Chrome session becoming stale or frozen when the window is not actively watched.
 - Found a frontend aggregation bug where company-level rows were not always inheriting PDF metadata unless a due date branch ran, which could make the green PDF button lag behind until a full refresh.
 - Found another sync gap: refresh attempts could be dropped while another sync was in flight, so the UI could miss the exact moment the PDF became available and only catch up on manual refresh.
+- Current status: PDF flow works end-to-end, but the automatic green-button refresh still has a visible lag edge case. Leave this as a pending follow-up instead of spending more time on it right now.
+
+## New Dashboard Idea
+
+- Add a company-focused CRM-style section in Debtors for CMP-owned user credentials and card state.
+- Source would be CMP `User management` and card/account screens, but the data should probably be stored as a separate snapshot table with history rather than merged into the main debtors rows.
+- The clean approach is likely:
+  - one sync job for credentials / owner contact info,
+  - one sync job for card status / last-seen state,
+  - a dashboard view that surfaces current state and last refresh time,
+  - a detail drawer with copy actions for email, username, and password when the user has permission.
+- Treat card status as volatile data and refresh it more aggressively than invoices.
 
 ## Notes For Chrome Stability
 
