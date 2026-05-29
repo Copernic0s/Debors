@@ -98,6 +98,15 @@ const mergeDebtorsWithClientSheet = (debtRows, csRows) => {
 export const aggregateByCompany = (rows) => {
   const grouped = new Map();
 
+  const pdfStatusRank = (status) => {
+    const value = String(status || '').toLowerCase();
+    if (value === 'available') return 4;
+    if (value === 'fetching') return 3;
+    if (value === 'queued') return 2;
+    if (value === 'failed') return 1;
+    return 0;
+  };
+
   rows.forEach((row) => {
     const company = String(row.company || row.clientName || '').trim();
     if (!company) return;
@@ -117,6 +126,12 @@ export const aggregateByCompany = (rows) => {
     const current = grouped.get(key);
     const normalizedCycle = normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED;
     const isCsSource = row.id?.startsWith('CS-') || row.source === 'cs';
+    const rowPdfStoragePath = row.pdfStoragePath || '';
+    const rowPdfStatus = row.pdfStatus || (rowPdfStoragePath ? 'available' : 'missing');
+    const rowPdfRank = pdfStatusRank(rowPdfStatus);
+    const rowPdfDownloadedAt = row.pdfDownloadedAt || null;
+    const rowPdfRequestedAt = row.pdfRequestedAt || null;
+    const rowPdfError = row.pdfError || null;
 
     if (!current) {
       grouped.set(key, {
@@ -138,7 +153,12 @@ export const aggregateByCompany = (rows) => {
         dueDate: row.dueDate || '',
         latestId: row.id,
         id: `CMP-${key}`,
-        seenInvoices: new Set([invKey])
+        seenInvoices: new Set([invKey]),
+        pdfStoragePath: rowPdfStoragePath || null,
+        pdfStatus: rowPdfStatus,
+        pdfDownloadedAt: rowPdfDownloadedAt,
+        pdfRequestedAt: rowPdfRequestedAt,
+        pdfError: rowPdfError
       });
       return;
     }
@@ -167,6 +187,33 @@ export const aggregateByCompany = (rows) => {
 
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
 
+    if (rowPdfStoragePath) {
+      const currentPdfRank = pdfStatusRank(current.pdfStatus);
+      const currentHasPath = Boolean(current.pdfStoragePath);
+      const currentDownloadedAt = current.pdfDownloadedAt ? new Date(current.pdfDownloadedAt).getTime() : 0;
+      const nextDownloadedAt = rowPdfDownloadedAt ? new Date(rowPdfDownloadedAt).getTime() : 0;
+
+      if (
+        !currentHasPath ||
+        rowPdfRank > currentPdfRank ||
+        (rowPdfRank === currentPdfRank && nextDownloadedAt > currentDownloadedAt)
+      ) {
+        current.pdfStoragePath = rowPdfStoragePath;
+        current.pdfStatus = 'available';
+        current.pdfDownloadedAt = rowPdfDownloadedAt || current.pdfDownloadedAt || null;
+        current.pdfRequestedAt = rowPdfRequestedAt || current.pdfRequestedAt || null;
+        current.pdfError = null;
+      }
+    } else if (rowPdfRank > pdfStatusRank(current.pdfStatus)) {
+      current.pdfStatus = rowPdfStatus;
+      current.pdfRequestedAt = rowPdfRequestedAt || current.pdfRequestedAt || null;
+      if (!rowPdfError) {
+        current.pdfError = null;
+      } else if (!current.pdfError) {
+        current.pdfError = rowPdfError;
+      }
+    }
+
     if (row.dueDate) {
       if (!current.dueDate || row.dueDate > current.dueDate) {
         current.dueDate = row.dueDate;
@@ -180,10 +227,6 @@ export const aggregateByCompany = (rows) => {
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
         current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
-        current.pdfStoragePath = row.pdfStoragePath;
-        current.pdfStatus = row.pdfStatus;
-        current.pdfDownloadedAt = row.pdfDownloadedAt;
-        current.pdfError = row.pdfError;
       }
     }
 
