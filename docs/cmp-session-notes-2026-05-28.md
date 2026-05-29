@@ -43,6 +43,12 @@
   - a detail drawer with copy actions for email, username, and password when the user has permission.
 - Treat card status as volatile data and refresh it more aggressively than invoices.
 
+## Debtors Cleanup
+
+- `SupportTracker` was removed from the visible Debtors navigation and content flow.
+- `InvoiceEntry` is now controlled by an explicit email allowlist instead of general manager access.
+- If you need to grant access later, use `VITE_INVOICE_ENTRY_ALLOWED_EMAILS`.
+
 ## Notes For Chrome Stability
 
 - Current behavior suggests the browser session can become stale or blocked during long-running scraping.
