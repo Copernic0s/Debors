@@ -260,7 +260,73 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
 
   const syncInFlightRef = useRef(false);
   const manualEditsRef = useRef({});
+  const sheetDataRef = useRef([]);
+  const clientsByAgentRef = useRef([]);
   const [manualEdits, setManualEdits] = useState({});
+
+  const applyCmpSnapshot = useCallback((sheetData, csData, cmpRows) => {
+    const zohoMerged = mergeDebtorsWithClientSheet(sheetData || [], csData || []);
+    const mergedData = mergeZohoWithCmpRows(zohoMerged, cmpRows || []);
+
+    // Auto-cleanup stale manual overrides (if Zoho/CMP shows invoice is paid, remove pending/overdue manual edits)
+    const paidInvoices = new Set();
+
+    (cmpRows || []).forEach((row) => {
+      if (String(row.status || '').toLowerCase() === 'paid') {
+        const companyKey = normalizeMatchKey(row.company || row.clientName);
+        const invKey = normalizeMatchKey(row.invoiceNumber);
+        if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+      }
+    });
+
+    zohoMerged.forEach((row) => {
+      if (String(row.status || '').toLowerCase() === 'paid') {
+        const companyKey = normalizeMatchKey(row.company || row.clientName);
+        const invKey = normalizeMatchKey(row.invoiceNumber);
+        if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
+      }
+    });
+
+    const staleEditIds = [];
+    const currentManualEdits = manualEditsRef.current || {};
+
+    Object.values(currentManualEdits).forEach((edit) => {
+      if (edit.__deleted) return;
+      const companyKey = normalizeMatchKey(edit.company || edit.clientName);
+      const invKey = normalizeMatchKey(edit.invoiceNumber);
+      const editStatus = String(edit.status || '').toLowerCase();
+
+      if (companyKey && invKey && (editStatus === 'pending' || editStatus === 'overdue')) {
+        if (paidInvoices.has(`${companyKey}|${invKey}`)) {
+          staleEditIds.push(edit.id);
+        }
+      }
+    });
+
+    if (staleEditIds.length > 0) {
+      console.log(`[Sync] Programmatically cleaning up ${staleEditIds.length} stale manual overrides...`);
+      supabase.from(tableName).delete().in('id', staleEditIds).then(({ error }) => {
+        if (error) {
+          console.error('[Sync] Failed to clean up stale overrides:', error.message);
+        } else {
+          setManualEdits(prev => {
+            const next = { ...prev };
+            staleEditIds.forEach(id => delete next[id]);
+            manualEditsRef.current = next;
+            return next;
+          });
+        }
+      });
+    }
+
+    if (mergedData && mergedData.length > 0) {
+      setRawZohoData(mergedData);
+      setSyncSourceLabel((cmpRows || []).length > 0 ? 'Zoho + CMP' : 'Zoho WorkDrive');
+    } else {
+      setRawZohoData([]);
+      setSyncSourceLabel('Zoho WorkDrive');
+    }
+  }, [supabase, tableName]);
 
   const fetchManualEdits = useCallback(async () => {
     if (!user || !supabase) return;
@@ -307,6 +373,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
 
     try {
       const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
+      sheetDataRef.current = sheetData || [];
+      clientsByAgentRef.current = csData || [];
       setClientsByAgent(csData || []);
 
       if (trackerLogs) setTrackerData(trackerLogs);
@@ -322,68 +390,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
         console.warn('[CMP] Load skipped:', cmpError.message);
         setCmpInvoiceCount(0);
       }
-
-      const zohoMerged = mergeDebtorsWithClientSheet(sheetData, csData);
-      const mergedData = mergeZohoWithCmpRows(zohoMerged, cmpRows);
-
-      // Auto-cleanup stale manual overrides (if Zoho/CMP shows invoice is paid, remove pending/overdue manual edits)
-      const paidInvoices = new Set();
-      
-      cmpRows.forEach(row => {
-        if (String(row.status || '').toLowerCase() === 'paid') {
-          const companyKey = normalizeMatchKey(row.company || row.clientName);
-          const invKey = normalizeMatchKey(row.invoiceNumber);
-          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
-        }
-      });
-      
-      zohoMerged.forEach(row => {
-        if (String(row.status || '').toLowerCase() === 'paid') {
-          const companyKey = normalizeMatchKey(row.company || row.clientName);
-          const invKey = normalizeMatchKey(row.invoiceNumber);
-          if (companyKey && invKey) paidInvoices.add(`${companyKey}|${invKey}`);
-        }
-      });
-
-      const staleEditIds = [];
-      const currentManualEdits = manualEditsRef.current || {};
-      
-      Object.values(currentManualEdits).forEach(edit => {
-        if (edit.__deleted) return;
-        const companyKey = normalizeMatchKey(edit.company || edit.clientName);
-        const invKey = normalizeMatchKey(edit.invoiceNumber);
-        const editStatus = String(edit.status || '').toLowerCase();
-        
-        if (companyKey && invKey && (editStatus === 'pending' || editStatus === 'overdue')) {
-          if (paidInvoices.has(`${companyKey}|${invKey}`)) {
-            staleEditIds.push(edit.id);
-          }
-        }
-      });
-
-      if (staleEditIds.length > 0) {
-        console.log(`[Sync] Programmatically cleaning up ${staleEditIds.length} stale manual overrides...`);
-        supabase.from(tableName).delete().in('id', staleEditIds).then(({ error }) => {
-          if (error) {
-            console.error('[Sync] Failed to clean up stale overrides:', error.message);
-          } else {
-            setManualEdits(prev => {
-              const next = { ...prev };
-              staleEditIds.forEach(id => delete next[id]);
-              manualEditsRef.current = next;
-              return next;
-            });
-          }
-        });
-      }
-
-      if (mergedData && mergedData.length > 0) {
-        setRawZohoData(mergedData);
-        setSyncSourceLabel(cmpRows.length > 0 ? 'Zoho + CMP' : 'Zoho WorkDrive');
-      } else {
-        setRawZohoData([]);
-        setSyncSourceLabel('Zoho WorkDrive');
-      }
+      applyCmpSnapshot(sheetData, csData, cmpRows);
     } catch (err) {
       console.error('[Sync] Load data failed:', err);
       setSyncSourceLabel('Offline Data');
@@ -393,7 +400,38 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
       setIsSyncing(false);
       syncInFlightRef.current = false;
     }
-  }, [supabase]);
+  }, [applyCmpSnapshot, supabase]);
+
+  const refreshCmpData = useCallback(async ({ silent = true } = {}) => {
+    if (syncInFlightRef.current) return;
+    if (!sheetDataRef.current || sheetDataRef.current.length === 0) return;
+    syncInFlightRef.current = true;
+
+    if (!silent) setIsSyncing(true);
+
+    try {
+      let cmpRows = [];
+      try {
+        const cmpInvoices = await fetchCmpInvoices(supabase);
+        const csData = clientsByAgentRef.current || [];
+        cmpRows = mapCmpInvoicesToDebtorRows(cmpInvoices, csData);
+        setCmpInvoiceCount(cmpRows.length);
+        const cmpMeta = await fetchCmpSyncMeta(supabase);
+        setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
+      } catch (cmpError) {
+        console.warn('[CMP] Refresh skipped:', cmpError.message);
+        setCmpInvoiceCount(0);
+        return;
+      }
+
+      applyCmpSnapshot(sheetDataRef.current, clientsByAgentRef.current || [], cmpRows);
+    } catch (err) {
+      console.error('[CMP] Refresh failed:', err);
+    } finally {
+      if (!silent) setIsSyncing(false);
+      syncInFlightRef.current = false;
+    }
+  }, [applyCmpSnapshot, supabase]);
 
   const persistEditedRows = useCallback(async (rows) => {
     if (!rows || rows.length === 0 || !user || !supabase) return;
@@ -448,6 +486,11 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     return () => window.clearInterval(interval);
   }, [loadData]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => refreshCmpData({ silent: true }), 15000);
+    return () => window.clearInterval(interval);
+  }, [refreshCmpData]);
+
   const updateLocalData = useCallback((updater) => {
     setRawZohoData(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -476,6 +519,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     manualEdits,
     setManualEdits,
     loadData,
+    refreshCmpData,
     persistEditedRows,
     aggregateByCompany,
     setData

@@ -624,10 +624,10 @@ const executePdfFetch = (supabase, invoiceNumber, companyName) => {
 let queueWorkerActive = false;
 const startCmpPdfQueueWorker = (supabase) => {
   console.log('[Queue Worker] Initializing background CMP PDF download queue listener...');
-  
-  setInterval(async () => {
+
+  const pollQueue = async () => {
     if (queueWorkerActive) return; // Prevent overlapping runs
-    
+
     // Skip if the main scraper bot is running (to avoid port/chrome conflicts)
     if (getCmpStatus().running) return;
 
@@ -668,7 +668,10 @@ const startCmpPdfQueueWorker = (supabase) => {
     } finally {
       queueWorkerActive = false;
     }
-  }, 30000); // Check every 30 seconds
+  };
+
+  pollQueue();
+  setInterval(pollQueue, 10000); // Check every 10 seconds
 };
 
 app.listen(PORT, '0.0.0.0', () => {
