@@ -28,6 +28,7 @@
 - Added browser background-throttling flags and a second focused retry path in the PDF fetcher.
 - Added toast-based notifications for queued, downloading, ready, failed, and slow PDF states.
 - The remaining hard problem is the Chrome session becoming stale or frozen when the window is not actively watched.
+- Found a frontend aggregation bug where company-level rows were not always inheriting PDF metadata unless a due date branch ran, which could make the green PDF button lag behind until a full refresh.
 
 ## Notes For Chrome Stability
 
