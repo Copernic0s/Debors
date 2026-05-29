@@ -485,6 +485,7 @@ function App() {
     lastCmpSyncAt,
     cmpInvoiceCount,
     loadData,
+    refreshCmpData,
     persistEditedRows,
     manualEdits,
     setManualEdits,
@@ -546,6 +547,7 @@ function App() {
   });
   const [syncAllBusy, setSyncAllBusy] = useState(false);
   const [pdfBusyIds, setPdfBusyIds] = useState({});
+  const [pdfPendingIds, setPdfPendingIds] = useState({});
   const cmpWasRunningRef = React.useRef(false);
 
   const refreshCmpStatus = React.useCallback(async () => {
@@ -652,7 +654,12 @@ function App() {
         await queueCmpInvoicePdf(supabase, row);
         toast.success('PDF requested (queued in cloud)');
       }
-      await loadData({ silent: true });
+      setPdfPendingIds((prev) => ({ ...prev, [rowId]: true }));
+      if (refreshCmpData) {
+        await refreshCmpData({ silent: true });
+      } else {
+        await loadData({ silent: true });
+      }
     } catch (error) {
       toast.error(error?.message || 'Could not request PDF');
     } finally {
@@ -662,7 +669,36 @@ function App() {
         return next;
       });
     }
-  }, [cmpRunnerApiBase, loadData, supabase]);
+  }, [cmpRunnerApiBase, loadData, refreshCmpData, supabase]);
+
+  useEffect(() => {
+    const readyIds = [];
+    const readyLabels = [];
+
+    Object.keys(pdfPendingIds).forEach((id) => {
+      if (!pdfPendingIds[id]) return;
+      const row = data.find((item) => item.id === id);
+      if (row?.pdfStoragePath) {
+        readyIds.push(id);
+        readyLabels.push(row.invoiceNumber || row.company || row.clientName || id);
+      }
+    });
+
+    if (readyIds.length === 0) return;
+
+    setPdfPendingIds((prev) => {
+      const next = { ...prev };
+      readyIds.forEach((id) => delete next[id]);
+      return next;
+    });
+
+    toast.success(
+      readyLabels.length === 1
+        ? `PDF ready: ${readyLabels[0]}`
+        : `${readyLabels.length} PDFs ready`,
+      { duration: 5000 }
+    );
+  }, [data, pdfPendingIds]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
