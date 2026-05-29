@@ -479,7 +479,9 @@ app.post('/api/cmp/pdf', async (req, res) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!supabaseUrl || !serviceKey) {
-    return res.status(500).json({ error: 'Missing Supabase service credentials for PDF upload' });
+    return res.status(500).json({
+      error: 'Missing Supabase service credentials for PDF upload. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+    });
   }
 
   const supabase = createClient(supabaseUrl, serviceKey, {
@@ -498,7 +500,9 @@ app.get('/api/cmp/pdf/queue', async (_req, res) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!supabaseUrl || !serviceKey) {
-    return res.status(500).json({ error: 'Missing Supabase service credentials' });
+    return res.status(500).json({
+      error: 'Missing Supabase service credentials. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+    });
   }
 
   const supabase = createClient(supabaseUrl, serviceKey, {
@@ -679,6 +683,6 @@ app.listen(PORT, '0.0.0.0', () => {
     });
     startCmpPdfQueueWorker(supabase);
   } else {
-    console.warn('[Queue Worker] Skip startup: missing Supabase environment credentials');
+    console.warn('[Queue Worker] Skip startup: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
   }
 });

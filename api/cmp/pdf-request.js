@@ -12,7 +12,11 @@ export default async function handler(req, res) {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   if (!supabaseUrl || !serviceKey) {
-    return jsonError(res, 500, 'Missing Supabase service credentials');
+    return jsonError(
+      res,
+      500,
+      'Missing Supabase service credentials. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel.'
+    );
   }
 
   const authHeader = String(req.headers.authorization || '');
