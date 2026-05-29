@@ -302,6 +302,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const [cmpInvoiceCount, setCmpInvoiceCount] = useState(0);
 
   const syncInFlightRef = useRef(false);
+  const pendingCmpRefreshRef = useRef(false);
+  const refreshCmpDataRef = useRef(null);
   const manualEditsRef = useRef({});
   const sheetDataRef = useRef([]);
   const clientsByAgentRef = useRef([]);
@@ -442,11 +444,20 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
       if (!silent) setLoading(false);
       setIsSyncing(false);
       syncInFlightRef.current = false;
+      if (pendingCmpRefreshRef.current) {
+        pendingCmpRefreshRef.current = false;
+        setTimeout(() => {
+          refreshCmpDataRef.current?.({ silent: true });
+        }, 0);
+      }
     }
   }, [applyCmpSnapshot, supabase]);
 
   const refreshCmpData = useCallback(async ({ silent = true } = {}) => {
-    if (syncInFlightRef.current) return;
+    if (syncInFlightRef.current) {
+      pendingCmpRefreshRef.current = true;
+      return;
+    }
     if (!sheetDataRef.current || sheetDataRef.current.length === 0) return;
     syncInFlightRef.current = true;
 
@@ -473,8 +484,18 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     } finally {
       if (!silent) setIsSyncing(false);
       syncInFlightRef.current = false;
+      if (pendingCmpRefreshRef.current) {
+        pendingCmpRefreshRef.current = false;
+        setTimeout(() => {
+          refreshCmpData({ silent: true });
+        }, 0);
+      }
     }
   }, [applyCmpSnapshot, supabase]);
+
+  useEffect(() => {
+    refreshCmpDataRef.current = refreshCmpData;
+  }, [refreshCmpData]);
 
   const persistEditedRows = useCallback(async (rows) => {
     if (!rows || rows.length === 0 || !user || !supabase) return;
