@@ -11,6 +11,7 @@ create table if not exists public.cmp_invoices (
   cmp_status_raw text,
   pdf_storage_path text,
   pdf_status text not null default 'missing',
+  pdf_requested_at timestamptz,
   pdf_downloaded_at timestamptz,
   pdf_error text,
   sync_run_id uuid not null,
@@ -20,6 +21,7 @@ create table if not exists public.cmp_invoices (
 alter table public.cmp_invoices
   add column if not exists pdf_storage_path text,
   add column if not exists pdf_status text not null default 'missing',
+  add column if not exists pdf_requested_at timestamptz,
   add column if not exists pdf_downloaded_at timestamptz,
   add column if not exists pdf_error text;
 
@@ -27,6 +29,7 @@ create index if not exists cmp_invoices_company_idx on public.cmp_invoices (comp
 create index if not exists cmp_invoices_invoice_idx on public.cmp_invoices (invoice_number);
 create index if not exists cmp_invoices_synced_at_idx on public.cmp_invoices (synced_at desc);
 create index if not exists cmp_invoices_pdf_status_idx on public.cmp_invoices (pdf_status);
+create index if not exists cmp_invoices_pdf_queue_idx on public.cmp_invoices (pdf_status, pdf_requested_at);
 
 alter table public.cmp_invoices enable row level security;
 

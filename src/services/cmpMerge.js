@@ -22,6 +22,8 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
     const companyKey = normalizeMatchKey(company);
     const meta = metaByCompany.get(companyKey) || { agentId: 'Unassigned', billingCycle: undefined };
 
+    const pdfStoragePath = row.pdf_storage_path || null;
+
     return {
       id: String(row.id || `CMP-INV-${companyKey}-${row.invoice_number}`),
       invoiceNumber: String(row.invoice_number || '').trim(),
@@ -37,9 +39,10 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
       invoiceDate: row.invoice_date || null,
       cmpStatusRaw: row.cmp_status_raw || null,
       syncedAt: row.synced_at || null,
-      pdfStoragePath: row.pdf_storage_path || null,
-      pdfStatus: row.pdf_status || (row.pdf_storage_path ? 'available' : 'missing'),
+      pdfStoragePath,
+      pdfStatus: pdfStoragePath ? 'available' : (row.pdf_status || 'missing'),
       pdfDownloadedAt: row.pdf_downloaded_at || null,
+      pdfRequestedAt: row.pdf_requested_at || null,
       pdfError: row.pdf_error || null
     };
   });
