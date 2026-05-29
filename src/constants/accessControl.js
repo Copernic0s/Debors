@@ -44,6 +44,11 @@ const hasPrivilegedIdentityFallback = (email) => {
   return localPart.includes('andres') || localPart.includes('kevin');
 };
 
+const hasInvoiceEntryAccessFallback = (email) => {
+  const localPart = String(email || '').split('@')[0] || '';
+  return localPart.includes('andres') || localPart.includes('kevin');
+};
+
 const canViewActivityLogsFallback = (email) => {
   const localPart = String(email || '').split('@')[0] || '';
   return localPart.includes('andres');
@@ -122,12 +127,16 @@ export const resolveAccessProfile = (user) => {
     canDeleteData: isManager,
     canResetData: isManager,
     canSyncData: isManager,
-    canUseInvoiceEntry: isManager,
+    canUseInvoiceEntry:
+      parseCsv(import.meta.env.VITE_INVOICE_ENTRY_ALLOWED_EMAILS).map((item) => item.toLowerCase()).includes(email) ||
+      hasInvoiceEntryAccessFallback(email),
     canEditInvoiceDetails: isManager,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
-    canViewSupportTracker: isManager,
-    canViewInvoiceEntry: isManager,
+    canViewSupportTracker: false,
+    canViewInvoiceEntry:
+      parseCsv(import.meta.env.VITE_INVOICE_ENTRY_ALLOWED_EMAILS).map((item) => item.toLowerCase()).includes(email) ||
+      hasInvoiceEntryAccessFallback(email),
     canViewActivityLogs: canViewActivityLogsFallback(email),
     hasScopedPortfolio: isManager ? true : agentScope.length > 0
   };

@@ -9,7 +9,6 @@ import DebtorModal from './components/DebtorModal';
 import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
-import SupportTracker from './components/SupportTracker';
 import InvoiceEntry from './components/InvoiceEntry';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -477,7 +476,6 @@ function App() {
     data,
     rawZohoData,
     clientsByAgent,
-    trackerData,
     loading,
     isSyncing,
     syncSourceLabel,
@@ -512,19 +510,20 @@ function App() {
     return clientsByAgent.filter((item) => userCanAccessAgent(accessProfile, item.agentId));
   }, [clientsByAgent, accessProfile, isHectorProfile]);
 
-  const accessibleTrackerData = React.useMemo(() => {
-    if (isHectorProfile) {
-      const hectorScopes = ['hector lomeli', 'hector lomeli g', 'hector', 'lomeli'];
-      return trackerData.filter((item) => hectorScopes.some((scope) => agentMatchesScopeValue(scope, item.agent || item.agentId)));
-    }
-    if (accessProfile.canViewAllData) return trackerData;
-    return trackerData.filter((item) => userCanAccessAgent(accessProfile, item.agent || item.agentId));
-  }, [trackerData, accessProfile, isHectorProfile]);
-
   const matchesSelectedAgent = React.useCallback(
     (agentId) => selectedAgent === 'all' || agentMatchesScopeValue(selectedAgent, agentId),
     [selectedAgent]
   );
+
+  useEffect(() => {
+    if (activeView === 'tracker') {
+      setActiveView('overview');
+      return;
+    }
+    if (activeView === 'invoice_entry' && !accessProfile.canViewInvoiceEntry) {
+      setActiveView('overview');
+    }
+  }, [activeView, accessProfile.canViewInvoiceEntry]);
 
   useEffect(() => {
     if (accessProfile.canViewAllData) return;
@@ -1361,9 +1360,6 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
-        {accessProfile.canViewSupportTracker && (
-          <ViewButton type="button" $active={activeView === 'tracker'} onClick={() => setActiveView('tracker')}>Support Tracker</ViewButton>
-        )}
         {accessProfile.canViewInvoiceEntry && (
           <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
         )}
@@ -1431,12 +1427,6 @@ function App() {
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
           onOpenCompanyProfile={openCompanyProfile}
         />
-      )}
-
-      {activeView === 'tracker' && (
-        <ContentScroll>
-          <SupportTracker data={accessibleTrackerData} />
-        </ContentScroll>
       )}
 
       {activeView === 'invoice_entry' && (
