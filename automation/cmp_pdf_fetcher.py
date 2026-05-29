@@ -100,6 +100,11 @@ def make_driver() -> webdriver.Chrome:
             f"--profile-directory={profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-features=Translate,BackForwardCache,TabFreeze,IntensiveWakeUpThrottling",
+            "--start-maximized",
             "--window-position=20,20",
             invoicing_url
         ]
@@ -130,6 +135,17 @@ def make_driver() -> webdriver.Chrome:
         {"behavior": "allow", "downloadPath": str(DOWNLOAD_DIR)},
     )
     return driver
+
+
+def bring_browser_to_front(driver: webdriver.Chrome) -> None:
+    try:
+        driver.execute_cdp_cmd("Page.bringToFront", {})
+    except WebDriverException:
+        pass
+    try:
+        driver.switch_to.window(driver.current_window_handle)
+    except WebDriverException:
+        pass
 
 
 def find_search_input(driver: webdriver.Chrome):
@@ -186,6 +202,7 @@ def clear_all_filters(driver: webdriver.Chrome) -> None:
 
 def search_invoice(driver: webdriver.Chrome, invoice_number: str) -> None:
     driver.get(os.getenv("CMP_INVOICING_URL", DEFAULT_INVOICING_URL))
+    bring_browser_to_front(driver)
     WebDriverWait(driver, 90).until(EC.presence_of_element_located((By.XPATH, "//table | //*[@role='table']")))
     
     # 1. Clear any existing filters/searches first to avoid conflicts
@@ -197,6 +214,7 @@ def search_invoice(driver: webdriver.Chrome, invoice_number: str) -> None:
     search.send_keys(Keys.CONTROL, "a")
     search.send_keys(Keys.BACKSPACE)
     search.send_keys(invoice_number)
+    bring_browser_to_front(driver)
     
     # Dispatch standard input/change events to ensure React registers it perfectly
     driver.execute_script(
@@ -258,8 +276,6 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any, invoice_number: str) -
 
     before = {path.name for path in DOWNLOAD_DIR.glob("*")}
     
-    clicked = False
-    
     # Helper to execute native or action click on a button
     def trigger_click(btn_element: Any) -> bool:
         # Try native .click() first (highly recognized by React/Radix-UI)
@@ -295,37 +311,26 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any, invoice_number: str) -
         "button[title*='pdf' i]",
         "button[id*='radix'] svg.lucide-file-down",
     ]
-    
-    for sel in css_selectors:
-        try:
-            elements = row.find_elements(By.CSS_SELECTOR, sel)
-            for el in elements:
-                btn = el
-                if el.tag_name.lower() in ("svg", "path"):
-                    btn = el.find_element(By.XPATH, "./ancestor::button")
-                if btn.is_displayed() and btn.is_enabled():
-                    if trigger_click(btn):
-                        clicked = True
-                        break
-            if clicked:
-                break
-        except WebDriverException:
-            continue
+    xpaths = [
+        ".//button[contains(translate(@title,'SUMMARY','summary'),'summary')]",
+        ".//button[.//*[contains(@class,'file') or contains(@class,'document')]]",
+        ".//button[position()=last() - 2]",  # Third from last (usually download is first, edit second, delete last)
+        ".//button[position()=last()]",
+    ]
 
-    # 2. Fall back to standard XPaths if CSS selectors did not match
-    if not clicked:
-        xpaths = [
-            ".//button[contains(translate(@title,'SUMMARY','summary'),'summary')]",
-            ".//button[.//*[contains(@class,'file') or contains(@class,'document')]]",
-            ".//button[position()=last() - 2]", # Third from last (usually download is first, edit second, delete last)
-            ".//button[position()=last()]",
-        ]
-        for xpath in xpaths:
+    for attempt in range(2):
+        clicked = False
+
+        for sel in css_selectors:
             try:
-                buttons = row.find_elements(By.XPATH, xpath)
-                for button in buttons:
-                    if button.is_displayed() and button.is_enabled():
-                        if trigger_click(button):
+                bring_browser_to_front(driver)
+                elements = row.find_elements(By.CSS_SELECTOR, sel)
+                for el in elements:
+                    btn = el
+                    if el.tag_name.lower() in ("svg", "path"):
+                        btn = el.find_element(By.XPATH, "./ancestor::button")
+                    if btn.is_displayed() and btn.is_enabled():
+                        if trigger_click(btn):
                             clicked = True
                             break
                 if clicked:
@@ -333,37 +338,55 @@ def click_summary_pdf(driver: webdriver.Chrome, row: Any, invoice_number: str) -
             except WebDriverException:
                 continue
 
-    if not clicked:
-        raise TimeoutException("Summary action button was not found")
+        if not clicked:
+            for xpath in xpaths:
+                try:
+                    bring_browser_to_front(driver)
+                    buttons = row.find_elements(By.XPATH, xpath)
+                    for button in buttons:
+                        if button.is_displayed() and button.is_enabled():
+                            if trigger_click(button):
+                                clicked = True
+                                break
+                    if clicked:
+                        break
+                except WebDriverException:
+                    continue
 
-    time.sleep(1.5)
-    candidates = driver.find_elements(
-        By.XPATH,
-        "//*[self::a or self::button or self::li or self::span or self::div or @role='menuitem']"
-        "[contains(translate(normalize-space(.), 'PDF', 'pdf'), 'pdf')]"
-    )
-    
-    pdf_items = []
-    for item in candidates:
-        try:
-            if not item.is_displayed() or not item.is_enabled():
-                continue
-            text = str(item.text or item.get_attribute("textContent") or "").strip().lower()
-            if "excel" in text:
-                # Skip Excel as PDF and similar options
-                continue
-            if "pdf" in text:
-                pdf_items.append((item, len(text)))
-        except WebDriverException:
+        if not clicked:
+            bring_browser_to_front(driver)
+            time.sleep(1)
             continue
 
-    if pdf_items:
-        # Sort by text length to select the shortest/most exact match (e.g. "PDF" over longer variants)
-        pdf_items.sort(key=lambda x: x[1])
-        target_item = pdf_items[0][0]
-        if trigger_click(target_item):
-            return wait_for_download(before)
-        raise TimeoutException("Failed to click the PDF menu item")
+        time.sleep(1.5)
+        candidates = driver.find_elements(
+            By.XPATH,
+            "//*[self::a or self::button or self::li or self::span or self::div or @role='menuitem']"
+            "[contains(translate(normalize-space(.), 'PDF', 'pdf'), 'pdf')]"
+        )
+
+        pdf_items = []
+        for item in candidates:
+            try:
+                if not item.is_displayed() or not item.is_enabled():
+                    continue
+                text = str(item.text or item.get_attribute("textContent") or "").strip().lower()
+                if "excel" in text:
+                    continue
+                if "pdf" in text:
+                    pdf_items.append((item, len(text)))
+            except WebDriverException:
+                continue
+
+        if pdf_items:
+            pdf_items.sort(key=lambda x: x[1])
+            target_item = pdf_items[0][0]
+            bring_browser_to_front(driver)
+            if trigger_click(target_item):
+                return wait_for_download(before)
+
+        bring_browser_to_front(driver)
+        time.sleep(1.25)
 
     raise TimeoutException("PDF menu item was not found")
 

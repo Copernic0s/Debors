@@ -549,6 +549,8 @@ function App() {
   const [pdfBusyIds, setPdfBusyIds] = useState({});
   const [pdfPendingIds, setPdfPendingIds] = useState({});
   const cmpWasRunningRef = React.useRef(false);
+  const pdfStatusRef = React.useRef({});
+  const pdfDelayWarnedRef = React.useRef({});
 
   const refreshCmpStatus = React.useCallback(async () => {
     if (!cmpRunnerApiBase) return;
@@ -701,6 +703,66 @@ function App() {
   }, [data, pdfPendingIds]);
 
   useEffect(() => {
+    const nextStatusMap = {};
+
+    data.forEach((item) => {
+      const rowId = item?.id;
+      if (!rowId) return;
+
+      const status = String(item.pdfStatus || (item.pdfStoragePath ? 'available' : 'missing')).toLowerCase();
+      nextStatusMap[rowId] = status;
+
+      const prevStatus = pdfStatusRef.current[rowId];
+      const label = item.invoiceNumber || item.company || item.clientName || rowId;
+      const requestedAt = item.pdfRequestedAt ? new Date(item.pdfRequestedAt) : null;
+      const isRecentRequest = Boolean(requestedAt && !Number.isNaN(requestedAt.getTime()) && (Date.now() - requestedAt.getTime()) < 15 * 60 * 1000);
+
+      if (prevStatus && prevStatus !== status) {
+        if (status === 'queued') {
+          toast.loading(`PDF queued: ${label}`, { id: `pdf-${rowId}` });
+        } else if (status === 'fetching') {
+          toast.loading(`Downloading PDF: ${label}`, { id: `pdf-${rowId}` });
+          pdfDelayWarnedRef.current[rowId] = false;
+        } else if (status === 'available') {
+          toast.success(`PDF ready: ${label}`, { id: `pdf-${rowId}`, duration: 5000 });
+          delete pdfDelayWarnedRef.current[rowId];
+          setPdfPendingIds((prev) => {
+            if (!prev[rowId]) return prev;
+            const next = { ...prev };
+            delete next[rowId];
+            return next;
+          });
+        } else if (status === 'failed') {
+          toast.error(`PDF failed: ${label}`, {
+            id: `pdf-${rowId}`,
+            duration: 7000
+          });
+          delete pdfDelayWarnedRef.current[rowId];
+          setPdfPendingIds((prev) => {
+            if (!prev[rowId]) return prev;
+            const next = { ...prev };
+            delete next[rowId];
+            return next;
+          });
+        }
+      }
+
+      if ((status === 'queued' || status === 'fetching') && isRecentRequest) {
+        const delayMs = requestedAt ? Date.now() - requestedAt.getTime() : 0;
+        if (delayMs > 120000 && !pdfDelayWarnedRef.current[rowId]) {
+          toast(`PDF is taking longer than usual: ${label}`, {
+            id: `pdf-delay-${rowId}`,
+            duration: 6000
+          });
+          pdfDelayWarnedRef.current[rowId] = true;
+        }
+      }
+    });
+
+    pdfStatusRef.current = nextStatusMap;
+  }, [data]);
+
+  useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -710,6 +772,25 @@ function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!hasSupabaseConfig || !supabase || !refreshCmpData) return undefined;
+
+    const channel = supabase
+      .channel('cmp-invoices-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cmp_invoices' },
+        () => {
+          refreshCmpData({ silent: true });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshCmpData, supabase]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);

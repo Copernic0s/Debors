@@ -613,6 +613,14 @@ export default function DebtorsList({
                         >
                           <FileText size={14} />
                         </IconActionButton>
+                      ) : (String(item.pdfStatus || '').toLowerCase() === 'queued' || String(item.pdfStatus || '').toLowerCase() === 'fetching') ? (
+                        <IconActionButton
+                          type="button"
+                          disabled
+                          title={String(item.pdfStatus || '').toLowerCase() === 'fetching' ? 'Downloading PDF...' : 'PDF queued'}
+                        >
+                          <Loader2 size={14} className="spin" />
+                        </IconActionButton>
                       ) : (
                         <IconActionButton
                           type="button"
