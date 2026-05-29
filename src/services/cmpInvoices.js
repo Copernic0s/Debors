@@ -75,17 +75,25 @@ export const queueCmpInvoicePdf = async (supabase, row) => {
     throw new Error('Invoice number is required to queue PDF download');
   }
 
-  const { data, error } = await supabase
-    .from('cmp_invoices')
-    .update({
-      pdf_status: 'queued',
-      pdf_error: null
-    })
-    .eq('invoice_number', invoiceNumber);
-
-  if (error) {
-    throw new Error(error.message || 'Failed to queue PDF download');
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (sessionError || !accessToken) {
+    throw new Error('Please sign in again before requesting PDFs');
   }
 
-  return data;
+  const response = await fetch('/api/cmp/pdf-request', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({ invoiceNumber })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to queue PDF download');
+  }
+
+  return payload;
 };

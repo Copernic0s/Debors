@@ -494,6 +494,51 @@ app.post('/api/cmp/pdf', async (req, res) => {
   }
 });
 
+app.get('/api/cmp/pdf/queue', async (_req, res) => {
+  const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  if (!supabaseUrl || !serviceKey) {
+    return res.status(500).json({ error: 'Missing Supabase service credentials' });
+  }
+
+  const supabase = createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+
+  try {
+    const statuses = ['queued', 'fetching', 'failed', 'available', 'missing'];
+    const counts = {};
+    for (const status of statuses) {
+      const { count, error } = await supabase
+        .from('cmp_invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('pdf_status', status);
+      if (error) throw error;
+      counts[status] = count || 0;
+    }
+
+    let { data: queue, error } = await supabase
+      .from('cmp_invoices')
+      .select('invoice_number, company_name, pdf_status, pdf_error, pdf_storage_path, pdf_requested_at, synced_at')
+      .in('pdf_status', ['queued', 'fetching', 'failed'])
+      .order('pdf_requested_at', { ascending: true, nullsFirst: false })
+      .limit(20);
+    if (error && String(error.message || '').includes('pdf_requested_at')) {
+      ({ data: queue, error } = await supabase
+        .from('cmp_invoices')
+        .select('invoice_number, company_name, pdf_status, pdf_error, pdf_storage_path, synced_at')
+        .in('pdf_status', ['queued', 'fetching', 'failed'])
+        .order('synced_at', { ascending: true })
+        .limit(20));
+    }
+    if (error) throw error;
+
+    return res.json({ ok: true, running: getCmpStatus().running, counts, queue: queue || [] });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to inspect PDF queue' });
+  }
+});
+
 // DRY Helper function to spawn the python crawler and upload the PDF
 const executePdfFetch = (supabase, invoiceNumber, companyName) => {
   return new Promise(async (resolve, reject) => {
@@ -585,12 +630,22 @@ const startCmpPdfQueueWorker = (supabase) => {
     queueWorkerActive = true;
     try {
       // Find the oldest queued invoice
-      const { data: queuedInvoices, error } = await supabase
+      let { data: queuedInvoices, error } = await supabase
         .from('cmp_invoices')
-        .select('invoice_number, company_name')
+        .select('invoice_number, company_name, pdf_requested_at, synced_at')
         .eq('pdf_status', 'queued')
-        .order('synced_at', { ascending: true }) // FIFO order
+        .order('pdf_requested_at', { ascending: true, nullsFirst: false })
+        .order('synced_at', { ascending: true })
         .limit(1);
+
+      if (error && String(error.message || '').includes('pdf_requested_at')) {
+        ({ data: queuedInvoices, error } = await supabase
+          .from('cmp_invoices')
+          .select('invoice_number, company_name, synced_at')
+          .eq('pdf_status', 'queued')
+          .order('synced_at', { ascending: true })
+          .limit(1));
+      }
 
       if (error) {
         console.error('[Queue Worker] Error fetching queue:', error.message);
