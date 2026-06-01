@@ -49,6 +49,7 @@
 - `InvoiceEntry` is now controlled by an explicit email allowlist instead of general manager access.
 - If you need to grant access later, use `VITE_INVOICE_ENTRY_ALLOWED_EMAILS`.
 - New non-manager users need an agent scope, or the overview will load empty. Added a fallback that derives a scope from the email local part when no explicit scope exists, so a user like `guidiana.puentes@theunitedtransports.com` can resolve to `Guidiana Puentes`.
+- Added a PDF pending watcher in the UI so a requested invoice keeps polling CMP data until the green PDF icon appears, reducing reliance on manual F5 refreshes.
 
 ## Notes For Chrome Stability
 

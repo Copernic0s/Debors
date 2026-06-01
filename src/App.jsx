@@ -550,6 +550,8 @@ function App() {
   const cmpWasRunningRef = React.useRef(false);
   const pdfStatusRef = React.useRef({});
   const pdfDelayWarnedRef = React.useRef({});
+  const pdfRefreshPollRef = React.useRef(null);
+  const pdfRefreshAttemptsRef = React.useRef(0);
 
   const refreshCmpStatus = React.useCallback(async () => {
     if (!cmpRunnerApiBase) return;
@@ -760,6 +762,44 @@ function App() {
 
     pdfStatusRef.current = nextStatusMap;
   }, [data]);
+
+  useEffect(() => {
+    const pendingIds = Object.keys(pdfPendingIds).filter((id) => pdfPendingIds[id]);
+    if (pdfRefreshPollRef.current) {
+      clearInterval(pdfRefreshPollRef.current);
+      pdfRefreshPollRef.current = null;
+    }
+
+    if (pendingIds.length === 0) {
+      pdfRefreshAttemptsRef.current = 0;
+      return undefined;
+    }
+
+    pdfRefreshAttemptsRef.current = 0;
+    const poll = async () => {
+      pdfRefreshAttemptsRef.current += 1;
+
+      if (refreshCmpData) {
+        await refreshCmpData({ silent: true });
+      }
+
+      const stillPending = Object.keys(pdfPendingIds).some((id) => pdfPendingIds[id]);
+      if (stillPending && pdfRefreshAttemptsRef.current >= 3 && loadData) {
+        pdfRefreshAttemptsRef.current = 0;
+        await loadData({ silent: true });
+      }
+    };
+
+    poll();
+    pdfRefreshPollRef.current = setInterval(poll, 5000);
+
+    return () => {
+      if (pdfRefreshPollRef.current) {
+        clearInterval(pdfRefreshPollRef.current);
+        pdfRefreshPollRef.current = null;
+      }
+    };
+  }, [loadData, pdfPendingIds, refreshCmpData]);
 
   useEffect(() => {
     if (!hasSupabaseConfig || !supabase) return;
