@@ -1307,6 +1307,12 @@ function App() {
 
   const aggregatedData = React.useMemo(() => aggregateByCompany(scopedInvoiceData), [scopedInvoiceData]);
   const agentData = aggregatedData;
+
+  const directoryInvoiceData = React.useMemo(() => hydratedWithSmartStatus.filter((item) => {
+    return matchesSelectedAgent(item.agentId);
+  }), [hydratedWithSmartStatus, matchesSelectedAgent]);
+
+  const directoryData = React.useMemo(() => aggregateByCompany(directoryInvoiceData), [directoryInvoiceData]);
   const metrics = React.useMemo(() => calculateMetrics(agentData), [agentData]);
 
   const { snapshotClients, snapshotClientsInDebt, snapshotClientsClear } = React.useMemo(() => {
@@ -1473,7 +1479,7 @@ function App() {
 
       {activeView === 'companies_directory' && (
         <CompanyDirectory
-          data={agentData}
+          data={directoryData}
           onOpenCompanyProfile={openCompanyProfile}
         />
       )}

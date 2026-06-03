@@ -203,6 +203,46 @@ const CompanyName = styled.div`
   gap: 0.5rem;
 `;
 
+const PaginationContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.1);
+`;
+
+const PageInfo = styled.div`
+  font-size: 0.85rem;
+  color: var(--text-muted);
+`;
+
+const PageControls = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`;
+
+const PageButton = styled.button`
+  padding: 0.4rem 0.8rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--brand);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
 const formatStatus = (status) => {
   switch (status) {
     case 'paid': return 'Paid';
@@ -216,6 +256,12 @@ const formatStatus = (status) => {
 const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'company', direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortConfig]);
 
   const handleSort = (key) => {
     setSortConfig((prev) => ({
@@ -259,6 +305,12 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
     return result;
   }, [data, searchTerm, sortConfig]);
 
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return sortedData.slice(start, start + itemsPerPage);
+  }, [sortedData, currentPage]);
+
   return (
     <Container>
       <Header>
@@ -301,8 +353,8 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
             </tr>
           </thead>
           <tbody>
-            {sortedData.length > 0 ? (
-              sortedData.map((item) => (
+            {paginatedData.length > 0 ? (
+              paginatedData.map((item) => (
                 <Tr key={item.id} onClick={() => onOpenCompanyProfile && onOpenCompanyProfile(item.company)}>
                   <Td>
                     <CompanyName>{item.company}</CompanyName>
@@ -330,6 +382,28 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
           </tbody>
         </Table>
       </TableContainer>
+
+      {totalPages > 1 && (
+        <PaginationContainer>
+          <PageInfo>
+            Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, sortedData.length)} of {sortedData.length} entries
+          </PageInfo>
+          <PageControls>
+            <PageButton 
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </PageButton>
+            <PageButton 
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </PageButton>
+          </PageControls>
+        </PaginationContainer>
+      )}
     </Container>
   );
 };
