@@ -227,6 +227,10 @@ export const aggregateByCompany = (rows) => {
         current.lastInvoicedDate = row.lastInvoicedDate || current.lastInvoicedDate;
         current.lastNoUsageDate = row.lastNoUsageDate || current.lastNoUsageDate;
         current.noUsageCount = row.noUsageCount ?? current.noUsageCount;
+        current.totalAmount = row.totalAmount !== undefined ? row.totalAmount : current.totalAmount;
+        current.remainingAmount = row.remainingAmount !== undefined ? row.remainingAmount : current.remainingAmount;
+        current.totalPaid = row.totalPaid !== undefined ? row.totalPaid : current.totalPaid;
+        current.billingType = row.billingType || current.billingType;
       }
     }
 

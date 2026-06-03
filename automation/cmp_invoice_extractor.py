@@ -625,6 +625,9 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             status_i = resolve_column_index(headers, ("payment status",))
         invoice_date_i = resolve_column_index(headers, ("invoice date",))
         due_date_i = resolve_column_index(headers, ("due date",))
+        remaining_amount_i = resolve_column_index(headers, ("remaining amount",))
+        total_paid_i = resolve_column_index(headers, ("total paid",))
+        billing_type_i = resolve_column_index(headers, ("billing type",))
 
         if company_i is None or invoice_i is None or amount_i is None or status_i is None:
             raise ValueError(f"Missing required columns on page {page}: {headers}")
@@ -633,6 +636,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
         const table = arguments[0];
         const cIdx = arguments[1], iIdx = arguments[2], aIdx = arguments[3], sIdx = arguments[4];
         const dIdx = arguments[5], ddIdx = arguments[6];
+        const remIdx = arguments[7], paidIdx = arguments[8], btIdx = arguments[9];
         const rows = table.querySelectorAll('tbody tr, [role="row"]:not([role="columnheader"])');
         const out = [];
         for (const row of rows) {
@@ -644,13 +648,17 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             cells[aIdx].innerText.trim(),
             cells[sIdx].innerText.trim(),
             dIdx !== null && dIdx < cells.length ? cells[dIdx].innerText.trim() : '',
-            ddIdx !== null && ddIdx < cells.length ? cells[ddIdx].innerText.trim() : ''
+            ddIdx !== null && ddIdx < cells.length ? cells[ddIdx].innerText.trim() : '',
+            remIdx !== null && remIdx < cells.length ? cells[remIdx].innerText.trim() : '',
+            paidIdx !== null && paidIdx < cells.length ? cells[paidIdx].innerText.trim() : '',
+            btIdx !== null && btIdx < cells.length ? cells[btIdx].innerText.trim() : ''
           ]);
         }
         return out;
         """
         raw_rows = driver.execute_script(
-            script, table, company_i, invoice_i, amount_i, status_i, invoice_date_i, due_date_i
+            script, table, company_i, invoice_i, amount_i, status_i, invoice_date_i, due_date_i,
+            remaining_amount_i, total_paid_i, billing_type_i
         )
 
         page_dates: list[datetime] = []
@@ -658,7 +666,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
         raw_row_count = len(raw_rows or [])
 
         for row in raw_rows or []:
-            company, invoice_no, amount_text, status_raw, inv_date_text, due_text = row
+            company, invoice_no, amount_text, status_raw, inv_date_text, due_text, remaining_text, paid_text, billing_type_text = row
             if not company or not invoice_no:
                 continue
 
@@ -682,13 +690,24 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             seen.add(dedupe_key)
 
             amount = parse_amount(amount_text) or 0.0
+            remaining_amount = parse_amount(remaining_text)
+            total_paid = parse_amount(paid_text) or 0.0
+            billing_type = str(billing_type_text or "").strip()
+            
+            # Use remaining_amount as the primary amount field to represent outstanding debt correctly.
+            final_amount = remaining_amount if remaining_amount is not None else amount
+
             status = normalize_debtor_status(status_raw, due_date)
 
             results.append(
                 {
                     "companyName": company.strip(),
                     "invoiceNumber": invoice_no.strip(),
-                    "amount": round(amount, 2),
+                    "amount": round(final_amount, 2),
+                    "totalAmount": round(amount, 2),
+                    "remainingAmount": round(final_amount, 2),
+                    "totalPaid": round(total_paid, 2),
+                    "billingType": billing_type,
                     "invoiceDate": invoice_date.strftime("%Y-%m-%d") if invoice_date else None,
                     "dueDate": due_date.strftime("%Y-%m-%d") if due_date else None,
                     "status": status,

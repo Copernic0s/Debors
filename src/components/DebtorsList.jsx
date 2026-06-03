@@ -414,7 +414,7 @@ export default function DebtorsList({
       return 0;
     }
 
-    if (sortConfig.key === 'agentId' || sortConfig.key === 'billingCycle') {
+    if (sortConfig.key === 'agentId' || sortConfig.key === 'billingCycle' || sortConfig.key === 'billingType') {
       const aValue = String(a[sortConfig.key] || '');
       const bValue = String(b[sortConfig.key] || '');
       if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -482,6 +482,7 @@ export default function DebtorsList({
               <Th onClick={() => handleSort('agentId')}>Sales Rep {sortConfig.key === 'agentId' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('billingCycle')}>Billing Cycle {sortConfig.key === 'billingCycle' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
+              <Th onClick={() => handleSort('billingType')}>Pay Method {sortConfig.key === 'billingType' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('dueDate')}>Due Date {sortConfig.key === 'dueDate' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th onClick={() => handleSort('amount')}>Total Due ($) {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}</Th>
               <Th></Th>
@@ -569,6 +570,20 @@ export default function DebtorsList({
                   </StatusSelect>
                 </Td>
                 <Td>
+                  <span style={{ 
+                    fontSize: '0.78rem',
+                    color: 'var(--text-main)',
+                    opacity: 0.85,
+                    padding: '0.2rem 0.45rem',
+                    background: item.billingType ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    border: item.billingType ? '1px solid var(--glass-border)' : 'none',
+                    borderRadius: '6px',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {item.billingType || '-'}
+                  </span>
+                </Td>
+                <Td>
                   <DueInput
                     type="date"
                     disabled={readOnly}
@@ -577,28 +592,35 @@ export default function DebtorsList({
                   />
                 </Td>
                 <Td>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.5 }}>$</span>
-                    <input
-                      type="text"
-                      disabled={readOnly}
-                      style={{
-                        background: 'rgba(0,0,0,0.2)',
-                        border: '1px solid var(--glass-border)',
-                        borderRadius: '6px',
-                        padding: '0.4rem 0.6rem 0.4rem 1.2rem',
-                        color: 'var(--text-main)',
-                        width: '100px',
-                        fontSize: '0.875rem',
-                        textAlign: 'right'
-                      }}
-                      value={pendingAmounts[item.id] !== undefined ? pendingAmounts[item.id] : (item.amount || '0.00')}
-                      onChange={(e) => !readOnly && setPendingAmounts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                      onBlur={() => !readOnly && commitQuickAmount(item)}
-                      onKeyDown={(e) => {
-                        if (!readOnly && e.key === 'Enter') e.currentTarget.blur();
-                      }}
-                    />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <span style={{ position: 'absolute', left: '0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', opacity: 0.5 }}>$</span>
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        style={{
+                          background: 'rgba(0,0,0,0.2)',
+                          border: '1px solid var(--glass-border)',
+                          borderRadius: '6px',
+                          padding: '0.4rem 0.6rem 0.4rem 1.2rem',
+                          color: 'var(--text-main)',
+                          width: '100px',
+                          fontSize: '0.875rem',
+                          textAlign: 'right'
+                        }}
+                        value={pendingAmounts[item.id] !== undefined ? pendingAmounts[item.id] : (item.amount || '0.00')}
+                        onChange={(e) => !readOnly && setPendingAmounts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        onBlur={() => !readOnly && commitQuickAmount(item)}
+                        onKeyDown={(e) => {
+                          if (!readOnly && e.key === 'Enter') e.currentTarget.blur();
+                        }}
+                      />
+                    </div>
+                    {item.totalPaid > 0 && (
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={`Original Total: $${item.totalAmount}`}>
+                        Paid: ${item.totalPaid}
+                      </span>
+                    )}
                   </div>
                 </Td>
                 <Td>
