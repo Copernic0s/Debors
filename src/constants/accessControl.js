@@ -46,7 +46,7 @@ const hasPrivilegedIdentityFallback = (email) => {
 
 const hasInvoiceEntryAccessFallback = (email) => {
   const localPart = String(email || '').split('@')[0] || '';
-  return localPart.includes('andres') || localPart.includes('kevin');
+  return localPart.includes('andres');
 };
 
 const canViewActivityLogsFallback = (email) => {

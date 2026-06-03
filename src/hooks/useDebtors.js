@@ -141,6 +141,8 @@ export const aggregateByCompany = (rows) => {
         agentId: agent,
         agentSet: new Set([agent]),
         amount: amountToAdd,
+        totalInvoiced: amount,
+        totalPaid: isPaid ? amount : 0,
         billingCycle: normalizedCycle,
         cycleSet: new Set([normalizedCycle]),
         isSheetCycle: isCsSource && normalizedCycle !== BILLING_CYCLES.UNSPECIFIED,
@@ -165,6 +167,8 @@ export const aggregateByCompany = (rows) => {
 
     if (!current.seenInvoices.has(invKey)) {
       current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
+      current.totalInvoiced = Number.isFinite(roundMoney(current.totalInvoiced + amount)) ? roundMoney(current.totalInvoiced + amount) : 0;
+      current.totalPaid = Number.isFinite(roundMoney(current.totalPaid + (isPaid ? amount : 0))) ? roundMoney(current.totalPaid + (isPaid ? amount : 0)) : 0;
       current.seenInvoices.add(invKey);
       if (row.invoiceNumber) current.invoiceCount += 1;
     }
@@ -275,9 +279,19 @@ export const aggregateByCompany = (rows) => {
       item.status = 'inactive';
     }
 
+    let overallStatus = 'pending';
+    if (item.amount <= 0) {
+      overallStatus = 'paid';
+    } else if (item.amount > 0 && item.totalPaid > 0) {
+      overallStatus = 'partial_payment';
+    } else if (status === 'overdue') {
+      overallStatus = 'overdue';
+    }
+
     return {
       ...item,
       status,
+      overallStatus,
       isAutoOverdue,
       agentId: agents.join(', '),
       billingCycle: (item.billingCycle && item.billingCycle !== BILLING_CYCLES.UNSPECIFIED) 

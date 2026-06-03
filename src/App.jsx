@@ -10,6 +10,7 @@ import CompanyProfileModal from './components/CompanyProfileModal';
 import ManagerAnalytics from './components/ManagerAnalytics';
 import Login from './components/Login';
 import InvoiceEntry from './components/InvoiceEntry';
+import CompanyDirectory from './components/CompanyDirectory';
 import AlmaFuelLogo from './components/AlmaFuelLogo';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
@@ -1399,6 +1400,7 @@ function App() {
     }}>
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
+        <ViewButton type="button" $active={activeView === 'companies_directory'} onClick={() => setActiveView('companies_directory')}>Companies</ViewButton>
         <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
         {accessProfile.canViewInvoiceEntry && (
           <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
@@ -1465,6 +1467,13 @@ function App() {
           aggregatedRows={agentData}
           selectedAgent={selectedAgent}
           onSelectAgent={(agentName) => setSelectedAgent(agentName || 'all')}
+          onOpenCompanyProfile={openCompanyProfile}
+        />
+      )}
+
+      {activeView === 'companies_directory' && (
+        <CompanyDirectory
+          data={agentData}
           onOpenCompanyProfile={openCompanyProfile}
         />
       )}
