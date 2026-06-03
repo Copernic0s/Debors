@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { Search, ChevronDown, ChevronUp, FileText } from 'lucide-react';
-import { formatMoney } from '../utils/moneyUtils';
+import { formatCurrency } from '../utils/moneyUtils';
 
 const Container = styled.div`
   padding: 1.5rem;
@@ -313,10 +313,10 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
                       {formatStatus(item.overallStatus)}
                     </StatusBadge>
                   </Td>
-                  <Td>{formatMoney(item.totalInvoiced)}</Td>
-                  <Td>{formatMoney(item.totalPaid)}</Td>
+                  <Td>{formatCurrency(item.totalInvoiced)}</Td>
+                  <Td>{formatCurrency(item.totalPaid)}</Td>
                   <Td style={{ fontWeight: 700, color: item.amount > 0 ? '#f87171' : 'var(--text-main)' }}>
-                    {formatMoney(item.amount)}
+                    {formatCurrency(item.amount)}
                   </Td>
                 </Tr>
               ))
