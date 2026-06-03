@@ -531,15 +531,15 @@ def wait_for_table_change(driver: WebDriver, first_row_sig: str, timeout_seconds
 
 def click_next_page_button(driver: WebDriver) -> bool:
     button_xpaths = [
-        "//button[not(@disabled) and not(@aria-disabled='true') and "
+        "//button[not(@disabled) and not(@aria-disabled='true') and not(ancestor::tbody or ancestor::tr) and "
         "(contains(translate(@aria-label,'NEXT','next'),'next') or "
         "contains(translate(@title,'NEXT','next'),'next') or "
         "contains(translate(normalize-space(.),'NEXT','next'),'next'))]",
-        "//a[not(@aria-disabled='true') and "
+        "//a[not(@aria-disabled='true') and not(ancestor::tbody or ancestor::tr) and "
         "(contains(translate(@aria-label,'NEXT','next'),'next') or "
         "contains(translate(@title,'NEXT','next'),'next') or "
         "contains(translate(normalize-space(.),'NEXT','next'),'next'))]",
-        "//*[self::button or self::a][not(@disabled) and not(@aria-disabled='true')]"
+        "//*[self::button or self::a][not(@disabled) and not(@aria-disabled='true') and not(ancestor::tbody or ancestor::tr)]"
         "[.//*[contains(@class,'chevron-right') or contains(@class,'arrow-right')]]",
     ]
 
