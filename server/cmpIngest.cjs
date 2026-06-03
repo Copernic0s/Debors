@@ -29,7 +29,11 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
       status: String(item.status || 'pending').toLowerCase(),
       cmp_status_raw: item.cmpStatusRaw || null,
       sync_run_id: runId,
-      synced_at: syncedAt
+      synced_at: syncedAt,
+      total_amount: Number(item.totalAmount) !== undefined ? Number(item.totalAmount) : (Number(item.amount) || 0),
+      remaining_amount: Number(item.remainingAmount) !== undefined ? Number(item.remainingAmount) : (Number(item.amount) || 0),
+      total_paid: Number(item.totalPaid) !== undefined ? Number(item.totalPaid) : 0,
+      billing_type: item.billingType || null
     }));
 
   const supabase = createClient(supabaseUrl, serviceKey, {
