@@ -26,9 +26,10 @@ import './index.css';
 const TABLE_NAME = 'manual_edits';
 
 const getUserAvatarSrc = (email) => {
-  const normalizedEmail = String(email || '').toLowerCase();
+  const normalizedEmail = (email || '').toLowerCase();
   if (normalizedEmail.includes('andres')) return '/avatar.png';
   if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
+  if (normalizedEmail.includes('guidiana') || normalizedEmail.includes('guidi')) return '/guidiana-avatar.png';
   return null;
 };
 
