@@ -191,32 +191,6 @@ export const aggregateByCompany = (rows) => {
 
     if (String(row.invoiceNumber || '').trim()) current.hasInvoice = true;
 
-    if (rowPdfStoragePath) {
-      const currentPdfRank = pdfStatusRank(current.pdfStatus);
-      const currentHasPath = Boolean(current.pdfStoragePath);
-      const currentDownloadedAt = current.pdfDownloadedAt ? new Date(current.pdfDownloadedAt).getTime() : 0;
-      const nextDownloadedAt = rowPdfDownloadedAt ? new Date(rowPdfDownloadedAt).getTime() : 0;
-
-      if (
-        !currentHasPath ||
-        rowPdfRank > currentPdfRank ||
-        (rowPdfRank === currentPdfRank && nextDownloadedAt > currentDownloadedAt)
-      ) {
-        current.pdfStoragePath = rowPdfStoragePath;
-        current.pdfStatus = 'available';
-        current.pdfDownloadedAt = rowPdfDownloadedAt || current.pdfDownloadedAt || null;
-        current.pdfRequestedAt = rowPdfRequestedAt || current.pdfRequestedAt || null;
-        current.pdfError = null;
-      }
-    } else if (rowPdfRank > pdfStatusRank(current.pdfStatus)) {
-      current.pdfStatus = rowPdfStatus;
-      current.pdfRequestedAt = rowPdfRequestedAt || current.pdfRequestedAt || null;
-      if (!rowPdfError) {
-        current.pdfError = null;
-      } else if (!current.pdfError) {
-        current.pdfError = rowPdfError;
-      }
-    }
 
     if (row.dueDate) {
       if (!current.dueDate || row.dueDate > current.dueDate) {
@@ -235,6 +209,24 @@ export const aggregateByCompany = (rows) => {
         current.remainingAmount = row.remainingAmount !== undefined ? row.remainingAmount : current.remainingAmount;
         current.totalPaid = row.totalPaid !== undefined ? row.totalPaid : current.totalPaid;
         current.billingType = row.billingType || current.billingType;
+        current.pdfStoragePath = rowPdfStoragePath || null;
+        current.pdfStatus = rowPdfStatus || 'missing';
+        current.pdfDownloadedAt = rowPdfDownloadedAt || null;
+        current.pdfRequestedAt = rowPdfRequestedAt || null;
+        current.pdfError = rowPdfError || null;
+      } else if (row.dueDate === current.dueDate) {
+        // If same due date, prefer row with a PDF or better PDF status
+        if (!current.pdfStoragePath && rowPdfStoragePath) {
+          current.pdfStoragePath = rowPdfStoragePath;
+          current.pdfStatus = 'available';
+          current.pdfDownloadedAt = rowPdfDownloadedAt || null;
+          current.pdfRequestedAt = rowPdfRequestedAt || null;
+          current.pdfError = null;
+        } else if (rowPdfRank > pdfStatusRank(current.pdfStatus)) {
+          current.pdfStatus = rowPdfStatus;
+          current.pdfRequestedAt = rowPdfRequestedAt || current.pdfRequestedAt || null;
+          current.pdfError = rowPdfError || current.pdfError;
+        }
       }
     }
 
