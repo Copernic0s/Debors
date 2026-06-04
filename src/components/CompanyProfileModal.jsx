@@ -235,7 +235,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                     <td>{item.invoiceNumber || '-'}</td>
                     <td>{item.billingCycle || '-'}</td>
                     <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
-                    <td>{formatCurrency(item.amount)}</td>
+                    <td>{formatCurrency(item.totalAmount || item.amount)}</td>
                     <td>
                       <button 
                         className="btn btn-secondary" 
