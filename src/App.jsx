@@ -30,7 +30,15 @@ const getUserAvatarSrc = (email) => {
   if (normalizedEmail.includes('andres')) return '/avatar.png';
   if (normalizedEmail.includes('hector')) return '/hector-avatar.png';
   if (normalizedEmail.includes('guidiana') || normalizedEmail.includes('guidi')) return '/guidiana-avatar.png';
+  if (normalizedEmail.includes('kevin')) return '/kevin-avatar.png';
   return null;
+};
+
+const getUserDisplayName = (email) => {
+  if (!email) return 'Andres Mendez';
+  const normalizedEmail = email.toLowerCase();
+  if (normalizedEmail.includes('kevin')) return 'Kevin';
+  return email.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ');
 };
 
 const AppContainer = styled.div`
@@ -1574,7 +1582,7 @@ function App() {
                 )}
               </UserAvatar>
               <UserInfo>
-                <span className="name">{user?.email?.split('@')[0].split('.').map(n => n.charAt(0).toUpperCase() + n.slice(1)).join(' ') || 'Andres Mendez'}</span>
+                <span className="name">{getUserDisplayName(user?.email)}</span>
                 <span className="status">Active Session</span>
               </UserInfo>
             </div>
