@@ -157,10 +157,10 @@ export const aggregateByCompany = (rows) => {
         id: `CMP-${key}`,
         seenInvoices: new Set([invKey]),
         pdfStoragePath: rowPdfStoragePath || null,
-        pdfStatus: rowPdfStatus,
         pdfDownloadedAt: rowPdfDownloadedAt,
         pdfRequestedAt: rowPdfRequestedAt,
-        pdfError: rowPdfError
+        pdfError: rowPdfError,
+        hasPartialPayment: !isPaid && (row.totalPaid > 0 || (row.remainingAmount > 0 && row.remainingAmount < row.totalAmount))
       });
       return;
     }
@@ -169,6 +169,9 @@ export const aggregateByCompany = (rows) => {
       current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
       current.totalInvoiced = Number.isFinite(roundMoney(current.totalInvoiced + amount)) ? roundMoney(current.totalInvoiced + amount) : 0;
       current.totalPaid = Number.isFinite(roundMoney(current.totalPaid + (isPaid ? amount : 0))) ? roundMoney(current.totalPaid + (isPaid ? amount : 0)) : 0;
+      if (!isPaid && (row.totalPaid > 0 || (row.remainingAmount > 0 && row.remainingAmount < row.totalAmount))) {
+        current.hasPartialPayment = true;
+      }
       current.seenInvoices.add(invKey);
       if (row.invoiceNumber) current.invoiceCount += 1;
     }
@@ -274,7 +277,7 @@ export const aggregateByCompany = (rows) => {
     let overallStatus = 'pending';
     if (item.amount <= 0) {
       overallStatus = 'paid';
-    } else if (item.amount > 0 && item.totalPaid > 0) {
+    } else if (item.hasPartialPayment) {
       overallStatus = 'partial_payment';
     } else if (status === 'overdue') {
       overallStatus = 'overdue';
