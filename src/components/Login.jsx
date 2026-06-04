@@ -311,7 +311,6 @@ function Login({ onLogin }) {
           <Title>
             <span className="brand">ALMAFUEL</span>
           </Title>
-          <Subtitle>Operational cockpit for collections, support tracking, and account follow-up.</Subtitle>
         </Header>
         <Form onSubmit={handleLogin}>
           <FormGroup>
