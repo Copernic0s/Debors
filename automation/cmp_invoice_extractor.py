@@ -4,7 +4,6 @@ Writes status to automation/cmp_status.json and POSTs snapshot to ingest API.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -15,9 +14,14 @@ import unicodedata
 import uuid
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from cmp_agent_scope import build_company_agent_map, normalize_company
+from cmp_invoice_window import should_keep_invoice
+from cmp_scrape_completion import classify_scrape_completion
+from cmp_run_status import write_run_status
 
 import pandas as pd
 import requests
@@ -73,18 +77,36 @@ ATTACH_TIMEOUT_SECONDS = int(os.getenv("CMP_ATTACH_TIMEOUT_SECONDS", "20"))
 INGEST_URL = os.getenv("CMP_INGEST_URL", "http://127.0.0.1:3001/api/cmp/ingest").strip()
 INGEST_SECRET = os.getenv("CMP_INGEST_SECRET", "").strip()
 STATUS_PATH = ROOT_DIR / "automation" / "cmp_status.json"
-LOG_PATH = ROOT_DIR / "automation" / "cmp_invoice_extractor.log"
+LOG_PATH = Path(os.getenv("CMP_LOG_PATH", str(ROOT_DIR / "automation" / "cmp_invoice_extractor.log")))
+RUN_ID = os.getenv("CMP_RUN_ID", "")
+PARENT_RUN_ID = os.getenv("CMP_PARENT_RUN_ID", "")
+
+
+@dataclass
+class ScrapeResult:
+    invoices: list[dict[str, Any]]
+    pages_scraped: int
+    complete: bool
+    truncated: bool
 
 
 def configure_logging() -> None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    class RunContextFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            record.run_id = RUN_ID or "unassigned"
+            record.parent_run_id = PARENT_RUN_ID or RUN_ID or "unassigned"
+            return True
+
+    handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    handler.addFilter(RunContextFilter())
+    console = logging.StreamHandler(sys.stdout)
+    console.addFilter(RunContextFilter())
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
+        format="%(asctime)s | %(levelname)s | run_id=%(run_id)s | parent_run_id=%(parent_run_id)s | %(message)s",
+        handlers=[handler, console],
     )
 
 
@@ -96,18 +118,26 @@ def write_status(
     page: int = 0,
     invoices_found: int = 0,
     error: str | None = None,
+    run_status: str | None = None,
+    pages_scraped: int | None = None,
+    truncated: bool | None = None,
+    persisted: bool = False,
 ) -> None:
-    payload = {
-        "running": running,
-        "phase": phase,
-        "message": message,
-        "page": page,
-        "invoicesFound": invoices_found,
-        "error": error,
-        "updatedAt": datetime.utcnow().isoformat() + "Z",
-    }
-    STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATUS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_run_status(
+        STATUS_PATH,
+        run_id=RUN_ID,
+        parent_run_id=PARENT_RUN_ID or RUN_ID,
+        running=running,
+        phase=phase,
+        message=message,
+        page=page,
+        invoices_found=invoices_found,
+        error=error,
+        run_status=run_status,
+        pages_scraped=pages_scraped,
+        truncated=truncated,
+        persisted=persisted,
+    )
 
 
 def normalize_text(value: str) -> str:
@@ -118,10 +148,7 @@ def normalize_text(value: str) -> str:
 
 
 def normalize_company_key(value: str) -> str:
-    cleaned = normalize_text(value)
-    cleaned = re.sub(r"\b(llc|inc|corp|co|ltd|limited)\b", "", cleaned)
-    cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return normalize_company(value)
 
 
 def parse_amount(raw_value: str) -> float | None:
@@ -182,7 +209,7 @@ def normalize_debtor_status(raw_status: str, due_date: datetime | None) -> str:
     return "pending"
 
 
-def load_portfolio_keys() -> set[str]:
+def load_portfolio_scope() -> tuple[set[str], dict[str, str | None]]:
     write_status(running=True, phase="zoho", message="Loading Client BY agent from Zoho...")
     response = requests.get(ZOHO_XLSX_URL, timeout=60)
     response.raise_for_status()
@@ -200,15 +227,22 @@ def load_portfolio_keys() -> set[str]:
     company_col = columns.get("company name") or columns.get("company")
     if not company_col:
         raise ValueError("Client BY agent sheet must include 'Company Name'")
+    agent_col = columns.get("sales rep") or columns.get("agentid") or columns.get("agent")
 
-    keys: set[str] = set()
+    scope_entries = []
     for _, row in frame.fillna("").iterrows():
         company = str(row[company_col]).strip()
-        key = normalize_company_key(company)
-        if key:
-            keys.add(key)
-    logging.info("Portfolio loaded: %d companies from '%s'", len(keys), sheet_name)
-    return keys
+        agent = row[agent_col] if agent_col else ""
+        scope_entries.append((company, agent))
+    agents_by_company = build_company_agent_map(scope_entries)
+    keys = set(agents_by_company)
+    logging.info(
+        "Portfolio loaded: %d companies from '%s'; %d scoped, %d ambiguous/unassigned.",
+        len(keys), sheet_name,
+        sum(agent is not None for agent in agents_by_company.values()),
+        len(keys) - sum(agent is not None for agent in agents_by_company.values()),
+    )
+    return keys, agents_by_company
 
 
 def build_chrome_options() -> ChromeOptions:
@@ -580,10 +614,17 @@ def advance_to_next_invoicing_page(driver: WebDriver, page: int, first_row_sig: 
     return wait_for_table_change(driver, first_row_sig)
 
 
-def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[dict[str, Any]]:
-    cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
+def scrape_global_invoices(
+    driver: WebDriver,
+    portfolio_keys: set[str],
+    agents_by_company: dict[str, str | None] | None = None,
+    cutoff: datetime | None = None,
+) -> ScrapeResult:
+    cutoff = cutoff or datetime.now() - timedelta(days=HISTORY_DAYS)
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
+    pages_scraped = 0
+    end_reason = "incomplete"
 
     navigate_to_invoicing(driver)
 
@@ -660,6 +701,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             script, table, company_i, invoice_i, amount_i, status_i, invoice_date_i, due_date_i,
             remaining_amount_i, total_paid_i, billing_type_i
         )
+        pages_scraped = page
 
         page_dates: list[datetime] = []
         page_matched = 0
@@ -677,8 +719,6 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             invoice_date = parse_date_value(inv_date_text)
             if invoice_date:
                 page_dates.append(invoice_date)
-                if invoice_date < cutoff:
-                    continue
 
             due_date = parse_date_value(due_text)
             if not due_date and invoice_date:
@@ -698,10 +738,13 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             final_amount = remaining_amount if remaining_amount is not None else amount
 
             status = normalize_debtor_status(status_raw, due_date)
+            if not should_keep_invoice(status, final_amount, invoice_date, cutoff):
+                continue
 
             results.append(
                 {
                     "companyName": company.strip(),
+                    "agentId": (agents_by_company or {}).get(company_key),
                     "invoiceNumber": invoice_no.strip(),
                     "amount": round(final_amount, 2),
                     "totalAmount": round(amount, 2),
@@ -734,23 +777,37 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
 
         rows = table.find_elements(By.XPATH, ".//tbody/tr | .//*[@role='row']")
         if len(rows) <= 1:
+            end_reason = "pagination_end"
             break
 
         if page >= MAX_PAGES:
+            end_reason = "max_pages"
             break
 
         first_row_sig = read_first_row_signature(driver)
         if not advance_to_next_invoicing_page(driver, page, first_row_sig):
             logging.warning("Pagination did not refresh; stopping.")
+            end_reason = "pagination_error"
             break
 
-    return results
+    complete, truncated = classify_scrape_completion(pages_scraped, MAX_PAGES, end_reason)
+    return ScrapeResult(results, pages_scraped, complete, truncated)
 
 
-def post_ingest(invoices: list[dict[str, Any]], sync_run_id: str) -> None:
+def post_ingest(
+    invoices: list[dict[str, Any]],
+    sync_run_id: str,
+    *,
+    run_status: str,
+    pages_scraped: int,
+    truncated: bool,
+    cutoff_date: datetime,
+    scope_agent_ids: list[str],
+    started_at: str,
+) -> dict[str, Any] | None:
     if not INGEST_URL:
         logging.warning("CMP_INGEST_URL not set; skipping upload.")
-        return
+        return None
 
     write_status(
         running=True,
@@ -762,48 +819,107 @@ def post_ingest(invoices: list[dict[str, Any]], sync_run_id: str) -> None:
     if INGEST_SECRET:
         headers["Authorization"] = f"Bearer {INGEST_SECRET}"
 
-    is_fast_sync = os.getenv("CMP_FAST_SYNC", "false").lower() == "true"
+    dry_run = os.getenv("CMP_INGEST_DRY_RUN", "false").lower() == "true"
     response = requests.post(
         INGEST_URL,
         headers=headers,
-        json={"syncRunId": sync_run_id, "invoices": invoices, "isFastSync": is_fast_sync},
+        json={
+            "syncRunId": sync_run_id,
+            "startedAt": started_at,
+            "invoices": invoices,
+            "runStatus": run_status,
+            "mode": os.getenv("CMP_SYNC_MODE", "normal"),
+            "pagesScraped": pages_scraped,
+            "rowsExtracted": len(invoices),
+            "truncated": truncated,
+            "cutoffDate": cutoff_date.date().isoformat(),
+            "scopeAgentIds": scope_agent_ids,
+            "dryRun": dry_run,
+        },
         timeout=120,
     )
     if not response.ok:
         raise RuntimeError(f"Ingest failed ({response.status_code}): {response.text[:500]}")
+    return response.json()
 
 
 def main() -> int:
+    global RUN_ID, PARENT_RUN_ID
+    sync_run_id = os.getenv("CMP_RUN_ID") or str(uuid.uuid4())
+    RUN_ID = sync_run_id
+    PARENT_RUN_ID = os.getenv("CMP_PARENT_RUN_ID") or sync_run_id
     configure_logging()
-    sync_run_id = str(uuid.uuid4())
+    started_at = os.getenv("CMP_RUN_STARTED_AT") or datetime.utcnow().isoformat() + "Z"
+    cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     attached = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
     driver: WebDriver | None = None
+    pages_scraped = 0
+    scope_agent_ids: list[str] = []
 
     try:
         write_status(running=True, phase="init", message="Starting CMP sync...")
-        portfolio_keys = load_portfolio_keys()
+        portfolio_keys, agents_by_company = load_portfolio_scope()
+        scope_agent_ids = sorted({agent for agent in agents_by_company.values() if agent})
         driver = create_driver()
-        invoices = scrape_global_invoices(driver, portfolio_keys)
+        scrape_result = scrape_global_invoices(driver, portfolio_keys, agents_by_company, cutoff)
+        invoices = scrape_result.invoices
+        pages_scraped = scrape_result.pages_scraped
 
         if not invoices:
             logging.warning("No invoices extracted for portfolio.")
 
-        post_ingest(invoices, sync_run_id)
+        ingest_result = post_ingest(
+            invoices,
+            sync_run_id,
+            run_status="complete" if scrape_result.complete else "incomplete",
+            pages_scraped=pages_scraped,
+            truncated=scrape_result.truncated,
+            cutoff_date=cutoff,
+            scope_agent_ids=scope_agent_ids,
+            started_at=started_at,
+        )
+        final_message = (
+            f"Dry run: {ingest_result.get('rowsThatWouldClose', 0)} rows would be closed."
+            if ingest_result and ingest_result.get("dryRun")
+            else f"Run {sync_run_id} stored {len(invoices)} invoices."
+        )
         write_status(
             running=False,
             phase="done",
-            message=f"Done. {len(invoices)} invoices synced.",
+            message=f"{final_message} Pages={pages_scraped}; complete={scrape_result.complete}; truncated={scrape_result.truncated}.",
             invoices_found=len(invoices),
+            run_status="complete" if scrape_result.complete else "incomplete",
+            pages_scraped=pages_scraped,
+            truncated=scrape_result.truncated,
+            persisted=bool(ingest_result and not ingest_result.get("dryRun")),
         )
-        logging.info("CMP sync complete: %d invoices", len(invoices))
+        logging.info("CMP run %s finished: %d invoices, %d pages, complete=%s, truncated=%s, ingest=%s",
+                     sync_run_id, len(invoices), pages_scraped, scrape_result.complete,
+                     scrape_result.truncated, ingest_result)
         return 0
     except Exception as error:
         logging.exception("CMP sync failed")
+        try:
+            post_ingest(
+                [],
+                sync_run_id,
+                run_status="failed",
+                pages_scraped=pages_scraped,
+                truncated=False,
+                cutoff_date=cutoff,
+                scope_agent_ids=scope_agent_ids,
+                started_at=started_at,
+            )
+        except Exception:
+            logging.warning("Could not persist failed CMP run metadata.")
         write_status(
             running=False,
             phase="error",
             message="CMP sync failed",
             error=str(error),
+            run_status="failed",
+            pages_scraped=pages_scraped,
+            truncated=False,
         )
         return 1
     finally:

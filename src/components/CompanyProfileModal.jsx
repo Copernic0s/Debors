@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
-import { X, Building2, Users, FileText, AlertTriangle, Edit2 } from 'lucide-react';
+import { X, Building2, Users, FileText, AlertTriangle, Edit2, CalendarDays } from 'lucide-react';
+import { centsToAmount, invoiceFinancials } from '../services/invoiceFinancials';
 
 const Overlay = styled.div`
   position: fixed;
@@ -129,6 +130,7 @@ const Chip = styled.span`
 
 const Table = styled.table`
   width: 100%;
+  min-width: 1020px;
   border-collapse: collapse;
 
   th,
@@ -148,15 +150,44 @@ const Table = styled.table`
   }
 `;
 
+const TableWrap = styled.div`
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+`;
+
+const Notice = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+`;
+
 const formatCurrency = (value) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD'
 }).format(value || 0);
 
+const formatDate = (value) => {
+  if (!value) return '-';
+  const rawDate = String(value);
+  const date = new Date(rawDate.length === 10 ? `${rawDate}T12:00:00` : rawDate);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+};
+
 const getStatusTone = (status) => {
   const s = String(status || '').toLowerCase();
   if (s === 'paid') return { label: 'Paid', color: 'var(--ok)' };
   if (s === 'overdue') return { label: 'Overdue', color: 'var(--danger)' };
+  if (s === 'partial_payment') return { label: 'Partial payment', color: 'var(--warn)' };
   return { label: 'Pending', color: 'var(--warn)' };
 };
 
@@ -167,7 +198,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
     <Overlay onClick={onClose}>
       <Panel onClick={(e) => e.stopPropagation()}>
         <Header>
-          <Title><Building2 size={18} /> Company Technical Profile</Title>
+          <Title><Building2 size={18} /> Company invoice profile</Title>
           <button type="button" onClick={onClose} className="btn btn-secondary" style={{ padding: '0.35rem' }}>
             <X size={16} />
           </button>
@@ -178,12 +209,12 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
 
           <Grid>
             <StatCard>
-              <span>Total Active Debt</span>
-              <strong>{formatCurrency(profile.totalDebt)}</strong>
+              <span>Total Due</span>
+              <strong>{formatCurrency(profile.totalDue ?? profile.totalDebt)}</strong>
             </StatCard>
             <StatCard>
               <span>Total Overdue</span>
-              <strong style={{ color: 'var(--danger)' }}>{formatCurrency(profile.totalOverdue)}</strong>
+              <strong style={{ color: 'var(--danger)' }}>{formatCurrency(profile.totalOverdue)} · {profile.overdueInvoiceCount} invoices</strong>
             </StatCard>
             <StatCard>
               <span>Invoices</span>
@@ -214,47 +245,76 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
           )}
 
           <div style={{ marginBottom: '0.45rem', color: 'var(--text-muted)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <AlertTriangle size={14} /> Invoice Breakdown
+            <CalendarDays size={14} /> Latest invoices
           </div>
 
-          <Table>
-            <thead>
-              <tr>
-                <th>Invoice</th>
-                <th>Cycle</th>
-                <th>Status</th>
-                <th>Amount</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {profile.invoices.length > 0 ? profile.invoices.map((item) => {
-                const tone = getStatusTone(item.status);
-                return (
-                  <tr key={item.id}>
-                    <td>{item.invoiceNumber || '-'}</td>
-                    <td>{item.billingCycle || '-'}</td>
-                    <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
-                    <td>{formatCurrency(item.totalAmount || item.amount)}</td>
-                    <td>
-                      <button 
-                        className="btn btn-secondary" 
-                        style={{ padding: '0.25rem', minWidth: 'auto' }}
-                        onClick={() => onEditInvoice(item)}
-                        title="Edit this invoice"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }) : (
+          {profile.weekFilterApplied && (
+            <Notice>CMP invoices remain included; the selected week only filters other sources.</Notice>
+          )}
+
+          <TableWrap>
+            <Table>
+              <thead>
                 <tr>
-                  <td colSpan={5} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                  <th>Invoice</th>
+                  <th>Invoice date</th>
+                  <th>Due date</th>
+                  <th>Cycle</th>
+                  <th>Status</th>
+                  <th>Invoice total</th>
+                  <th>Paid</th>
+                  <th>Balance due</th>
+                  <th>Actions</th>
                 </tr>
-              )}
-            </tbody>
-          </Table>
+              </thead>
+              <tbody>
+                {profile.invoices.length > 0 ? profile.invoices.map((item) => {
+                  const tone = getStatusTone(item.status);
+                  const amounts = invoiceFinancials(item);
+                  return (
+                    <tr key={item.id}>
+                      <td title={amounts.financialMismatch ? 'CMP financial fields do not reconcile' : undefined}>
+                        {amounts.financialMismatch && <AlertTriangle size={13} color="var(--warn)" style={{ marginRight: 5, verticalAlign: 'middle' }} />}
+                        {item.invoiceNumber || '-'}
+                      </td>
+                      <td>{formatDate(item.invoiceDate || item.lastInvoicedDate)}</td>
+                      <td>{formatDate(item.dueDate)}</td>
+                      <td>{item.billingCycle || '-'}</td>
+                      <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
+                      <td>{formatCurrency(centsToAmount(amounts.invoiced))}</td>
+                      <td>{formatCurrency(centsToAmount(amounts.paid))}</td>
+                      <td style={{ color: amounts.due > 0 ? 'var(--danger)' : 'var(--text-main)', fontWeight: 700 }}>
+                        {formatCurrency(centsToAmount(amounts.due))}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '0.25rem', minWidth: 'auto' }}
+                          onClick={() => onEditInvoice(item)}
+                          title="Edit this invoice"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <tr>
+                    <td colSpan={9} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                  </tr>
+                )}
+                {profile.invoices.length > 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'right', fontWeight: 800 }}>Totals</td>
+                    <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalInvoiced)}</td>
+                    <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalPaid)}</td>
+                    <td style={{ fontWeight: 800, color: 'var(--danger)' }}>{formatCurrency(profile.totalDue)}</td>
+                    <td />
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </TableWrap>
         </Body>
       </Panel>
     </Overlay>

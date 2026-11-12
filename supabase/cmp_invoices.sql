@@ -33,24 +33,12 @@ create index if not exists cmp_invoices_pdf_queue_idx on public.cmp_invoices (pd
 
 alter table public.cmp_invoices enable row level security;
 
-drop policy if exists "cmp_invoices_read_authenticated" on public.cmp_invoices;
-create policy "cmp_invoices_read_authenticated"
-  on public.cmp_invoices
-  for select
-  to authenticated
-  using (true);
-
--- Writes only via service role (ingest API), not from browser clients.
+-- No authenticated read policy is created in the bootstrap schema. Apply the
+-- versioned agent RLS migration before enabling client access.
 
 insert into storage.buckets (id, name, public)
 values ('cmp-invoices', 'cmp-invoices', false)
 on conflict (id) do nothing;
 
-drop policy if exists "cmp_invoice_pdfs_read_authenticated" on storage.objects;
-create policy "cmp_invoice_pdfs_read_authenticated"
-  on storage.objects
-  for select
-  to authenticated
-  using (bucket_id = 'cmp-invoices');
-
--- PDF writes happen through the local CMP runner/API with the service role.
+-- Private PDF access is granted by the versioned agent RLS migration only.
+-- Writes happen through the local CMP runner/API with the service role.

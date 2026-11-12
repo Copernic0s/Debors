@@ -24,16 +24,23 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
 
     const pdfStoragePath = row.pdf_storage_path || null;
 
+    const totalAmount = row.total_amount !== undefined && row.total_amount !== null
+      ? Number(row.total_amount)
+      : (Number(row.amount) || 0);
+    const remainingAmount = row.remaining_amount !== undefined && row.remaining_amount !== null
+      ? Number(row.remaining_amount)
+      : (Number(row.amount) || 0);
+
     return {
       id: String(row.id || `CMP-INV-${companyKey}-${row.invoice_number}`),
       invoiceNumber: String(row.invoice_number || '').trim(),
       company,
       clientName: company,
-      agentId: meta.agentId,
+      agentId: String(row.agent_id || meta.agentId || 'Unassigned').trim() || 'Unassigned',
       billingCycle: meta.billingCycle,
-      amount: Number(row.amount) || 0,
-      totalAmount: row.total_amount !== undefined && row.total_amount !== null ? Number(row.total_amount) : (Number(row.amount) || 0),
-      remainingAmount: row.remaining_amount !== undefined && row.remaining_amount !== null ? Number(row.remaining_amount) : (Number(row.amount) || 0),
+      amount: remainingAmount,
+      totalAmount,
+      remainingAmount,
       totalPaid: Number(row.total_paid) || 0,
       billingType: row.billing_type || null,
       dueDate: row.due_date || '',

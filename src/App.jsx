@@ -19,12 +19,14 @@ import { useDebtors, aggregateByCompany } from './hooks/useDebtors';
 import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
 import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { normalizeBillingCycle } from './constants/billingCycles';
 import { emailService } from './services/emailService';
 import { openCmpInvoicePdf, requestCmpInvoicePdf, queueCmpInvoicePdf } from './services/cmpInvoices';
+import { centsToAmount, invoiceFinancials, sortInvoicesNewestFirst } from './services/invoiceFinancials';
+import { companyProfileRowMatchesWeek, PROFILE_RESPECTS_WEEK_FILTER } from './services/companyProfile';
 import './index.css';
 
 const TABLE_NAME = 'manual_edits';
-
 const getUserAvatarSrc = (email) => {
   const normalizedEmail = (email || '').toLowerCase();
   if (normalizedEmail.includes('andres')) return '/avatar.png';
@@ -465,7 +467,7 @@ const ViewButton = styled.button`
 function App() {
   const [activeView, setActiveView] = useState('overview');
   const [selectedAgent, setSelectedAgent] = useState('all');
-  const [selectedWeek, setSelectedWeek] = useState('all');
+  const [selectedWeek] = useState('all');
   const [statusScope, setStatusScope] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentDebtor, setCurrentDebtor] = useState(null);
@@ -488,10 +490,10 @@ function App() {
     clientsByAgent,
     loading,
     isSyncing,
-    syncSourceLabel,
-    lastSyncAt,
     lastCmpSyncAt,
     cmpInvoiceCount,
+    cmpExpectedCount,
+    cmpPartial,
     loadData,
     refreshCmpData,
     persistEditedRows,
@@ -602,7 +604,7 @@ function App() {
       const response = await fetch(`${cmpRunnerApiBase}/api/cmp/log?lines=120`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Failed to read log');
-      toast(String(payload?.tail || 'No log yet.').trim(), { duration: 8000 });
+      toast(`${payload?.runId ? `Run ${payload.runId}\n` : ''}${String(payload?.tail || 'No log yet.').trim()}`, { duration: 8000 });
     } catch (error) {
       toast.error(error?.message || 'Could not read CMP log');
     }
@@ -1281,7 +1283,6 @@ function App() {
 
 
 
-  const weekOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.weekLabel || '').trim()).filter(Boolean))).sort(), [accessibleData]);
   const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
@@ -1343,26 +1344,19 @@ function App() {
     };
   }, [agentData]);
 
-  const syncTimeLabel = lastSyncAt
-    ? new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(lastSyncAt)
-    : '--:--';
-
   const companyProfile = React.useMemo(() => {
     if (!activeCompany) return null;
 
     const targetKey = normalizeMatchKey(activeCompany);
-    const scopedRows = accessibleData.filter((item) => {
+    const scopedRows = hydratedWithSmartStatus.filter((item) => {
       const byCompany = normalizeMatchKey(item.company || item.clientName) === targetKey;
       if (!byCompany) return false;
       const byAgent = matchesSelectedAgent(item.agentId);
-      const byWeek = selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+      const byWeek = companyProfileRowMatchesWeek(item, selectedWeek, PROFILE_RESPECTS_WEEK_FILTER);
       return byAgent && byWeek;
     });
 
-    // Deduplicate by week to avoid double-counting placeholders
     const deduplicatedRows = [];
-    const seenWindows = new Set();
-    
     // Sort to prioritize actual invoices (debt source) over placeholders (cs source)
     const sortedScoped = [...scopedRows].sort((a, b) => {
       if (a.source === 'debt' && b.source !== 'debt') return -1;
@@ -1383,25 +1377,31 @@ function App() {
     });
 
     const invoiceRows = deduplicatedRows.filter((item) => !String(item.id || '').startsWith('CS-') && item.invoiceNumber !== 'Marked as Sent');
-    const totalDebt = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() !== 'paid')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const totalOverdue = deduplicatedRows
-      .filter((item) => String(item.status || '').toLowerCase() === 'overdue')
-      .reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-
+    const totalsInCents = invoiceRows.reduce((totals, item) => {
+      const financial = invoiceFinancials(item);
+      totals.invoiced += financial.invoiced;
+      totals.paid += financial.paid;
+      totals.due += financial.due;
+      if (String(item.status || '').toLowerCase() === 'overdue') totals.overdue += financial.due;
+      if (financial.financialMismatch) totals.mismatches += 1;
+      return totals;
+    }, { invoiced: 0, paid: 0, due: 0, overdue: 0, mismatches: 0 });
     return {
       company: activeCompany,
-      totalDebt,
-      totalOverdue,
+      totalDebt: centsToAmount(totalsInCents.due),
+      totalDue: centsToAmount(totalsInCents.due),
+      totalInvoiced: centsToAmount(totalsInCents.invoiced),
+      totalPaid: centsToAmount(totalsInCents.paid),
+      totalOverdue: centsToAmount(totalsInCents.overdue),
+      overdueInvoiceCount: invoiceRows.filter((item) => String(item.status || '').toLowerCase() === 'overdue' && invoiceFinancials(item).due > 0).length,
       invoiceCount: invoiceRows.length,
+      financialMismatchCount: totalsInCents.mismatches,
+      weekFilterApplied: selectedWeek !== 'all',
       agents: Array.from(new Set(deduplicatedRows.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(),
       contacts: Array.from(new Set(deduplicatedRows.map((item) => String(item.contactPerson || '').trim()).filter(Boolean))).sort(),
-      invoices: invoiceRows.sort((a, b) => 
-        String(a.invoiceNumber || a.id).localeCompare(String(b.invoiceNumber || b.id))
-      )
+      invoices: sortInvoicesNewestFirst(invoiceRows)
     };
-  }, [activeCompany, accessibleData, matchesSelectedAgent, selectedWeek]);
+  }, [activeCompany, hydratedWithSmartStatus, matchesSelectedAgent, selectedWeek]);
 
 
 
@@ -1627,6 +1627,8 @@ function App() {
             onShowLog={showCmpLog}
             lastCmpSyncAt={lastCmpSyncAt}
             cmpInvoiceCount={cmpInvoiceCount}
+            cmpExpectedCount={cmpExpectedCount}
+            cmpPartial={cmpPartial}
             syncAllBusy={syncAllBusy}
             onRunSync={handleSyncAll}
           />

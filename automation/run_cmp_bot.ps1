@@ -6,6 +6,12 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $ErrorActionPreference = "Stop"
+if (-not $env:CMP_RUN_ID) { $env:CMP_RUN_ID = [Guid]::NewGuid().ToString() }
+if (-not $env:CMP_RUN_STARTED_AT) { $env:CMP_RUN_STARTED_AT = [DateTime]::UtcNow.ToString("o") }
+if (-not $env:CMP_PARENT_RUN_ID) { $env:CMP_PARENT_RUN_ID = $env:CMP_RUN_ID }
+if (-not $env:CMP_LOG_PATH) {
+  $env:CMP_LOG_PATH = Join-Path $PSScriptRoot ("logs\cmp-{0}.log" -f $env:CMP_RUN_ID)
+}
 
 if ($Depth) {
   if ($Depth -eq "deep") {
@@ -96,6 +102,9 @@ python .\automation\cmp_invoice_extractor.py
 
 if ($LASTEXITCODE -ne 0) {
   Start-Sleep -Seconds 5
+  # A retry is a distinct run; the failed attempt may already have been recorded.
+  $env:CMP_RUN_ID = [Guid]::NewGuid().ToString()
+  $env:CMP_RUN_STARTED_AT = [DateTime]::UtcNow.ToString("o")
   python .\automation\cmp_invoice_extractor.py
 }
 
