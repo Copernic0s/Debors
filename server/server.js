@@ -12,9 +12,23 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 3001;
 const { getCmpStatus, tailLog, startCmpScraper } = require('./cmpRunner');
-const { ingestCmpSnapshot, verifyCmpIngestSecret } = require('./cmpIngest.cjs');
+const {
+  ingestCmpSnapshot,
+  verifyCmpIngestSecret,
+  getConfiguredIngestSecret
+} = require('./cmpIngest.cjs');
 
-app.use(cors());
+const allowedOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+]);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('Origin not allowed by local Debors API'));
+  }
+}));
 app.use(express.json({ limit: '12mb' }));
 
 const isCsByAgentSheet = (name) => {
@@ -439,6 +453,10 @@ app.get('/api/cmp/log', (req, res) => {
 });
 
 app.post('/api/cmp/run', (req, res) => {
+  if (!getConfiguredIngestSecret()) {
+    return res.status(503).json({ error: 'CMP runner is not configured' });
+  }
+
   try {
     const depth = req.body?.depth || 'fast';
     const result = startCmpScraper(depth);
@@ -453,6 +471,9 @@ app.post('/api/cmp/run', (req, res) => {
 
 app.post('/api/cmp/ingest', async (req, res) => {
   try {
+    if (!getConfiguredIngestSecret()) {
+      return res.status(503).json({ error: 'CMP ingest is not configured' });
+    }
     if (!verifyCmpIngestSecret(req)) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -674,8 +695,13 @@ const startCmpPdfQueueWorker = (supabase) => {
   setInterval(pollQueue, 10000); // Check every 10 seconds
 };
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend listening on port ${PORT}`);
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
+
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`Backend listening on http://${BIND_HOST}:${PORT}`);
+  if (!getConfiguredIngestSecret()) {
+    console.warn('[CMP] Runner and ingest disabled: a valid local ingest secret is required.');
+  }
   
   // Start the queue worker on startup if Supabase config is present
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();

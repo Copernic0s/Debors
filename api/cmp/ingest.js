@@ -1,8 +1,16 @@
-import { ingestCmpSnapshot, verifyCmpIngestSecret } from '../../lib/cmpIngest.js';
+import {
+  getConfiguredIngestSecret,
+  ingestCmpSnapshot,
+  verifyCmpIngestSecret
+} from '../../lib/cmpIngest.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  if (!getConfiguredIngestSecret()) {
+    return res.status(503).json({ error: 'CMP ingest is not configured' });
   }
 
   if (!verifyCmpIngestSecret(req)) {

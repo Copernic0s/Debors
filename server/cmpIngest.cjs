@@ -1,4 +1,12 @@
 const { createClient } = require('@supabase/supabase-js');
+const { timingSafeEqual } = require('node:crypto');
+
+const MIN_INGEST_SECRET_LENGTH = 32;
+
+const getConfiguredIngestSecret = (env = process.env) => {
+  const secret = String(env.CMP_INGEST_SECRET || '').trim();
+  return secret.length >= MIN_INGEST_SECRET_LENGTH ? secret : null;
+};
 
 const buildRowId = (companyName, invoiceNumber) => {
   const company = String(companyName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -61,12 +69,19 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
   return { syncRunId: runId, count: rows.length, syncedAt };
 };
 
-const verifyCmpIngestSecret = (req) => {
-  const expected = String(process.env.CMP_INGEST_SECRET || '').trim();
-  if (!expected) return true;
+const verifyCmpIngestSecret = (req, env = process.env) => {
+  const expected = getConfiguredIngestSecret(env);
+  if (!expected) return false;
   const header = String(req.headers.authorization || '');
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  return token === expected;
+  const expectedBuffer = Buffer.from(expected);
+  const tokenBuffer = Buffer.from(token);
+  return tokenBuffer.length === expectedBuffer.length && timingSafeEqual(tokenBuffer, expectedBuffer);
 };
 
-module.exports = { ingestCmpSnapshot, verifyCmpIngestSecret };
+module.exports = {
+  ingestCmpSnapshot,
+  verifyCmpIngestSecret,
+  getConfiguredIngestSecret,
+  MIN_INGEST_SECRET_LENGTH
+};
