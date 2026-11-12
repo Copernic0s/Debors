@@ -16,10 +16,10 @@ Ultima actualizacion: 2026-11-12
 - [x] P1: conciliar importe original, total pagado y saldo restante en agregados y detalle (aritmetica en centavos y aviso de discrepancias).
 - [x] P1: ordenar invoices por fecha y asegurar que el perfil no esconda CMP por el filtro de semana.
 - [ ] P1: activar y validar el acceso por agente en RLS/API. La migracion F3 y la propagacion `company -> agent_id` ya estan preparadas; faltan scopes reales (aprovisionamiento privado), prueba con usuarios agente/manager en Postgres local y decision del owner para aplicar en remoto.
-- [ ] P1: definir reconciliacion de snapshot vigente sin perder historial ni aceptar crawls parciales.
+- [ ] P1: F4 snapshot: migracion idempotente y RPC transaccional preparados; extractor/runner e ingest aun en implementacion. No ejecutar migracion remota.
 - [x] P1: reflejar en SQL las columnas financieras usadas por ingest (migracion creada; no aplicada a Supabase remoto).
 - [x] P1: hacer que ingest falle cerrado si falta `CMP_INGEST_SECRET` (backend requiere secreto de 32 bytes o mas al reiniciar).
-- [ ] P1: acordar como cubrir todos los saldos abiertos, incluso invoices anteriores a la ventana temporal normal.
+- [x] P1: D1 confirmado: conservar todos los saldos abiertos y limitar por fecha solo invoices pagadas; F4 cambia el filtro del extractor y agrega tests.
 - [ ] P2: corregir estado obsoleto del runner y documentacion operativa.
 - [ ] P2: agregar prueba de integracion de RLS (requiere Supabase CLI/Postgres local); pruebas de propagacion de agent scope e ingest ya agregadas.
 
@@ -39,3 +39,4 @@ Ultima actualizacion: 2026-11-12
 | 2026-11-12 | F1: migracion versionada para campos financieros/snapshot; ingest fail-closed con comparacion timing-safe, CORS local y bind loopback. | `cd server && npm test` 3/3; `npm run test:run` 17/17; `npm run build` pasa (warning de chunk >500 kB). Migracion no aplicada remotamente; no se reinicio el backend activo. |
 | 2026-11-12 | F2: lectura paginada y completa de CMP; totales financieros en centavos; perfil con fechas, ultimo invoice, total/paid/balance y subtotal overdue; retencion del ultimo snapshot al fallar una lectura parcial. | `npm run test:run` 25/25; `cd server && npm test` 3/3; `npm run build` pasa (warning de chunk >500 kB); ESLint focalizado sin errores (3 warnings preexistentes de dependencias React). SQL remoto y backend activo no tocados. |
 | 2026-11-12 | F3 preparado: nueva RLS por `agent_scopes`, lectura de PDF con mismo alcance y `agent_id` propagado desde `Client BY agent` al ingest; asignaciones conflictivas quedan nulas. No aplicar hasta provisionar scopes y probar RLS en Postgres local. | Python `unittest` 3/3; `npm run test:run` 27/27; `cd server && npm test` 5/5; ESLint focalizado y build pasan (warning de chunk >500 kB). No hay Supabase CLI; no se aplico SQL remoto ni se ejecuto CMP. |
+| 2026-11-12 | F4 en curso: migracion idempotente `cmp_sync_runs`/snapshot y RPC transaccional con guardas, umbral, scope de agentes/fecha, idempotencia y preview dry-run; agregado modelo de reconciliacion para pruebas. | Baseline antes de editar: `npm run test:run` 27/27, `cd server && npm test` 5/5, `npm run build` pasa con warning de chunk. Modelo: `cd server && npm test` 9/9. No hay `psql`, Supabase CLI ni Docker engine accesible para correr la prueba SQL local; migracion remota no aplicada. |
