@@ -36,7 +36,7 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
       invoiceNumber: String(row.invoice_number || '').trim(),
       company,
       clientName: company,
-      agentId: meta.agentId,
+      agentId: String(row.agent_id || meta.agentId || 'Unassigned').trim() || 'Unassigned',
       billingCycle: meta.billingCycle,
       amount: remainingAmount,
       totalAmount,

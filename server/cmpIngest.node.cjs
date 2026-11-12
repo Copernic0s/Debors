@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   getConfiguredIngestSecret,
   verifyCmpIngestSecret,
+  mapCmpInvoiceRows,
   MIN_INGEST_SECRET_LENGTH
 } = require('./cmpIngest.cjs');
 const serverlessIngest = import('../lib/cmpIngest.js');
@@ -36,4 +37,23 @@ test('serverless ingest applies the same fail-closed secret contract', async () 
   assert.equal(getConfiguredIngestSecret({}), null);
   assert.equal(verifyCmpIngestSecret(buildRequest(), { CMP_INGEST_SECRET: secret }), false);
   assert.equal(verifyCmpIngestSecret(buildRequest(`Bearer ${secret}`), { CMP_INGEST_SECRET: secret }), true);
+});
+
+test('ingest preserves explicit agent scope and leaves unknown assignments unscoped', () => {
+  const rows = mapCmpInvoiceRows([
+    { companyName: 'Acme LLC', invoiceNumber: 'INV-1', agentId: 'jose rivera' },
+    { companyName: 'Unmapped Inc', invoiceNumber: 'INV-2' }
+  ], 'run-1', '2026-11-12T00:00:00.000Z');
+
+  assert.equal(rows[0].agent_id, 'jose rivera');
+  assert.equal(rows[1].agent_id, null);
+});
+
+test('serverless ingest maps agent scope with the same contract', async () => {
+  const { mapCmpInvoiceRows: mapServerlessRows } = await serverlessIngest;
+  const rows = mapServerlessRows([
+    { companyName: 'Acme LLC', invoiceNumber: 'INV-1', agentId: 'jose rivera' }
+  ], 'run-1', '2026-11-12T00:00:00.000Z');
+
+  assert.equal(rows[0].agent_id, 'jose rivera');
 });

@@ -14,6 +14,26 @@ const buildRowId = (companyName, invoiceNumber) => {
   return `CMP-${company}-${invoice}`;
 };
 
+const mapCmpInvoiceRows = (invoices, runId, syncedAt) => (invoices || [])
+  .filter((item) => item?.companyName && item?.invoiceNumber)
+  .map((item) => ({
+    id: buildRowId(item.companyName, item.invoiceNumber),
+    invoice_number: String(item.invoiceNumber).trim(),
+    company_name: String(item.companyName).trim(),
+    agent_id: String(item.agentId || '').trim() || null,
+    amount: Number(item.amount) || 0,
+    invoice_date: item.invoiceDate || null,
+    due_date: item.dueDate || null,
+    status: String(item.status || 'pending').toLowerCase(),
+    cmp_status_raw: item.cmpStatusRaw || null,
+    sync_run_id: runId,
+    synced_at: syncedAt,
+    total_amount: Number(item.totalAmount) !== undefined ? Number(item.totalAmount) : (Number(item.amount) || 0),
+    remaining_amount: Number(item.remainingAmount) !== undefined ? Number(item.remainingAmount) : (Number(item.amount) || 0),
+    total_paid: Number(item.totalPaid) !== undefined ? Number(item.totalPaid) : 0,
+    billing_type: item.billingType || null
+  }));
+
 const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -25,24 +45,7 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
   const runId = String(syncRunId || require('crypto').randomUUID());
   const syncedAt = new Date().toISOString();
 
-  const rows = (invoices || [])
-    .filter((item) => item?.companyName && item?.invoiceNumber)
-    .map((item) => ({
-      id: buildRowId(item.companyName, item.invoiceNumber),
-      invoice_number: String(item.invoiceNumber).trim(),
-      company_name: String(item.companyName).trim(),
-      amount: Number(item.amount) || 0,
-      invoice_date: item.invoiceDate || null,
-      due_date: item.dueDate || null,
-      status: String(item.status || 'pending').toLowerCase(),
-      cmp_status_raw: item.cmpStatusRaw || null,
-      sync_run_id: runId,
-      synced_at: syncedAt,
-      total_amount: Number(item.totalAmount) !== undefined ? Number(item.totalAmount) : (Number(item.amount) || 0),
-      remaining_amount: Number(item.remainingAmount) !== undefined ? Number(item.remainingAmount) : (Number(item.amount) || 0),
-      total_paid: Number(item.totalPaid) !== undefined ? Number(item.totalPaid) : 0,
-      billing_type: item.billingType || null
-    }));
+  const rows = mapCmpInvoiceRows(invoices, runId, syncedAt);
 
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false }
@@ -83,5 +86,6 @@ module.exports = {
   ingestCmpSnapshot,
   verifyCmpIngestSecret,
   getConfiguredIngestSecret,
+  mapCmpInvoiceRows,
   MIN_INGEST_SECRET_LENGTH
 };

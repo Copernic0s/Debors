@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from cmp_agent_scope import build_company_agent_map, normalize_company
 
 import pandas as pd
 import requests
@@ -118,10 +119,7 @@ def normalize_text(value: str) -> str:
 
 
 def normalize_company_key(value: str) -> str:
-    cleaned = normalize_text(value)
-    cleaned = re.sub(r"\b(llc|inc|corp|co|ltd|limited)\b", "", cleaned)
-    cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned)
-    return re.sub(r"\s+", " ", cleaned).strip()
+    return normalize_company(value)
 
 
 def parse_amount(raw_value: str) -> float | None:
@@ -182,7 +180,7 @@ def normalize_debtor_status(raw_status: str, due_date: datetime | None) -> str:
     return "pending"
 
 
-def load_portfolio_keys() -> set[str]:
+def load_portfolio_scope() -> tuple[set[str], dict[str, str | None]]:
     write_status(running=True, phase="zoho", message="Loading Client BY agent from Zoho...")
     response = requests.get(ZOHO_XLSX_URL, timeout=60)
     response.raise_for_status()
@@ -200,15 +198,22 @@ def load_portfolio_keys() -> set[str]:
     company_col = columns.get("company name") or columns.get("company")
     if not company_col:
         raise ValueError("Client BY agent sheet must include 'Company Name'")
+    agent_col = columns.get("sales rep") or columns.get("agentid") or columns.get("agent")
 
-    keys: set[str] = set()
+    scope_entries = []
     for _, row in frame.fillna("").iterrows():
         company = str(row[company_col]).strip()
-        key = normalize_company_key(company)
-        if key:
-            keys.add(key)
-    logging.info("Portfolio loaded: %d companies from '%s'", len(keys), sheet_name)
-    return keys
+        agent = row[agent_col] if agent_col else ""
+        scope_entries.append((company, agent))
+    agents_by_company = build_company_agent_map(scope_entries)
+    keys = set(agents_by_company)
+    logging.info(
+        "Portfolio loaded: %d companies from '%s'; %d scoped, %d ambiguous/unassigned.",
+        len(keys), sheet_name,
+        sum(agent is not None for agent in agents_by_company.values()),
+        len(keys) - sum(agent is not None for agent in agents_by_company.values()),
+    )
+    return keys, agents_by_company
 
 
 def build_chrome_options() -> ChromeOptions:
@@ -580,7 +585,11 @@ def advance_to_next_invoicing_page(driver: WebDriver, page: int, first_row_sig: 
     return wait_for_table_change(driver, first_row_sig)
 
 
-def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[dict[str, Any]]:
+def scrape_global_invoices(
+    driver: WebDriver,
+    portfolio_keys: set[str],
+    agents_by_company: dict[str, str | None] | None = None,
+) -> list[dict[str, Any]]:
     cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -702,6 +711,7 @@ def scrape_global_invoices(driver: WebDriver, portfolio_keys: set[str]) -> list[
             results.append(
                 {
                     "companyName": company.strip(),
+                    "agentId": (agents_by_company or {}).get(company_key),
                     "invoiceNumber": invoice_no.strip(),
                     "amount": round(final_amount, 2),
                     "totalAmount": round(amount, 2),
@@ -781,9 +791,9 @@ def main() -> int:
 
     try:
         write_status(running=True, phase="init", message="Starting CMP sync...")
-        portfolio_keys = load_portfolio_keys()
+        portfolio_keys, agents_by_company = load_portfolio_scope()
         driver = create_driver()
-        invoices = scrape_global_invoices(driver, portfolio_keys)
+        invoices = scrape_global_invoices(driver, portfolio_keys, agents_by_company)
 
         if not invoices:
             logging.warning("No invoices extracted for portfolio.")

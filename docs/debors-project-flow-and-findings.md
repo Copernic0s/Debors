@@ -127,7 +127,9 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 
 **Archivos:** `supabase/cmp_invoices.sql`, `src/constants/accessControl.js`, `src/hooks/useDebtors.js`, `src/services/cmpInvoices.js`.
 
-**Criterio de cierre:** imponer RLS por usuario/agent scope o mover lectura a un endpoint autenticado que aplique ese scope; CMP necesita una relacion autorizada entre compania y agente en servidor/base; probar que una cuenta agente no puede leer otra cartera y que manager conserva acceso global.
+**Estado (F3 preparado, aun no activado):** existe migracion `20261112213000_cmp_agent_rls.sql` para `agent_scopes`, lectura de invoices y PDFs; el bootstrap ya no crea policies de lectura global. El extractor agrega el `agent_id` de `Client BY agent` y las asignaciones en conflicto quedan sin agente. Falta provisionar los scopes privados, probar RLS agente/manager contra Postgres local y recien entonces decidir la aplicacion remota. La lectura de filas antiguas sin `agent_id` queda solo para manager hasta que una corrida valide y actualice esas filas.
+
+**Criterio de cierre:** probar que una cuenta agente no puede leer otra cartera via tabla o Storage, que un usuario sin scope ve cero filas y que un manager ve todo; aplicar migraciones en el entorno aprobado y verificar asignaciones reales.
 
 ### P1 - Mostrar saldo restante en el detalle de invoice
 
