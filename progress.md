@@ -21,7 +21,7 @@ Ultima actualizacion: 2026-11-12
 - [x] P1: hacer que ingest falle cerrado si falta `CMP_INGEST_SECRET` (backend requiere secreto de 32 bytes o mas al reiniciar).
 - [x] P1: D1 confirmado: conservar todos los saldos abiertos y limitar por fecha solo invoices pagadas; F4 cambia el filtro del extractor y agrega tests.
 - [x] P2: T9 perfil por fecha desc y CMP excluido del filtro semanal; pruebas agregadas.
-- [ ] P2: T10 status/log por run_id, reset al inicio, status stale/huérfano ignorado, historial de ultimo exito/error separado (implementado, commit pendiente).
+- [x] P2: T10 status/log por run_id, reset al inicio, status stale/huérfano ignorado, historial de ultimo exito/error separado.
 - [ ] P2: F6 pruebas faltantes no-DB, contratos DB separados en `codex/db-baseline`, CI y docs de persistencia/recuperacion actualizados (implementado, commits pendientes).
 
 ## Forma de trabajo
@@ -43,3 +43,4 @@ Ultima actualizacion: 2026-11-12
 | 2026-11-12 | F4 implementado en codigo: migracion idempotente `cmp_sync_runs` + RPC transaccional, run id en runner, complete/pages/truncated, ventana de abiertos, upsert/reconciliacion, dry-run y lectura `is_current`. | Baseline: frontend 27/27, server 5/5, build OK con warning de chunk. Ahora `cd server && npm test` 13/13; Python `unittest discover -s automation -p 'test_cmp_*.py'` 10/10; `py_compile` y lint focalizado OK. Prueba SQL de integracion escrita pero pendiente de correr: no hay `psql`, Supabase CLI ni Docker engine. No se aplico SQL remoto ni se ejecuto CMP. |
 | 2026-11-12 | DB baseline separada en rama `codex/db-baseline`: config Supabase local, bootstrap antes de F1-F4 y contratos SQL de esquema, RLS y reconciliacion. | `npx supabase db reset` limpio y los tres contratos pasan en Docker local. No existe linked project; SQL solo local. Commit `dd7d374` publicado; crear PR separado. |
 | 2026-11-12 | T9: perfil CMP inmune al filtro semanal y orden de fechas por parseo con pruebas de regresion. | `npm run test:run` 30/30. |
+| 2026-11-12 | T10: status/log aislados por ejecucion, reset de progreso, antiguedad/run-id validados, reintentos enlazados por parent run, success/error separados y panel actualizado. | Server 19/19; Python 13/13; PowerShell parse OK; lint focalizado 0 errores/3 warnings preexistentes. |
