@@ -15,13 +15,14 @@ Ultima actualizacion: 2026-11-12
 - [x] P1: leer todas las facturas CMP; paginacion Supabase de hasta 1,000 por peticion, conteo exacto y rechazo de lecturas incompletas.
 - [x] P1: conciliar importe original, total pagado y saldo restante en agregados y detalle (aritmetica en centavos y aviso de discrepancias).
 - [x] P1: ordenar invoices por fecha y asegurar que el perfil no esconda CMP por el filtro de semana.
-- [ ] P1: activar y validar el acceso por agente en RLS/API. La migracion F3 y la propagacion `company -> agent_id` ya estan preparadas; faltan scopes reales (aprovisionamiento privado), prueba con usuarios agente/manager en Postgres local y decision del owner para aplicar en remoto.
-- [ ] P1: F4 snapshot: migracion/RPC, runner/extractor, ingest dry-run y filtro `is_current` implementados en branch; pendiente ejecutar la prueba SQL en Postgres local. No aplicar migracion remota.
+- [ ] P1: activar acceso por agente en remoto requiere provisionar scopes reales y decision del owner. RLS agente/manager/sin scope pasa en baseline local `codex/db-baseline`.
+- [x] P1: F4 snapshot SQL, dry-run, esquema limpio y contratos de reconciliacion pasan en Supabase local aislado (`codex/db-baseline`); no aplicar a remoto sin aprobacion.
 - [x] P1: reflejar en SQL las columnas financieras usadas por ingest (migracion creada; no aplicada a Supabase remoto).
 - [x] P1: hacer que ingest falle cerrado si falta `CMP_INGEST_SECRET` (backend requiere secreto de 32 bytes o mas al reiniciar).
 - [x] P1: D1 confirmado: conservar todos los saldos abiertos y limitar por fecha solo invoices pagadas; F4 cambia el filtro del extractor y agrega tests.
-- [ ] P2: corregir estado obsoleto del runner y documentacion operativa.
-- [ ] P2: agregar prueba de integracion de RLS (requiere Supabase CLI/Postgres local); pruebas de propagacion de agent scope e ingest ya agregadas.
+- [x] P2: T9 perfil por fecha desc y CMP excluido del filtro semanal; pruebas agregadas.
+- [ ] P2: T10 status/log por run_id, reset al inicio, status stale/huérfano ignorado, historial de ultimo exito/error separado (implementado, commit pendiente).
+- [ ] P2: F6 pruebas faltantes no-DB, contratos DB separados en `codex/db-baseline`, CI y docs de persistencia/recuperacion actualizados (implementado, commits pendientes).
 
 ## Forma de trabajo
 
@@ -40,3 +41,5 @@ Ultima actualizacion: 2026-11-12
 | 2026-11-12 | F2: lectura paginada y completa de CMP; totales financieros en centavos; perfil con fechas, ultimo invoice, total/paid/balance y subtotal overdue; retencion del ultimo snapshot al fallar una lectura parcial. | `npm run test:run` 25/25; `cd server && npm test` 3/3; `npm run build` pasa (warning de chunk >500 kB); ESLint focalizado sin errores (3 warnings preexistentes de dependencias React). SQL remoto y backend activo no tocados. |
 | 2026-11-12 | F3 preparado: nueva RLS por `agent_scopes`, lectura de PDF con mismo alcance y `agent_id` propagado desde `Client BY agent` al ingest; asignaciones conflictivas quedan nulas. No aplicar hasta provisionar scopes y probar RLS en Postgres local. | Python `unittest` 3/3; `npm run test:run` 27/27; `cd server && npm test` 5/5; ESLint focalizado y build pasan (warning de chunk >500 kB). No hay Supabase CLI; no se aplico SQL remoto ni se ejecuto CMP. |
 | 2026-11-12 | F4 implementado en codigo: migracion idempotente `cmp_sync_runs` + RPC transaccional, run id en runner, complete/pages/truncated, ventana de abiertos, upsert/reconciliacion, dry-run y lectura `is_current`. | Baseline: frontend 27/27, server 5/5, build OK con warning de chunk. Ahora `cd server && npm test` 13/13; Python `unittest discover -s automation -p 'test_cmp_*.py'` 10/10; `py_compile` y lint focalizado OK. Prueba SQL de integracion escrita pero pendiente de correr: no hay `psql`, Supabase CLI ni Docker engine. No se aplico SQL remoto ni se ejecuto CMP. |
+| 2026-11-12 | DB baseline separada en rama `codex/db-baseline`: config Supabase local, bootstrap antes de F1-F4 y contratos SQL de esquema, RLS y reconciliacion. | `npx supabase db reset` limpio y los tres contratos pasan en Docker local. No existe linked project; SQL solo local. Commit `dd7d374` publicado; crear PR separado. |
+| 2026-11-12 | T9: perfil CMP inmune al filtro semanal y orden de fechas por parseo con pruebas de regresion. | `npm run test:run` 30/30. |
