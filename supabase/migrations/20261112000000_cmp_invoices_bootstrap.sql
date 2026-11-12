@@ -33,6 +33,32 @@ create index if not exists cmp_invoices_pdf_queue_idx on public.cmp_invoices (pd
 
 alter table public.cmp_invoices enable row level security;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'cmp_invoices'
+      and policyname = 'cmp_invoices_read_authenticated'
+  ) then
+    execute 'create policy cmp_invoices_read_authenticated on public.cmp_invoices for select to authenticated using (true)';
+  end if;
+end;
+$$;
+
 insert into storage.buckets (id, name, public)
 values ('cmp-invoices', 'cmp-invoices', false)
 on conflict (id) do nothing;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'cmp_invoice_pdfs_read_authenticated'
+  ) then
+    execute 'create policy cmp_invoice_pdfs_read_authenticated on storage.objects for select to authenticated using (bucket_id = ''cmp-invoices'')';
+  end if;
+end;
+$$;
