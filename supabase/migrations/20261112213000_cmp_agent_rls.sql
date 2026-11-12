@@ -53,7 +53,6 @@ revoke all on function public.has_cmp_agent_scope(text) from public;
 grant execute on function public.is_cmp_manager() to authenticated, service_role;
 grant execute on function public.has_cmp_agent_scope(text) to authenticated, service_role;
 
-drop policy if exists "cmp_invoices_read_authenticated" on public.cmp_invoices;
 drop policy if exists "cmp_invoices_read_by_agent_scope" on public.cmp_invoices;
 create policy "cmp_invoices_read_by_agent_scope"
   on public.cmp_invoices
@@ -64,7 +63,6 @@ create policy "cmp_invoices_read_by_agent_scope"
     or (select public.has_cmp_agent_scope(agent_id))
   );
 
-drop policy if exists "cmp_invoice_pdfs_read_authenticated" on storage.objects;
 drop policy if exists "cmp_invoice_pdfs_read_by_agent_scope" on storage.objects;
 create policy "cmp_invoice_pdfs_read_by_agent_scope"
   on storage.objects

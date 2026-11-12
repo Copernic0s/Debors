@@ -1,5 +1,6 @@
 -- Run after db reset and all migrations on a local Supabase database.
--- Fixed fixtures are rolled back; never run this against production.
+-- This verifies 213000 is additive: authenticated reads remain open until the
+-- manual activation script is explicitly run. Fixtures are rolled back.
 begin;
 
 insert into auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at)
@@ -20,13 +21,18 @@ insert into public.cmp_invoices (
   ('F6-RLS-AGENT-A', 'F6-A', 'F6 Agent A', 10, 'pending', gen_random_uuid(), 'f6-agent-a'),
   ('F6-RLS-AGENT-B', 'F6-B', 'F6 Agent B', 20, 'pending', gen_random_uuid(), 'f6-agent-b');
 
+insert into storage.objects (bucket_id, name, owner, metadata)
+values
+  ('cmp-invoices', 'f6-agent-a.pdf', 'f6100000-0000-4000-8000-000000000001', '{}'::jsonb),
+  ('cmp-invoices', 'f6-agent-b.pdf', 'f6100000-0000-4000-8000-000000000002', '{}'::jsonb);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f6100000-0000-4000-8000-000000000001', true);
 do $$
 begin
-  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 1
-     or not exists (select 1 from public.cmp_invoices where id = 'F6-RLS-AGENT-A') then
-    raise exception 'agent must read only invoices in its own scope';
+  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 2
+     or (select count(*) from storage.objects where bucket_id = 'cmp-invoices' and name like 'f6-%') <> 2 then
+    raise exception 'agent scope must retain open access to invoice and PDF rows before manual activation';
   end if;
 end;
 $$;
@@ -36,8 +42,9 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f6100000-0000-4000-8000-000000000002', true);
 do $$
 begin
-  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 2 then
-    raise exception 'manager must read invoices across agent scopes';
+  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 2
+     or (select count(*) from storage.objects where bucket_id = 'cmp-invoices' and name like 'f6-%') <> 2 then
+    raise exception 'manager must retain open access before manual activation';
   end if;
 end;
 $$;
@@ -47,8 +54,9 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', 'f6100000-0000-4000-8000-000000000003', true);
 do $$
 begin
-  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 0 then
-    raise exception 'user without an agent scope must read no CMP invoices';
+  if (select count(*) from public.cmp_invoices where id like 'F6-RLS-%') <> 2
+     or (select count(*) from storage.objects where bucket_id = 'cmp-invoices' and name like 'f6-%') <> 2 then
+    raise exception 'unscoped user must retain open access before manual activation';
   end if;
 end;
 $$;
