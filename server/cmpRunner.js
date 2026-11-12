@@ -6,20 +6,29 @@ const path = require('path');
 const ROOT_DIR = path.resolve(__dirname, '..');
 const STATUS_PATH = path.join(ROOT_DIR, 'automation', 'cmp_status.json');
 const LOG_PATH = path.join(ROOT_DIR, 'automation', 'cmp_invoice_extractor.log');
+const LOG_DIR = path.join(ROOT_DIR, 'automation', 'logs');
 const PS_SCRIPT = path.join(ROOT_DIR, 'automation', 'run_cmp_bot.ps1');
+const DEFAULT_STATUS_MAX_AGE_MIN = 60;
 
-let cmpChild = null;
-let startedAt = null;
-let lastExitCode = null;
-let lastExitAt = null;
+const parseStatusMaxAge = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_STATUS_MAX_AGE_MIN;
+};
 
-const readStatusFile = () => {
+const readStatusFile = (fileSystem, statusPath) => {
   try {
-    if (!fs.existsSync(STATUS_PATH)) return null;
-    return JSON.parse(fs.readFileSync(STATUS_PATH, 'utf8'));
+    if (!fileSystem.existsSync(statusPath)) return null;
+    return JSON.parse(fileSystem.readFileSync(statusPath, 'utf8'));
   } catch {
     return null;
   }
+};
+
+const writeStatusFile = (fileSystem, statusPath, status) => {
+  fileSystem.mkdirSync(path.dirname(statusPath), { recursive: true });
+  const temporaryPath = `${statusPath}.tmp`;
+  fileSystem.writeFileSync(temporaryPath, JSON.stringify(status, null, 2), 'utf8');
+  fileSystem.renameSync(temporaryPath, statusPath);
 };
 
 const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString()) => {
@@ -40,93 +49,244 @@ const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().t
   };
 };
 
-const getCmpStatus = () => {
-  const fileStatus = readStatusFile();
-  const running = Boolean(cmpChild && cmpChild.exitCode === null);
+const createCmpRunner = ({
+  spawnProcess = spawn,
+  fileSystem = fs,
+  rootDir = ROOT_DIR,
+  statusPath = STATUS_PATH,
+  logPath = LOG_PATH,
+  logDir = LOG_DIR,
+  scriptPath = PS_SCRIPT,
+  env = process.env,
+  now = () => new Date(),
+  makeRunId = randomUUID,
+  logger = console,
+  statusMaxAgeMin = parseStatusMaxAge(env.STATUS_MAX_AGE_MIN)
+} = {}) => {
+  let cmpChild = null;
+  let startedAt = null;
+  let lastExitCode = null;
+  let lastExitAt = null;
+  let latestRun = null;
+  let lastSuccessfulSync = null;
+  let lastRunError = null;
 
-  return {
-    pid: process.pid,
-    rootDir: ROOT_DIR,
-    logPath: LOG_PATH,
-    statusPath: STATUS_PATH,
-    running,
-    startedAt,
-    lastExitAt,
-    lastExitCode,
-    logMtime: fs.existsSync(LOG_PATH) ? fs.statSync(LOG_PATH).mtime.toISOString() : null,
-    phase: fileStatus?.phase || (running ? 'running' : 'idle'),
-    message: fileStatus?.message || '',
-    page: fileStatus?.page || 0,
-    invoicesFound: fileStatus?.invoicesFound || 0,
-    error: fileStatus?.error || null,
-    updatedAt: fileStatus?.updatedAt || null
-  };
-};
-
-const tailLog = (lines = 120) => {
-  if (!fs.existsSync(LOG_PATH)) return '';
-  const content = fs.readFileSync(LOG_PATH, 'utf8');
-  return content.split(/\r?\n/).slice(-lines).join('\n');
-};
-
-const startCmpScraper = (depth = 'fast') => {
-  if (cmpChild && cmpChild.exitCode === null) {
-    return { started: false, reason: 'already_running' };
+  const priorStatus = readStatusFile(fileSystem, statusPath);
+  if (priorStatus?.runId) latestRun = { runId: priorStatus.runId, startedAt: priorStatus.startedAt || null };
+  if (priorStatus?.lastSuccessfulSync) lastSuccessfulSync = priorStatus.lastSuccessfulSync;
+  else if (priorStatus?.phase === 'done' && priorStatus.runStatus === 'complete' && priorStatus.updatedAt) {
+    lastSuccessfulSync = { runId: priorStatus.runId || null, timestamp: priorStatus.updatedAt };
+  }
+  if (priorStatus?.lastRunError) lastRunError = priorStatus.lastRunError;
+  else if (priorStatus?.error) {
+    lastRunError = {
+      runId: priorStatus.runId || null,
+      timestamp: priorStatus.updatedAt || null,
+      message: priorStatus.error
+    };
   }
 
-  if (!fs.existsSync(PS_SCRIPT)) {
-    throw new Error(`CMP script not found: ${PS_SCRIPT}`);
-  }
-
-  const runConfig = buildCmpRunConfig(depth);
-
-  const env = {
-    ...process.env,
-    CMP_INGEST_URL: process.env.CMP_INGEST_URL || `http://127.0.0.1:${process.env.PORT || 3001}/api/cmp/ingest`,
-    CMP_INGEST_SECRET: process.env.CMP_INGEST_SECRET || '',
-    CMP_HISTORY_DAYS: runConfig.historyDays,
-    CMP_MAX_PAGES: runConfig.maxPages,
-    CMP_FAST_SYNC: runConfig.isFastSync,
-    CMP_SYNC_MODE: runConfig.mode,
-    CMP_RUN_ID: runConfig.runId,
-    CMP_RUN_STARTED_AT: runConfig.startedAt
+  const isFresh = (status) => {
+    const updatedAt = Date.parse(status?.updatedAt || '');
+    const age = now().getTime() - updatedAt;
+    return Number.isFinite(updatedAt) && age >= 0 && age <= statusMaxAgeMin * 60_000;
   };
 
-  cmpChild = spawn(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', PS_SCRIPT],
-    {
-      cwd: ROOT_DIR,
-      env,
-      windowsHide: true
+  const statusForRun = (runConfig, values = {}) => ({
+    runId: runConfig.runId,
+    parentRunId: runConfig.runId,
+    running: true,
+    phase: 'starting',
+    message: 'CMP run starting...',
+    page: 0,
+    invoicesFound: 0,
+    error: null,
+    runStatus: 'running',
+    updatedAt: now().toISOString(),
+    lastSuccessfulSync,
+    lastRunError,
+    ...values
+  });
+
+  const refreshHistory = (status) => {
+    if (status?.lastSuccessfulSync) lastSuccessfulSync = status.lastSuccessfulSync;
+    if (status?.lastRunError) lastRunError = status.lastRunError;
+    else if (status?.error) {
+      lastRunError = {
+        runId: status.runId || null,
+        timestamp: status.updatedAt || null,
+        message: status.error
+      };
     }
-  );
+  };
 
-  startedAt = new Date().toISOString();
-  lastExitCode = null;
-  lastExitAt = null;
+  const recordRunFailure = (runConfig, message) => {
+    const failedAt = now().toISOString();
+    const existing = readStatusFile(fileSystem, statusPath);
+    const matchesRun = existing?.runId === runConfig.runId || existing?.parentRunId === runConfig.runId;
+    const matching = matchesRun ? existing : statusForRun(runConfig);
+    lastRunError = { runId: matching.runId || runConfig.runId, timestamp: failedAt, message };
+    writeStatusFile(fileSystem, statusPath, {
+      ...matching,
+      running: false,
+      phase: 'error',
+      message: 'CMP run failed',
+      error: message,
+      runStatus: 'failed',
+      updatedAt: failedAt,
+      lastSuccessfulSync,
+      lastRunError
+    });
+  };
 
-  cmpChild.on('exit', (code) => {
+  const finishRun = (runConfig, code) => {
     lastExitCode = code;
-    lastExitAt = new Date().toISOString();
+    lastExitAt = now().toISOString();
     cmpChild = null;
-  });
 
-  cmpChild.on('error', (error) => {
-    lastExitCode = 1;
-    lastExitAt = new Date().toISOString();
-    cmpChild = null;
-    console.error('[CMP Runner] Process error:', error);
-  });
+    const existing = readStatusFile(fileSystem, statusPath);
+    const matchesRun = existing?.runId === runConfig.runId || existing?.parentRunId === runConfig.runId;
+    if (!matchesRun) return;
 
-  return { started: true, runId: runConfig.runId };
+    if (code !== 0) {
+      recordRunFailure(runConfig, existing.error || `CMP worker exited with code ${code}`);
+      return;
+    }
+
+    if (existing.running || !['done', 'error'].includes(existing.phase)) {
+      recordRunFailure(runConfig, 'CMP worker exited without a terminal status');
+      return;
+    }
+
+    if (existing.phase === 'done' && existing.runStatus === 'complete' && existing.persisted === true) {
+      lastSuccessfulSync = { runId: existing.runId, timestamp: existing.updatedAt };
+      writeStatusFile(fileSystem, statusPath, { ...existing, lastSuccessfulSync });
+    }
+  };
+
+  const getCmpStatus = () => {
+    const fileStatus = readStatusFile(fileSystem, statusPath);
+    const running = Boolean(cmpChild && cmpChild.exitCode === null);
+    const belongsToActiveRun = Boolean(fileStatus?.runId) && (!latestRun
+      || fileStatus.runId === latestRun.runId
+      || fileStatus.parentRunId === latestRun.runId);
+    const processStateMatches = running ? belongsToActiveRun : !fileStatus?.running;
+    const usableStatus = processStateMatches && belongsToActiveRun && isFresh(fileStatus) ? fileStatus : null;
+
+    refreshHistory(usableStatus);
+    if (usableStatus?.phase === 'done' && usableStatus.runStatus === 'complete' && usableStatus.persisted === true) {
+      lastSuccessfulSync = { runId: usableStatus.runId, timestamp: usableStatus.updatedAt };
+    }
+    const activeLogPath = latestRun
+      ? path.join(logDir, `cmp-${latestRun.runId}.log`)
+      : logPath;
+    return {
+      pid: process.pid,
+      rootDir,
+      logPath: activeLogPath,
+      statusPath,
+      statusMaxAgeMin,
+      running,
+      runId: usableStatus?.runId || latestRun?.runId || null,
+      lastRunIsStale: Boolean(fileStatus && !usableStatus && (!running || !belongsToActiveRun)),
+      startedAt,
+      lastExitAt,
+      lastExitCode,
+      logMtime: fileSystem.existsSync(activeLogPath) ? fileSystem.statSync(activeLogPath).mtime.toISOString() : null,
+      phase: usableStatus?.phase || (running ? 'starting' : 'idle'),
+      message: usableStatus?.message || (running ? 'Waiting for current run status...' : ''),
+      page: usableStatus?.page || 0,
+      invoicesFound: usableStatus?.invoicesFound || 0,
+      error: usableStatus?.error || null,
+      runStatus: usableStatus?.runStatus || null,
+      updatedAt: usableStatus?.updatedAt || null,
+      lastSuccessfulSync,
+      lastRunError
+    };
+  };
+
+  const tailLog = (lines = 120) => {
+    const activeLogPath = latestRun
+      ? path.join(logDir, `cmp-${latestRun.runId}.log`)
+      : logPath;
+    if (!fileSystem.existsSync(activeLogPath)) return '';
+    const content = fileSystem.readFileSync(activeLogPath, 'utf8');
+    return content.split(/\r?\n/).slice(-lines).join('\n');
+  };
+
+  const startCmpScraper = (depth = 'fast') => {
+    if (cmpChild && cmpChild.exitCode === null) {
+      return { started: false, reason: 'already_running' };
+    }
+    if (!fileSystem.existsSync(scriptPath)) {
+      throw new Error(`CMP script not found: ${scriptPath}`);
+    }
+    refreshHistory(readStatusFile(fileSystem, statusPath));
+
+    const runConfig = buildCmpRunConfig(depth, makeRunId(), now().toISOString());
+    latestRun = runConfig;
+    startedAt = runConfig.startedAt;
+    lastExitCode = null;
+    lastExitAt = null;
+    writeStatusFile(fileSystem, statusPath, statusForRun(runConfig));
+
+    const runLogPath = path.join(logDir, `cmp-${runConfig.runId}.log`);
+    fileSystem.mkdirSync(logDir, { recursive: true });
+    const childEnv = {
+      ...env,
+      CMP_INGEST_URL: env.CMP_INGEST_URL || `http://127.0.0.1:${env.PORT || 3001}/api/cmp/ingest`,
+      CMP_INGEST_SECRET: env.CMP_INGEST_SECRET || '',
+      CMP_HISTORY_DAYS: runConfig.historyDays,
+      CMP_MAX_PAGES: runConfig.maxPages,
+      CMP_FAST_SYNC: runConfig.isFastSync,
+      CMP_SYNC_MODE: runConfig.mode,
+      CMP_RUN_ID: runConfig.runId,
+      CMP_PARENT_RUN_ID: runConfig.runId,
+      CMP_RUN_STARTED_AT: runConfig.startedAt,
+      CMP_LOG_PATH: runLogPath
+    };
+
+    try {
+      cmpChild = spawnProcess(
+        'powershell.exe',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+        { cwd: rootDir, env: childEnv, windowsHide: true }
+      );
+    } catch (error) {
+      cmpChild = null;
+      recordRunFailure(runConfig, error.message || 'Failed to start CMP worker');
+      throw error;
+    }
+
+    cmpChild.on('exit', (code) => finishRun(runConfig, code));
+    cmpChild.on('error', (error) => {
+      lastExitCode = 1;
+      lastExitAt = now().toISOString();
+      cmpChild = null;
+      recordRunFailure(runConfig, error.message || 'CMP worker process error');
+      logger.error('[CMP Runner] Process error:', error.message);
+    });
+
+    return { started: true, runId: runConfig.runId };
+  };
+
+  return { getCmpStatus, tailLog, startCmpScraper };
+};
+
+let runner;
+const getRunner = () => {
+  if (!runner) runner = createCmpRunner();
+  return runner;
 };
 
 module.exports = {
-  getCmpStatus,
-  tailLog,
-  startCmpScraper,
+  getCmpStatus: (...args) => getRunner().getCmpStatus(...args),
+  tailLog: (...args) => getRunner().tailLog(...args),
+  startCmpScraper: (...args) => getRunner().startCmpScraper(...args),
   buildCmpRunConfig,
+  createCmpRunner,
   STATUS_PATH,
-  LOG_PATH
+  LOG_PATH,
+  LOG_DIR,
+  DEFAULT_STATUS_MAX_AGE_MIN
 };

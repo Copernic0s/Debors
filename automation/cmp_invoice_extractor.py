@@ -4,7 +4,6 @@ Writes status to automation/cmp_status.json and POSTs snapshot to ingest API.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -22,6 +21,7 @@ from typing import Any
 from cmp_agent_scope import build_company_agent_map, normalize_company
 from cmp_invoice_window import should_keep_invoice
 from cmp_scrape_completion import classify_scrape_completion
+from cmp_run_status import write_run_status
 
 import pandas as pd
 import requests
@@ -77,8 +77,9 @@ ATTACH_TIMEOUT_SECONDS = int(os.getenv("CMP_ATTACH_TIMEOUT_SECONDS", "20"))
 INGEST_URL = os.getenv("CMP_INGEST_URL", "http://127.0.0.1:3001/api/cmp/ingest").strip()
 INGEST_SECRET = os.getenv("CMP_INGEST_SECRET", "").strip()
 STATUS_PATH = ROOT_DIR / "automation" / "cmp_status.json"
-LOG_PATH = ROOT_DIR / "automation" / "cmp_invoice_extractor.log"
+LOG_PATH = Path(os.getenv("CMP_LOG_PATH", str(ROOT_DIR / "automation" / "cmp_invoice_extractor.log")))
 RUN_ID = os.getenv("CMP_RUN_ID", "")
+PARENT_RUN_ID = os.getenv("CMP_PARENT_RUN_ID", "")
 
 
 @dataclass
@@ -91,13 +92,21 @@ class ScrapeResult:
 
 def configure_logging() -> None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    class RunContextFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            record.run_id = RUN_ID or "unassigned"
+            record.parent_run_id = PARENT_RUN_ID or RUN_ID or "unassigned"
+            return True
+
+    handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+    handler.addFilter(RunContextFilter())
+    console = logging.StreamHandler(sys.stdout)
+    console.addFilter(RunContextFilter())
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=[
-            logging.FileHandler(LOG_PATH, encoding="utf-8"),
-            logging.StreamHandler(sys.stdout),
-        ],
+        format="%(asctime)s | %(levelname)s | run_id=%(run_id)s | parent_run_id=%(parent_run_id)s | %(message)s",
+        handlers=[handler, console],
     )
 
 
@@ -109,19 +118,26 @@ def write_status(
     page: int = 0,
     invoices_found: int = 0,
     error: str | None = None,
+    run_status: str | None = None,
+    pages_scraped: int | None = None,
+    truncated: bool | None = None,
+    persisted: bool = False,
 ) -> None:
-    payload = {
-        "runId": RUN_ID or None,
-        "running": running,
-        "phase": phase,
-        "message": message,
-        "page": page,
-        "invoicesFound": invoices_found,
-        "error": error,
-        "updatedAt": datetime.utcnow().isoformat() + "Z",
-    }
-    STATUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STATUS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    write_run_status(
+        STATUS_PATH,
+        run_id=RUN_ID,
+        parent_run_id=PARENT_RUN_ID or RUN_ID,
+        running=running,
+        phase=phase,
+        message=message,
+        page=page,
+        invoices_found=invoices_found,
+        error=error,
+        run_status=run_status,
+        pages_scraped=pages_scraped,
+        truncated=truncated,
+        persisted=persisted,
+    )
 
 
 def normalize_text(value: str) -> str:
@@ -828,10 +844,11 @@ def post_ingest(
 
 
 def main() -> int:
-    global RUN_ID
-    configure_logging()
+    global RUN_ID, PARENT_RUN_ID
     sync_run_id = os.getenv("CMP_RUN_ID") or str(uuid.uuid4())
     RUN_ID = sync_run_id
+    PARENT_RUN_ID = os.getenv("CMP_PARENT_RUN_ID") or sync_run_id
+    configure_logging()
     started_at = os.getenv("CMP_RUN_STARTED_AT") or datetime.utcnow().isoformat() + "Z"
     cutoff = datetime.now() - timedelta(days=HISTORY_DAYS)
     attached = bool(os.getenv("CMP_DEBUGGER_ADDRESS", "").strip())
@@ -871,6 +888,10 @@ def main() -> int:
             phase="done",
             message=f"{final_message} Pages={pages_scraped}; complete={scrape_result.complete}; truncated={scrape_result.truncated}.",
             invoices_found=len(invoices),
+            run_status="complete" if scrape_result.complete else "incomplete",
+            pages_scraped=pages_scraped,
+            truncated=scrape_result.truncated,
+            persisted=bool(ingest_result and not ingest_result.get("dryRun")),
         )
         logging.info("CMP run %s finished: %d invoices, %d pages, complete=%s, truncated=%s, ingest=%s",
                      sync_run_id, len(invoices), pages_scraped, scrape_result.complete,
@@ -896,6 +917,9 @@ def main() -> int:
             phase="error",
             message="CMP sync failed",
             error=str(error),
+            run_status="failed",
+            pages_scraped=pages_scraped,
+            truncated=False,
         )
         return 1
     finally:

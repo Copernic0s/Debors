@@ -23,11 +23,10 @@ import { normalizeBillingCycle } from './constants/billingCycles';
 import { emailService } from './services/emailService';
 import { openCmpInvoicePdf, requestCmpInvoicePdf, queueCmpInvoicePdf } from './services/cmpInvoices';
 import { centsToAmount, invoiceFinancials, sortInvoicesNewestFirst } from './services/invoiceFinancials';
+import { companyProfileRowMatchesWeek, PROFILE_RESPECTS_WEEK_FILTER } from './services/companyProfile';
 import './index.css';
 
 const TABLE_NAME = 'manual_edits';
-const PROFILE_RESPECTS_WEEK_FILTER = false;
-
 const getUserAvatarSrc = (email) => {
   const normalizedEmail = (email || '').toLowerCase();
   if (normalizedEmail.includes('andres')) return '/avatar.png';
@@ -605,7 +604,7 @@ function App() {
       const response = await fetch(`${cmpRunnerApiBase}/api/cmp/log?lines=120`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Failed to read log');
-      toast(String(payload?.tail || 'No log yet.').trim(), { duration: 8000 });
+      toast(`${payload?.runId ? `Run ${payload.runId}\n` : ''}${String(payload?.tail || 'No log yet.').trim()}`, { duration: 8000 });
     } catch (error) {
       toast.error(error?.message || 'Could not read CMP log');
     }
@@ -1353,10 +1352,7 @@ function App() {
       const byCompany = normalizeMatchKey(item.company || item.clientName) === targetKey;
       if (!byCompany) return false;
       const byAgent = matchesSelectedAgent(item.agentId);
-      const isCmpInvoice = item.source === 'cmp';
-      const byWeek = !PROFILE_RESPECTS_WEEK_FILTER && isCmpInvoice
-        ? true
-        : selectedWeek === 'all' || String(item.weekLabel || '').trim() === selectedWeek;
+      const byWeek = companyProfileRowMatchesWeek(item, selectedWeek, PROFILE_RESPECTS_WEEK_FILTER);
       return byAgent && byWeek;
     });
 
