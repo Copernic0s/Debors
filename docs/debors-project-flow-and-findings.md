@@ -205,6 +205,8 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 
 **Criterio de cierre:** ordenar por `invoiceDate` descendente, fallback `dueDate`/`syncedAt`; mostrar fecha de factura y vencimiento; decidir explicitamente si perfil ignora semana seleccionada o comunica el filtro aplicado.
 
+**Estado T9:** implementado en `src/App.jsx`: CMP no se oculta al seleccionar semana y el modal explica el alcance. Las facturas usan orden por fecha parseada; pruebas de regresion verifican fechas mixtas y filtro semanal.
+
 ### P2 - Corregir indicador de status viejo del runner
 
 **Evidencia:** `cmpRunner.js` mezcla el estado de proceso en memoria con `automation/cmp_status.json` y conserva phase/error anteriores cuando inicia un servidor nuevo. Ya se observo un error Selenium antiguo persistiendo despues de reiniciar el backend.
@@ -214,6 +216,8 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 **Archivos:** `server/cmpRunner.js`, `automation/cmp_status.json`, `src/components/CmpSyncPanel.jsx`.
 
 **Criterio de cierre:** asociar status/log con `run_id`; al iniciar una ejecucion nueva limpiar el error previo; exponer `last_successful_sync` y `last_run_error` como valores separados; ignorar estados demasiado antiguos.
+
+**Estado T10:** implementado en runner/extractor y panel. El runner crea status limpio con cada `run_id`, asigna un log por corrida, valida antiguedad con `STATUS_MAX_AGE_MIN`, y conserva `lastSuccessfulSync`/`lastRunError` por separado. Los reintentos conservan un `parentRunId` para pertenecer a la corrida del runner sin confundir sus IDs. Pruebas de server y Python cubren reset, status ajeno/antiguo, reintento, log, exito y fallo.
 
 ### P2 - Mantener sincronizados esquema, guia y comportamiento real
 
@@ -227,9 +231,13 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 
 ### P2 - Agregar pruebas de negocio y flujo CMP
 
-**Evidencia:** las pruebas automatizadas encontradas en `src` cubren normalizacion y utilidades monetarias. `server/package.json` no tiene suite real de pruebas.
+**Evidencia:** faltaba cobertura de deduplicacion CMP/Zoho, perfil semana/orden, RLS y contrato de esquema.
 
 **Pruebas necesarias:** paginacion Supabase >1,000 filas; importe total/paid/remaining; suma de multiples overdue; deduplicacion CMP/Zoho; click y perfil de compania con fechas ordenadas; RLS por agente/manager; rechazo de ingest sin secreto; migracion desde esquema limpio; y que un scrape incompleto no marque snapshot como vigente.
+
+**Estado T11:** se agregaron pruebas unitarias CMP/Zoho y perfil, scripts SQL rollback-bound de RLS por agente/manager/sin scope, y contrato de esquema para bootstrap+migraciones. CI ejecuta suite frontend, build, server y helpers CMP. La suite SQL aun requiere ejecucion en Postgres/Supabase local.
+
+**Estado T12:** README y guia de automatizacion describen historial y snapshot actual, ventanas de abiertos/pagadas, persistencia al ingest, recuperacion de scrape parcial, migraciones, scopes y variables locales.
 
 ## Backlog recomendado
 
