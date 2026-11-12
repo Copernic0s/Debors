@@ -177,6 +177,8 @@ export default function CmpSyncPanel({
   onShowLog,
   lastCmpSyncAt,
   cmpInvoiceCount,
+  cmpExpectedCount,
+  cmpPartial,
   syncAllBusy,
   onRunSync
 }) {
@@ -261,9 +263,14 @@ export default function CmpSyncPanel({
       <Meta>
         <span>Page: <strong>{cmpStatus?.page || 0}</strong></span>
         <span>Invoices found: <strong>{cmpStatus?.invoicesFound ?? 0}</strong></span>
-        <span>Stored in cloud: <strong>{cmpInvoiceCount ?? 0}</strong></span>
+        <span>Invoices loaded: <strong>{cmpInvoiceCount ?? 0}</strong> / {cmpExpectedCount ?? cmpInvoiceCount ?? 0}</span>
         <span>Last CMP upload: <strong>{formatTime(lastCmpSyncAt)}</strong></span>
       </Meta>
+      {cmpPartial && (
+        <Message role="alert" style={{ color: 'var(--danger)' }}>
+          CMP invoice read is incomplete. Totals may be partial; the previous complete snapshot is being kept.
+        </Message>
+      )}
 
       <style>{`
         .spin { animation: cmpSpin 1s linear infinite; }

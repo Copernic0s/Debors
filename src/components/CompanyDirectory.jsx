@@ -286,7 +286,7 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
       let aVal = a[sortConfig.key];
       let bVal = b[sortConfig.key];
 
-      if (sortConfig.key === 'amount' || sortConfig.key === 'totalInvoiced' || sortConfig.key === 'totalPaid') {
+      if (sortConfig.key === 'amount' || sortConfig.key === 'totalInvoiced' || sortConfig.key === 'totalPaid' || sortConfig.key === 'totalOverdue') {
         aVal = Number(aVal) || 0;
         bVal = Number(bVal) || 0;
       } else if (sortConfig.key === 'overallStatus') {
@@ -350,6 +350,9 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
               <Th onClick={() => handleSort('amount')}>
                 Total Due {sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} style={{ display: 'inline' }} /> : <ChevronDown size={14} style={{ display: 'inline' }} />)}
               </Th>
+              <Th onClick={() => handleSort('totalOverdue')}>
+                Total Overdue {sortConfig.key === 'totalOverdue' && (sortConfig.direction === 'asc' ? <ChevronUp size={14} style={{ display: 'inline' }} /> : <ChevronDown size={14} style={{ display: 'inline' }} />)}
+              </Th>
             </tr>
           </thead>
           <tbody>
@@ -370,11 +373,14 @@ const CompanyDirectory = ({ data, onOpenCompanyProfile }) => {
                   <Td style={{ fontWeight: 700, color: item.amount > 0 ? '#f87171' : 'var(--text-main)' }}>
                     {formatCurrency(item.amount)}
                   </Td>
+                  <Td style={{ fontWeight: 700, color: item.totalOverdue > 0 ? 'var(--danger)' : 'var(--text-main)' }}>
+                    {formatCurrency(item.totalOverdue)}
+                  </Td>
                 </Tr>
               ))
             ) : (
               <tr>
-                <Td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                <Td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                   No companies found matching your criteria.
                 </Td>
               </tr>

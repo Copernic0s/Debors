@@ -12,16 +12,16 @@ Ultima actualizacion: 2026-11-12
 
 ## Prioridad inmediata
 
-- [ ] P1: leer todas las facturas CMP; hoy el frontend obtiene 1,000 filas aunque la base tenia 2,520.
-- [ ] P1: conciliar importe original, total pagado y saldo restante en agregados y detalle.
-- [ ] P1: ordenar invoices por fecha y asegurar que el perfil no esconda CMP por el filtro de semana.
+- [x] P1: leer todas las facturas CMP; paginacion Supabase de hasta 1,000 por peticion, conteo exacto y rechazo de lecturas incompletas.
+- [x] P1: conciliar importe original, total pagado y saldo restante en agregados y detalle (aritmetica en centavos y aviso de discrepancias).
+- [x] P1: ordenar invoices por fecha y asegurar que el perfil no esconda CMP por el filtro de semana.
 - [ ] P1: aplicar el acceso por agente en RLS/API, no solo en filtros del navegador.
 - [ ] P1: definir reconciliacion de snapshot vigente sin perder historial ni aceptar crawls parciales.
 - [x] P1: reflejar en SQL las columnas financieras usadas por ingest (migracion creada; no aplicada a Supabase remoto).
 - [x] P1: hacer que ingest falle cerrado si falta `CMP_INGEST_SECRET` (backend requiere secreto de 32 bytes o mas al reiniciar).
 - [ ] P1: acordar como cubrir todos los saldos abiertos, incluso invoices anteriores a la ventana temporal normal.
 - [ ] P2: corregir estado obsoleto del runner y documentacion operativa.
-- [ ] P2: agregar pruebas de paginacion, pagos parciales, overdue, RLS e ingest.
+- [ ] P2: agregar pruebas de RLS e ingest.
 
 ## Forma de trabajo
 
@@ -37,3 +37,4 @@ Ultima actualizacion: 2026-11-12
 |---|---|---|
 | 2026-11-12 | Revision tecnica de datos Zoho/CMP, dashboard, esquema y permisos; se agrego el informe detallado. | Vite y API local HTTP 200; conteo Supabase 2,520 vs lectura default 1,000; CMP seguia scrapeando en pagina 56/1,360 al ultimo chequeo. |
 | 2026-11-12 | F1: migracion versionada para campos financieros/snapshot; ingest fail-closed con comparacion timing-safe, CORS local y bind loopback. | `cd server && npm test` 3/3; `npm run test:run` 17/17; `npm run build` pasa (warning de chunk >500 kB). Migracion no aplicada remotamente; no se reinicio el backend activo. |
+| 2026-11-12 | F2: lectura paginada y completa de CMP; totales financieros en centavos; perfil con fechas, ultimo invoice, total/paid/balance y subtotal overdue; retencion del ultimo snapshot al fallar una lectura parcial. | `npm run test:run` 25/25; `cd server && npm test` 3/3; `npm run build` pasa (warning de chunk >500 kB); ESLint focalizado sin errores (3 warnings preexistentes de dependencias React). SQL remoto y backend activo no tocados. |

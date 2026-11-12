@@ -1,16 +1,48 @@
 export const fetchCmpInvoices = async (supabase) => {
-  if (!supabase) return [];
+  if (!supabase) return { rows: [], expected: 0 };
 
-  const { data, error } = await supabase
+  const { count, error: countError } = await supabase
     .from('cmp_invoices')
-    .select('*')
-    .order('invoice_date', { ascending: false });
+    .select('id', { count: 'exact', head: true });
 
-  if (error) {
-    throw new Error(error.message || 'Failed to load CMP invoices');
+  if (countError) {
+    throw new Error(countError.message || 'Failed to count CMP invoices');
   }
 
-  return data || [];
+  const expected = Number(count) || 0;
+  const pageSize = 1000;
+  const rowsById = new Map();
+
+  for (let from = 0; from < expected;) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from('cmp_invoices')
+      .select('*')
+      .order('invoice_date', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      const pageError = new Error(error.message || `Failed to load CMP invoices at offset ${from}`);
+      pageError.expectedCount = expected;
+      pageError.receivedCount = rowsById.size;
+      throw pageError;
+    }
+
+    const pageRows = data || [];
+    if (pageRows.length === 0) break;
+    pageRows.forEach((row) => rowsById.set(row.id, row));
+    from += pageRows.length;
+  }
+
+  if (rowsById.size !== expected) {
+    const pageError = new Error(`CMP invoice read incomplete: expected ${expected}, received ${rowsById.size}`);
+    pageError.expectedCount = expected;
+    pageError.receivedCount = rowsById.size;
+    throw pageError;
+  }
+
+  return { rows: [...rowsById.values()], expected };
 };
 
 export const fetchCmpSyncMeta = async (supabase) => {

@@ -3,9 +3,9 @@ import { fetchAllDataFromSheet } from '../services/zohoWorkDrive';
 import { fetchCmpInvoices, fetchCmpSyncMeta } from '../services/cmpInvoices';
 import { mapCmpInvoicesToDebtorRows, mergeZohoWithCmpRows } from '../services/cmpMerge';
 import { normalizeWeekLabel, normalizeMatchKey } from '../utils/normalizers';
-import { roundMoney } from '../utils/moneyUtils';
 import { normalizeBillingCycle } from '../constants/billingCycles';
 import { BILLING_CYCLES } from '../constants/billingCycles';
+import { centsToAmount, invoiceFinancials } from '../services/invoiceFinancials';
 
 const mergeManualEdits = (rows, editsById) => {
   const editsByInvKey = new Map();
@@ -119,9 +119,9 @@ export const aggregateByCompany = (rows) => {
 
     const companyKey = normalizeMatchKey(company);
     const key = companyKey;
-    const amount = Number.isFinite(roundMoney(row.amount)) ? roundMoney(row.amount) : 0;
+    const financial = invoiceFinancials(row);
     const isPaid = String(row.status || '').toLowerCase() === 'paid' || String(row.status || '').toLowerCase() === 'inactive';
-    const amountToAdd = isPaid ? 0 : amount;
+    const isOverdue = String(row.status || '').toLowerCase() === 'overdue';
 
     const current = grouped.get(key);
     const normalizedCycle = normalizeBillingCycle(row.billingCycle) || BILLING_CYCLES.UNSPECIFIED;
@@ -140,9 +140,17 @@ export const aggregateByCompany = (rows) => {
         clientName: company,
         agentId: agent,
         agentSet: new Set([agent]),
-        amount: amountToAdd,
-        totalInvoiced: amount,
-        totalPaid: isPaid ? amount : 0,
+        amount: 0,
+        totalDue: 0,
+        totalInvoiced: 0,
+        totalPaid: 0,
+        totalOverdue: 0,
+        financialInvoicedCents: financial.invoiced,
+        financialPaidCents: financial.paid,
+        financialDueCents: financial.due,
+        financialOverdueCents: isOverdue ? financial.due : 0,
+        overdueInvoiceCount: isOverdue && financial.due > 0 ? 1 : 0,
+        financialMismatch: financial.financialMismatch,
         billingCycle: normalizedCycle,
         cycleSet: new Set([normalizedCycle]),
         isSheetCycle: isCsSource && normalizedCycle !== BILLING_CYCLES.UNSPECIFIED,
@@ -160,16 +168,21 @@ export const aggregateByCompany = (rows) => {
         pdfDownloadedAt: rowPdfDownloadedAt,
         pdfRequestedAt: rowPdfRequestedAt,
         pdfError: rowPdfError,
-        hasPartialPayment: !isPaid && (row.totalPaid > 0 || (row.remainingAmount > 0 && row.remainingAmount < row.totalAmount))
+        hasPartialPayment: !isPaid && financial.paid > 0 && financial.due > 0
       });
       return;
     }
 
     if (!current.seenInvoices.has(invKey)) {
-      current.amount = Number.isFinite(roundMoney(current.amount + amountToAdd)) ? roundMoney(current.amount + amountToAdd) : 0;
-      current.totalInvoiced = Number.isFinite(roundMoney(current.totalInvoiced + amount)) ? roundMoney(current.totalInvoiced + amount) : 0;
-      current.totalPaid = Number.isFinite(roundMoney(current.totalPaid + (isPaid ? amount : 0))) ? roundMoney(current.totalPaid + (isPaid ? amount : 0)) : 0;
-      if (!isPaid && (row.totalPaid > 0 || (row.remainingAmount > 0 && row.remainingAmount < row.totalAmount))) {
+      current.financialInvoicedCents += financial.invoiced;
+      current.financialPaidCents += financial.paid;
+      current.financialDueCents += financial.due;
+      if (isOverdue) {
+        current.financialOverdueCents += financial.due;
+        if (financial.due > 0) current.overdueInvoiceCount += 1;
+      }
+      current.financialMismatch ||= financial.financialMismatch;
+      if (!isPaid && financial.paid > 0 && financial.due > 0) {
         current.hasPartialPayment = true;
       }
       current.seenInvoices.add(invKey);
@@ -247,8 +260,6 @@ export const aggregateByCompany = (rows) => {
 
   return Array.from(grouped.values()).map((item) => {
     const agents = Array.from(item.agentSet);
-    const cycles = Array.from(item.cycleSet);
-    
     let status = item.status;
     let isAutoOverdue = false;
     
@@ -275,7 +286,12 @@ export const aggregateByCompany = (rows) => {
     }
 
     let overallStatus = 'pending';
-    if (item.amount <= 0) {
+    const totalInvoiced = centsToAmount(item.financialInvoicedCents);
+    const totalPaid = centsToAmount(item.financialPaidCents);
+    const totalDue = centsToAmount(item.financialDueCents);
+    const totalOverdue = centsToAmount(item.financialOverdueCents);
+
+    if (totalDue <= 0) {
       overallStatus = 'paid';
     } else if (item.hasPartialPayment) {
       overallStatus = 'partial_payment';
@@ -283,8 +299,19 @@ export const aggregateByCompany = (rows) => {
       overallStatus = 'overdue';
     }
 
+    const visibleItem = { ...item };
+    delete visibleItem.financialInvoicedCents;
+    delete visibleItem.financialPaidCents;
+    delete visibleItem.financialDueCents;
+    delete visibleItem.financialOverdueCents;
+
     return {
-      ...item,
+      ...visibleItem,
+      amount: totalDue,
+      totalDue,
+      totalInvoiced,
+      totalPaid,
+      totalOverdue,
       status,
       overallStatus,
       isAutoOverdue,
@@ -313,6 +340,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [lastCmpSyncAt, setLastCmpSyncAt] = useState(null);
   const [cmpInvoiceCount, setCmpInvoiceCount] = useState(0);
+  const [cmpExpectedCount, setCmpExpectedCount] = useState(0);
+  const [cmpPartial, setCmpPartial] = useState(false);
 
   const syncInFlightRef = useRef(false);
   const pendingCmpRefreshRef = useRef(false);
@@ -320,6 +349,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const manualEditsRef = useRef({});
   const sheetDataRef = useRef([]);
   const clientsByAgentRef = useRef([]);
+  const cmpRowsRef = useRef([]);
   const [manualEdits, setManualEdits] = useState({});
 
   const applyCmpSnapshot = useCallback((sheetData, csData, cmpRows) => {
@@ -422,7 +452,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     }
   }, [user, supabase, tableName]);
 
-  const loadData = useCallback(async ({ silent = false, notifyUser = false } = {}) => {
+  const loadData = useCallback(async ({ silent = false } = {}) => {
     if (syncInFlightRef.current) return;
     syncInFlightRef.current = true;
 
@@ -437,16 +467,20 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
 
       if (trackerLogs) setTrackerData(trackerLogs);
 
-      let cmpRows = [];
+      let cmpRows = cmpRowsRef.current;
       try {
-        const cmpInvoices = await fetchCmpInvoices(supabase);
-        cmpRows = mapCmpInvoicesToDebtorRows(cmpInvoices, csData);
-        setCmpInvoiceCount(cmpRows.length);
+        const cmpResult = await fetchCmpInvoices(supabase);
+        cmpRows = mapCmpInvoicesToDebtorRows(cmpResult.rows, csData);
+        cmpRowsRef.current = cmpRows;
+        setCmpInvoiceCount(cmpResult.rows.length);
+        setCmpExpectedCount(cmpResult.expected);
+        setCmpPartial(false);
         const cmpMeta = await fetchCmpSyncMeta(supabase);
         setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
       } catch (cmpError) {
         console.warn('[CMP] Load skipped:', cmpError.message);
-        setCmpInvoiceCount(0);
+        setCmpPartial(true);
+        if (Number.isFinite(cmpError.expectedCount)) setCmpExpectedCount(cmpError.expectedCount);
       }
       applyCmpSnapshot(sheetData, csData, cmpRows);
     } catch (err) {
@@ -479,15 +513,19 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     try {
       let cmpRows = [];
       try {
-        const cmpInvoices = await fetchCmpInvoices(supabase);
+        const cmpResult = await fetchCmpInvoices(supabase);
         const csData = clientsByAgentRef.current || [];
-        cmpRows = mapCmpInvoicesToDebtorRows(cmpInvoices, csData);
-        setCmpInvoiceCount(cmpRows.length);
+        cmpRows = mapCmpInvoicesToDebtorRows(cmpResult.rows, csData);
+        cmpRowsRef.current = cmpRows;
+        setCmpInvoiceCount(cmpResult.rows.length);
+        setCmpExpectedCount(cmpResult.expected);
+        setCmpPartial(false);
         const cmpMeta = await fetchCmpSyncMeta(supabase);
         setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
       } catch (cmpError) {
         console.warn('[CMP] Refresh skipped:', cmpError.message);
-        setCmpInvoiceCount(0);
+        setCmpPartial(true);
+        if (Number.isFinite(cmpError.expectedCount)) setCmpExpectedCount(cmpError.expectedCount);
         return;
       }
 
@@ -559,7 +597,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => loadData({ silent: true, notifyUser: false }), 5 * 60 * 1000);
+    const interval = window.setInterval(() => loadData({ silent: true }), 5 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [loadData]);
 
@@ -567,13 +605,6 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     const interval = window.setInterval(() => refreshCmpData({ silent: true }), 15000);
     return () => window.clearInterval(interval);
   }, [refreshCmpData]);
-
-  const updateLocalData = useCallback((updater) => {
-    setRawZohoData(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      return next;
-    });
-  }, []);
 
   const setData = useCallback((updater) => {
     setRawZohoData(prev => {
@@ -593,6 +624,8 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     lastSyncAt,
     lastCmpSyncAt,
     cmpInvoiceCount,
+    cmpExpectedCount,
+    cmpPartial,
     manualEdits,
     setManualEdits,
     loadData,
