@@ -1,48 +1,53 @@
 # Debtors App
 
-Panel de seguimiento de deudas por agente para el equipo de ventas.
+Panel de seguimiento de deudas por agente. Combina el portafolio de Zoho (`Client BY agent`) con facturas de CMP persistidas en Supabase.
 
-## CMP sync (Andres / localhost)
+## Persistencia CMP
 
-1. Crea el esquema base con `supabase/cmp_invoices.sql` y aplica las migraciones de `supabase/migrations/` en orden.
-2. Configura `SUPABASE_SERVICE_ROLE_KEY` y `CMP_INGEST_SECRET` en el server local.
-3. `cd server && npm start` y `npm run dev`.
-4. **Sync All** recarga Zoho, corre el scraper (Chrome Profile 8) y hace upsert de las facturas CMP. Solo un scrape completo, no truncado, no vacio y sobre el umbral de cobertura puede marcar filas fuera del snapshot como no vigentes; nunca elimina filas.
+`cmp_invoices` es historial: las facturas observadas se hacen upsert y nunca se borran. `is_current=true` identifica el snapshot que lee el dashboard; las filas que dejan de estar vigentes conservan su historial con `closed_at` y `last_seen_sync_run_id`. `cmp_sync_runs` registra estado, cobertura y resultado de reconciliación.
 
-Ver `automation/README.md`.
+El extractor conserva **todos los saldos abiertos, sin límite de antigüedad**, y limita por fecha de factura solo las facturas pagadas/cerradas. Los modos definen esa ventana de pagadas: fast 15 días, normal 120 y deep 365.
 
-Para previsualizar una reconciliacion sin modificar Supabase, configura `CMP_INGEST_DRY_RUN=true` en el entorno local antes de iniciar el backend y ejecuta un scrape autorizado. El endpoint devuelve `rowsThatWouldClose`; no hace upsert ni crea un registro de corrida. El valor por defecto es `false`.
+Los resultados se envían al ingest al terminar el scrape. Si el extractor devuelve filas con estado incompleto, esas observaciones se upsert; un error que interrumpe el scrape reporta una corrida fallida sin reconciliar. Corridas incompletas, vacías, fallidas o truncadas no cierran filas ausentes. Solo una corrida `complete`, no truncada, no vacía y con cobertura suficiente reconcilia el alcance observado. Un scrape posterior completo recupera la reconciliación sin borrar el historial.
 
-## Funciones clave
+Pasos de sync desde este equipo:
 
-- Sincronizacion de datos desde Zoho WorkDrive (CSV publico).
-- Facturas CMP abiertas de cualquier antiguedad y facturas pagadas dentro de la ventana seleccionada (fast 15, normal 120, deep 365 dias) para empresas de `Client BY agent`.
-- Fallback automatico a datos locales cuando la fuente remota no responde.
-- Dashboard con metricas automáticas (deuda activa, vencida, recaudado, efectividad).
-- Listado editable de deudores con filtros y ordenamiento.
+1. Iniciar el API local con `cd server && npm start`.
+2. Iniciar Vite con `npm run dev`.
+3. Desde la app local, usar Sync All o el nivel de profundidad deseado. CMP requiere el Chrome del operador y su sesión existente.
+4. Consultar en el panel `Last successful sync` y `Last run error`. Status y logs se asocian al `run_id`; el status activo se oculta si no coincide con la corrida o supera `STATUS_MAX_AGE_MIN`.
 
-## Desarrollo local
+Para previsualizar la reconciliación, establecer `CMP_INGEST_DRY_RUN=true` en el entorno local y enviar un scrape autorizado. El RPC calcula `rowsThatWouldClose` sin escribir facturas ni registrar la corrida. El preview necesita el payload extraído de CMP; no se debe usar un run normal para validar el número antes de revisar el resultado.
 
-```bash
-npm install
-npm run dev
-```
+Ver [automation/README.md](automation/README.md) para variables, instalación, migraciones y recuperación de scrapes parciales.
 
-## Build
+## Esquema y acceso
 
-```bash
+El bootstrap limpio, config de Supabase local y contratos SQL están separados en la rama `codex/db-baseline` para revisión/PR independiente. Ejecutar sus instrucciones contra una base local desechable. Esta revisión no aplicó migraciones remotas.
+
+Provisionar `agent_scopes` con usuarios y `agent_id` verificados; usar [supabase/agent_scopes.seed.example.sql](supabase/agent_scopes.seed.example.sql) solo como plantilla, nunca con datos de usuarios reales en Git.
+
+## Variables de entorno
+
+- `CMP_INGEST_SECRET`: requerido; mínimo 32 bytes aleatorios. Solo el backend y el extractor local lo usan.
+- `BIND_HOST`: `127.0.0.1` por defecto para el API local.
+- `CMP_RECONCILE_MIN_RATIO`: umbral de cobertura de reconciliación; default `0.5`.
+- `CMP_INGEST_DRY_RUN`: preview sin escrituras; default `false`.
+- `STATUS_MAX_AGE_MIN`: edad máxima del progreso activo; default `60` minutos.
+
+Los placeholders están en `.env.example` y `server/.env.example`. Nunca se versionan `.env` o `server/.env`.
+
+## Desarrollo y verificación
+
+```powershell
+npm ci
+npm run test:run
 npm run build
-npm run preview
+cd server
+npm ci
+npm test
+cd ..
+python -m unittest discover -s automation -p 'test_cmp_*.py'
 ```
 
-## Deploy a GitHub Pages
-
-El repo incluye workflow en `.github/workflows/deploy-pages.yml`.
-
-1. En GitHub, abre `Settings > Pages`.
-2. En `Build and deployment`, selecciona `GitHub Actions`.
-3. Haz push a `main` y espera la ejecucion del workflow.
-
-URL esperada:
-
-`https://copernic0s.github.io/Debors/`
+GitHub Actions ejecuta tests de frontend, build, server y helpers CMP. Los tests SQL de migraciones/RLS requieren una instancia Supabase/Postgres local.

@@ -449,7 +449,8 @@ app.get('/api/cmp/status', (_req, res) => {
 
 app.get('/api/cmp/log', (req, res) => {
   const lines = Number.parseInt(String(req.query.lines || '120'), 10);
-  res.json({ tail: tailLog(Number.isFinite(lines) ? lines : 120) });
+  const status = getCmpStatus();
+  res.json({ runId: status.runId, tail: tailLog(Number.isFinite(lines) ? lines : 120) });
 });
 
 app.post('/api/cmp/run', (req, res) => {

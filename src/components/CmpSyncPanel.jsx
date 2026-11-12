@@ -185,7 +185,8 @@ export default function CmpSyncPanel({
   const running = Boolean(cmpStatus?.running);
   const phase = String(cmpStatus?.phase || 'idle');
   const error = cmpStatus?.error;
-  const tone = error ? 'err' : running ? 'warn' : phase === 'done' ? 'ok' : 'warn';
+  const partial = phase === 'done' && (cmpStatus?.runStatus !== 'complete' || cmpStatus?.persisted !== true);
+  const tone = error ? 'err' : running ? 'warn' : phase === 'done' && !partial ? 'ok' : 'warn';
 
   return (
     <Panel>
@@ -195,7 +196,9 @@ export default function CmpSyncPanel({
           CMP sync
           <StatusPill $tone={tone}>
             {running ? <Loader2 size={12} className="spin" /> : error ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
-            {running ? 'Running' : error ? 'Error' : phase === 'done' ? 'Ready' : 'Idle'}
+            {running ? 'Running' : error ? 'Error' : partial
+              ? cmpStatus?.runStatus === 'complete' ? 'Not persisted' : 'Partial'
+              : phase === 'done' ? 'Ready' : 'Idle'}
           </StatusPill>
         </Title>
         <Actions>
@@ -261,11 +264,21 @@ export default function CmpSyncPanel({
       </SyncSection>
 
       <Meta>
+        <span>Run ID: <strong>{cmpStatus?.runId || '--'}</strong></span>
         <span>Page: <strong>{cmpStatus?.page || 0}</strong></span>
         <span>Invoices found: <strong>{cmpStatus?.invoicesFound ?? 0}</strong></span>
         <span>Invoices loaded: <strong>{cmpInvoiceCount ?? 0}</strong> / {cmpExpectedCount ?? cmpInvoiceCount ?? 0}</span>
         <span>Last CMP upload: <strong>{formatTime(lastCmpSyncAt)}</strong></span>
+        <span>Last successful sync: <strong>{formatTime(cmpStatus?.lastSuccessfulSync?.timestamp)}</strong></span>
+        <span>
+          Last run error: <strong>{cmpStatus?.lastRunError
+            ? `${formatTime(cmpStatus.lastRunError.timestamp)} · ${cmpStatus.lastRunError.message}`
+            : '--'}</strong>
+        </span>
       </Meta>
+      {cmpStatus?.lastRunIsStale && !running && (
+        <Message role="status">The previous run status is stale; live progress is hidden.</Message>
+      )}
       {cmpPartial && (
         <Message role="alert" style={{ color: 'var(--danger)' }}>
           CMP invoice read is incomplete. Totals may be partial; the previous complete snapshot is being kept.
