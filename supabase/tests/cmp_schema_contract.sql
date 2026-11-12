@@ -3,6 +3,7 @@ do $$
 declare
   missing_columns text;
   current_default text;
+  invalid_financial_columns text;
 begin
   select string_agg(required.column_name, ', ' order by required.column_name)
     into missing_columns
@@ -38,6 +39,46 @@ begin
 
   if current_default is null or lower(current_default) not like '%true%' then
     raise exception 'is_current must default to true; found %', current_default;
+  end if;
+
+  select string_agg(required.column_name, ', ' order by required.column_name)
+    into invalid_financial_columns
+  from (values ('total_amount'), ('remaining_amount'), ('total_paid')) as required(column_name)
+  join information_schema.columns actual
+    on actual.table_schema = 'public'
+   and actual.table_name = 'cmp_invoices'
+   and actual.column_name = required.column_name
+  where actual.data_type <> 'numeric'
+     or actual.is_nullable <> 'NO'
+     or actual.column_default is null
+     or actual.column_default not like '0%';
+
+  if invalid_financial_columns is not null then
+    raise exception 'financial CMP columns must be numeric not null default 0: %', invalid_financial_columns;
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'cmp_invoices'
+      and policyname = 'cmp_invoices_read_authenticated'
+      and cmd = 'SELECT'
+      and 'authenticated' = any(roles)
+      and qual = 'true'
+  ) then
+    raise exception 'open authenticated invoice read policy is missing';
+  end if;
+
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'cmp_invoice_pdfs_read_authenticated'
+      and cmd = 'SELECT'
+      and 'authenticated' = any(roles)
+      and qual like '%cmp-invoices%'
+  ) then
+    raise exception 'open authenticated CMP PDF read policy is missing';
   end if;
 
   if not exists (

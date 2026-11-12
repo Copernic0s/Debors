@@ -63,6 +63,11 @@ declare
   v_rows_count integer;
   v_previous_current integer;
   v_would_close integer := 0;
+  v_would_close_amount numeric := 0;
+  v_would_close_paid integer := 0;
+  v_would_close_unpaid integer := 0;
+  v_would_close_paid_amount numeric := 0;
+  v_would_close_unpaid_amount numeric := 0;
   v_closed_rows integer := 0;
   v_eligible boolean := false;
   v_skip_reason text;
@@ -123,7 +128,6 @@ begin
     and i.agent_id = any(v_scope_agent_ids)
     and (
       lower(coalesce(i.status, 'pending')) <> 'paid'
-      or coalesce(i.remaining_amount, i.amount, 0) > 0
       or i.invoice_date >= p_cutoff_date
     );
 
@@ -145,8 +149,14 @@ begin
     v_skip_reason := 'coverage_below_threshold';
   end if;
 
-  select count(*)::integer
-    into v_would_close
+  select count(*)::integer,
+         coalesce(sum(coalesce(i.remaining_amount, i.amount, 0)), 0),
+         count(*) filter (where lower(coalesce(i.status, 'pending')) = 'paid')::integer,
+         count(*) filter (where lower(coalesce(i.status, 'pending')) <> 'paid')::integer,
+         coalesce(sum(coalesce(i.remaining_amount, i.amount, 0)) filter (where lower(coalesce(i.status, 'pending')) = 'paid'), 0),
+         coalesce(sum(coalesce(i.remaining_amount, i.amount, 0)) filter (where lower(coalesce(i.status, 'pending')) <> 'paid'), 0)
+    into v_would_close, v_would_close_amount, v_would_close_paid,
+         v_would_close_unpaid, v_would_close_paid_amount, v_would_close_unpaid_amount
   from public.cmp_invoices i
   where v_eligible
     and i.is_current
@@ -155,7 +165,6 @@ begin
     and not (i.id = any(v_invoice_ids))
     and (
       lower(coalesce(i.status, 'pending')) <> 'paid'
-      or coalesce(i.remaining_amount, i.amount, 0) > 0
       or i.invoice_date >= p_cutoff_date
     );
 
@@ -167,6 +176,11 @@ begin
       'previousCurrentRowsInScope', v_previous_current,
       'rowsExtracted', p_rows_extracted,
       'rowsThatWouldClose', case when v_eligible then v_would_close else 0 end,
+      'amountThatWouldClose', case when v_eligible then v_would_close_amount else 0 end,
+      'paidRowsThatWouldClose', case when v_eligible then v_would_close_paid else 0 end,
+      'unpaidRowsThatWouldClose', case when v_eligible then v_would_close_unpaid else 0 end,
+      'paidAmountThatWouldClose', case when v_eligible then v_would_close_paid_amount else 0 end,
+      'unpaidAmountThatWouldClose', case when v_eligible then v_would_close_unpaid_amount else 0 end,
       'skipReason', v_skip_reason,
       'scopeAgentCount', cardinality(v_scope_agent_ids),
       'cutoffDate', p_cutoff_date
@@ -225,7 +239,6 @@ begin
       and not (i.id = any(v_invoice_ids))
       and (
         lower(coalesce(i.status, 'pending')) <> 'paid'
-        or coalesce(i.remaining_amount, i.amount, 0) > 0
         or i.invoice_date >= p_cutoff_date
       );
     get diagnostics v_closed_rows = row_count;
