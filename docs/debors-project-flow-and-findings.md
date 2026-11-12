@@ -153,13 +153,15 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 
 ### P1 - Reconciliar el snapshot actual sin destruir el historial
 
-**Evidencia:** `ingestCmpSnapshot()` hace upsert y conserva todas las filas previas. El comentario antiguo en `server/cmpIngest.cjs` menciona limpiar filas antiguas, pero esa limpieza no existe; despues el codigo confirma que preserva todo el historial.
+**Evidencia:** el ingest anterior solo hacia upsert, por lo que invoices que ya no aparecen podian seguir vigentes indefinidamente.
 
 **Impacto:** si una invoice deja de aparecer en el scrape o cambia a un estado que no se carga, la fila antigua puede seguir contando como abierta/overdue. Al mismo tiempo, borrar filas de forma global seria riesgoso si el scrape fue parcial o fallo.
 
 **Archivos:** `server/cmpIngest.cjs`, `lib/cmpIngest.js`, `automation/cmp_invoice_extractor.py`.
 
-**Criterio de cierre:** definir dos conceptos: historial de observaciones y snapshot vigente. Solo reconciliar despues de un scrape completo validado (run id, paginacion terminada y filas esperadas); conservar historial en tabla/archive aparte o marcar `last_seen_sync_run_id`/`is_current`; nunca borrar por una ejecucion incompleta o vacia sin confirmacion.
+**Estado F4 implementado en codigo:** la migracion `20261112214000_cmp_snapshot_reconciliation.sql` agrega/asegura las columnas y `cmp_sync_runs`; `apply_cmp_sync_run` upsertea y reconcilia en una sola transaccion, registra status/coverage y ofrece `p_dry_run`. La reconciliacion exige complete, no truncated, filas > 0, ratio minimo y limita la cobertura a agentes del run y saldos abiertos o facturas pagadas desde cutoff. Usa `is_current`/`closed_at`; no contiene `DELETE`. El cliente cuenta y lee solo `is_current = true`.
+
+**Validacion pendiente:** prueba SQL agregada en `supabase/tests/cmp_snapshot_reconciliation.sql`, pero no ejecutada porque este entorno no tiene `psql`, Supabase CLI ni Docker engine. No se aplico la migracion remota. Ejecutar el test contra una base local antes de aplicar en Supabase.
 
 ### P1 - Aplicar migracion versionada para las columnas financieras
 
@@ -189,7 +191,9 @@ La UI transforma y agrupa facturas por nombre normalizado de compania. Las filas
 
 **Archivos:** `server/cmpRunner.js`, `automation/cmp_invoice_extractor.py`.
 
-**Criterio de cierre:** acordar si la vista representa invoices recientes o todos los saldos abiertos. Para deuda vigente, priorizar status/remaining balance de CMP y paginar hasta cubrir todas las invoices abiertas; documentar cualquier limite historico.
+**Estado F4 implementado:** D1 confirmado: invoices con saldo > 0 o estado no pagado se conservan aunque sean antiguas; la ventana por `invoice_date` descarta solo pagadas cerradas. Un fin natural de paginacion reporta `complete`; llegar a `CMP_MAX_PAGES` reporta `truncated`; error de paginacion reporta `incomplete`. No se usa la parada temprana por antiguedad porque el orden CMP no es confiable.
+
+**Riesgo operativo:** los limites fast/normal/deep siguen siendo 5/100/250 paginas. Si no se llega al fin real, el run se persiste como truncado/incompleto y no reconcilia; aumentar max pages o hacer una corrida deep puede ser necesario para cubrir todas las facturas abiertas.
 
 ### P2 - Corregir orden y filtros del perfil de compania
 

@@ -4,6 +4,7 @@ const {
   getConfiguredIngestSecret,
   verifyCmpIngestSecret,
   mapCmpInvoiceRows,
+  ingestCmpSnapshot,
   MIN_INGEST_SECRET_LENGTH
 } = require('./cmpIngest.cjs');
 const serverlessIngest = import('../lib/cmpIngest.js');
@@ -56,4 +57,88 @@ test('serverless ingest maps agent scope with the same contract', async () => {
   ], 'run-1', '2026-11-12T00:00:00.000Z');
 
   assert.equal(rows[0].agent_id, 'jose rivera');
+});
+
+test('dry-run sends the snapshot to the preview RPC and performs no table write', async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  let requestUrl = '';
+  let requestBody;
+  process.env.SUPABASE_URL = 'http://127.0.0.1:54321';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+  global.fetch = async (url, options) => {
+    requestUrl = String(url);
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ dryRun: true, rowsThatWouldClose: 4 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await ingestCmpSnapshot({
+      syncRunId: 'f4f80000-0000-4000-8000-000000000001',
+      startedAt: '2026-11-12T21:00:00.000Z',
+      runStatus: 'complete',
+      mode: 'fast',
+      pagesScraped: 2,
+      rowsExtracted: 1,
+      truncated: false,
+      cutoffDate: '2026-10-28',
+      scopeAgentIds: ['agent-a'],
+      dryRun: true,
+      invoices: [{ companyName: 'Acme LLC', invoiceNumber: 'INV-1', agentId: 'agent-a' }]
+    });
+
+    assert.match(requestUrl, /\/rest\/v1\/rpc\/apply_cmp_sync_run$/);
+    assert.equal(requestBody.p_dry_run, true);
+    assert.equal(requestBody.p_rows[0].agent_id, 'agent-a');
+    assert.equal(result.rowsThatWouldClose, 4);
+    assert.equal(result.count, 0);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test('serverless ingest uses the same transactional dry-run RPC', async () => {
+  const { ingestCmpSnapshot: ingestServerless } = await serverlessIngest;
+  const previousFetch = global.fetch;
+  let requestBody;
+  global.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ dryRun: true, rowsThatWouldClose: 2 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await ingestServerless({
+      syncRunId: 'f4f80000-0000-4000-8000-000000000002',
+      runStatus: 'complete',
+      mode: 'normal',
+      pagesScraped: 3,
+      rowsExtracted: 1,
+      truncated: false,
+      cutoffDate: '2026-07-15',
+      scopeAgentIds: ['agent-b'],
+      dryRun: true,
+      invoices: [{ companyName: 'Acme LLC', invoiceNumber: 'INV-2', agentId: 'agent-b' }]
+    }, {
+      SUPABASE_URL: 'http://127.0.0.1:54321',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-service-key'
+    });
+
+    assert.equal(requestBody.p_dry_run, true);
+    assert.equal(requestBody.p_scope_agent_ids[0], 'agent-b');
+    assert.equal(result.rowsThatWouldClose, 2);
+    assert.equal(result.count, 0);
+  } finally {
+    global.fetch = previousFetch;
+  }
 });
