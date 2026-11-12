@@ -3,15 +3,28 @@ import { fetchCmpInvoices } from './cmpInvoices';
 
 const createSupabaseMock = ({ rows, maxPageSize = Infinity, failAt } = {}) => {
   const requestedRanges = [];
+  const currentFilters = [];
   return {
     requestedRanges,
+    currentFilters,
     from: () => ({
       select: (_columns, options) => {
-        if (options?.head) return Promise.resolve({ count: rows.length, error: null });
+        if (options?.head) {
+          return {
+            eq: (column, value) => {
+              currentFilters.push(['count', column, value]);
+              return Promise.resolve({ count: rows.length, error: null });
+            }
+          };
+        }
 
         let rangeStart = 0;
         let rangeEnd = rows.length - 1;
         const query = {
+          eq: (column, value) => {
+            currentFilters.push(['rows', column, value]);
+            return query;
+          },
           order: () => query,
           range: (start, end) => {
             rangeStart = start;
@@ -45,6 +58,7 @@ describe('fetchCmpInvoices', () => {
     expect(new Set(result.rows.map((row) => row.id)).size).toBe(2520);
     expect(supabase.requestedRanges).toHaveLength(6);
     expect(supabase.requestedRanges.at(-1)[0]).toBe(2500);
+    expect(supabase.currentFilters.every(([, column, value]) => column === 'is_current' && value === true)).toBe(true);
   });
 
   it('returns an empty list when the exact count is zero', async () => {

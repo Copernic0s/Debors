@@ -3,7 +3,8 @@ export const fetchCmpInvoices = async (supabase) => {
 
   const { count, error: countError } = await supabase
     .from('cmp_invoices')
-    .select('id', { count: 'exact', head: true });
+    .select('id', { count: 'exact', head: true })
+    .eq('is_current', true);
 
   if (countError) {
     throw new Error(countError.message || 'Failed to count CMP invoices');
@@ -18,6 +19,7 @@ export const fetchCmpInvoices = async (supabase) => {
     const { data, error } = await supabase
       .from('cmp_invoices')
       .select('*')
+      .eq('is_current', true)
       .order('invoice_date', { ascending: false, nullsFirst: false })
       .order('id', { ascending: true })
       .range(from, to);

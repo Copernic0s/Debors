@@ -34,7 +34,10 @@ const mapCmpInvoiceRows = (invoices, runId, syncedAt) => (invoices || [])
     billing_type: item.billingType || null
   }));
 
-const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
+const ingestCmpSnapshot = async ({
+  invoices = [], syncRunId, startedAt, runStatus, mode, pagesScraped,
+  rowsExtracted, truncated, cutoffDate, scopeAgentIds, dryRun = false
+}) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
@@ -44,32 +47,52 @@ const ingestCmpSnapshot = async ({ invoices = [], syncRunId, isFastSync }) => {
 
   const runId = String(syncRunId || require('crypto').randomUUID());
   const syncedAt = new Date().toISOString();
-
   const rows = mapCmpInvoiceRows(invoices, runId, syncedAt);
+  const pageCount = Number(pagesScraped);
+  const extractedCount = Number(rowsExtracted ?? rows.length);
+  const coveredAgentIds = Array.isArray(scopeAgentIds)
+    ? [...new Set(scopeAgentIds.map((value) => String(value ?? '').trim()).filter(Boolean))]
+    : [];
+  if (!Number.isInteger(pageCount) || pageCount < 0
+      || !Number.isInteger(extractedCount) || extractedCount !== rows.length) {
+    throw new Error('Invalid CMP run page or invoice counts');
+  }
+  const ratioValue = Number(process.env.CMP_RECONCILE_MIN_RATIO || 0.5);
+  if (!Number.isFinite(ratioValue) || ratioValue < 0 || ratioValue > 1) {
+    throw new Error('CMP reconciliation ratio must be between 0 and 1');
+  }
+  if (!['complete', 'incomplete', 'failed'].includes(runStatus)) {
+    throw new Error('CMP run status is required');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(cutoffDate || ''))) {
+    throw new Error('CMP run cutoff date is required');
+  }
 
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
+  const { data, error } = await supabase.rpc('apply_cmp_sync_run', {
+    p_run_id: runId,
+    p_started_at: startedAt || null,
+    p_rows: rows,
+    p_status: runStatus,
+    p_mode: mode || 'unknown',
+    p_pages_scraped: pageCount,
+    p_rows_extracted: extractedCount,
+    p_truncated: truncated === true,
+    p_cutoff_date: cutoffDate,
+    p_scope_agent_ids: coveredAgentIds,
+    p_reconcile_min_ratio: ratioValue,
+    p_dry_run: dryRun === true
+  });
+  if (error) throw new Error(`CMP snapshot transaction failed: ${error.message}`);
 
-  // We no longer delete all cmp_invoices before inserting to prevent leaving the database empty on errors.
-  // Instead, we will do an upsert, and then clean up any older records that weren't in this sync run.
-
-  if (rows.length > 0) {
-    const chunkSize = 500;
-    for (let index = 0; index < rows.length; index += chunkSize) {
-      const chunk = rows.slice(index, index + chunkSize);
-      const { error: insertError } = await supabase.from('cmp_invoices').upsert(chunk);
-      if (insertError) {
-        throw new Error(`Failed to upsert cmp_invoices: ${insertError.message}`);
-      }
-    }
-  }
-
-  // Preserve all historical invoices in the database to maintain history across sync runs.
-  console.log(`[CMP Ingest] Preserved all historical invoices in the database.`);
-
-
-  return { syncRunId: runId, count: rows.length, syncedAt };
+  return {
+    syncRunId: runId,
+    count: dryRun === true ? 0 : rows.length,
+    syncedAt,
+    ...data
+  };
 };
 
 const verifyCmpIngestSecret = (req, env = process.env) => {

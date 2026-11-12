@@ -24,7 +24,7 @@ cd server
 npm test
 ```
 
-Run Python extractor unit tests from `automation` with `python -m unittest test_cmp_agent_scope`.
+Run Python extractor unit tests from the repository root with `python -m unittest discover -s automation -p 'test_cmp_*.py'`.
 
 ## Supabase
 

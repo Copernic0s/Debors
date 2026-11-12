@@ -96,6 +96,9 @@ python .\automation\cmp_invoice_extractor.py
 
 if ($LASTEXITCODE -ne 0) {
   Start-Sleep -Seconds 5
+  # A retry is a distinct run; the failed attempt may already have been recorded.
+  $env:CMP_RUN_ID = [Guid]::NewGuid().ToString()
+  $env:CMP_RUN_STARTED_AT = [DateTime]::UtcNow.ToString("o")
   python .\automation\cmp_invoice_extractor.py
 }
 
