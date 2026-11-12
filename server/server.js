@@ -463,7 +463,7 @@ app.post('/api/cmp/run', (req, res) => {
     if (!result.started) {
       return res.status(409).json({ error: 'CMP scraper is already running' });
     }
-    return res.json({ ok: true, ...getCmpStatus() });
+    return res.json({ ok: true, runId: result.runId, ...getCmpStatus() });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Failed to start CMP scraper' });
   }

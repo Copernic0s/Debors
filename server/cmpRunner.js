@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const { randomUUID } = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,6 +20,24 @@ const readStatusFile = () => {
   } catch {
     return null;
   }
+};
+
+const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString()) => {
+  const mode = depth === 'standard' ? 'normal' : ['fast', 'normal', 'deep'].includes(depth) ? depth : 'fast';
+  const settings = {
+    fast: { historyDays: '15', maxPages: '5', isFastSync: 'true' },
+    normal: { historyDays: '120', maxPages: '100', isFastSync: 'false' },
+    deep: { historyDays: '365', maxPages: '250', isFastSync: 'false' }
+  }[mode];
+
+  return {
+    mode,
+    runId,
+    startedAt,
+    historyDays: settings.historyDays,
+    maxPages: settings.maxPages,
+    isFastSync: settings.isFastSync
+  };
 };
 
 const getCmpStatus = () => {
@@ -59,27 +78,18 @@ const startCmpScraper = (depth = 'fast') => {
     throw new Error(`CMP script not found: ${PS_SCRIPT}`);
   }
 
-  let historyDays = '15';
-  let maxPages = '5';
-  let isFastSync = 'true';
-
-  if (depth === 'deep') {
-    historyDays = '365';
-    maxPages = '250';
-    isFastSync = 'false';
-  } else if (depth === 'normal') {
-    historyDays = '120';
-    maxPages = '100';
-    isFastSync = 'false';
-  }
+  const runConfig = buildCmpRunConfig(depth);
 
   const env = {
     ...process.env,
     CMP_INGEST_URL: process.env.CMP_INGEST_URL || `http://127.0.0.1:${process.env.PORT || 3001}/api/cmp/ingest`,
     CMP_INGEST_SECRET: process.env.CMP_INGEST_SECRET || '',
-    CMP_HISTORY_DAYS: historyDays,
-    CMP_MAX_PAGES: maxPages,
-    CMP_FAST_SYNC: isFastSync
+    CMP_HISTORY_DAYS: runConfig.historyDays,
+    CMP_MAX_PAGES: runConfig.maxPages,
+    CMP_FAST_SYNC: runConfig.isFastSync,
+    CMP_SYNC_MODE: runConfig.mode,
+    CMP_RUN_ID: runConfig.runId,
+    CMP_RUN_STARTED_AT: runConfig.startedAt
   };
 
   cmpChild = spawn(
@@ -109,13 +119,14 @@ const startCmpScraper = (depth = 'fast') => {
     console.error('[CMP Runner] Process error:', error);
   });
 
-  return { started: true };
+  return { started: true, runId: runConfig.runId };
 };
 
 module.exports = {
   getCmpStatus,
   tailLog,
   startCmpScraper,
+  buildCmpRunConfig,
   STATUS_PATH,
   LOG_PATH
 };

@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test cmpIngest.node.cjs cmpReconciliation.node.cjs"
+    "test": "node --test cmpIngest.node.cjs cmpReconciliation.node.cjs cmpRunner.node.cjs"
   },
   "keywords": [],
   "author": "",
