@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { isActiveAgent } from '../constants/activeAgents';
+import { canonicalActiveAgent } from '../constants/activeAgents';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
   AlertTriangle,
@@ -799,12 +799,12 @@ export default function ManagerAnalytics({
     cleanInvoiceRows.forEach((row) => {
       const amount = Number(row.amount) || 0;
       const status = normalizeStatus(row.status);
-      const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
+      const agent = canonicalActiveAgent(row.agentId);
       const week = String(row.weekLabel || 'Unknown week');
 
       statusTotals[status] += amount;
 
-      if (isActiveAgent(agent)) {
+      if (agent) {
         const currentAgent = agentMap.get(agent) || { agent, open: 0, overdue: 0, paid: 0, accounts: 0 };
         currentAgent.accounts += 1;
         if (status === 'pending' || status === 'overdue') currentAgent.open += amount;

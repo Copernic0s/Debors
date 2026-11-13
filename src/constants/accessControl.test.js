@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAccessProfile, userCanAccessAgent } from './accessControl';
-import { isActiveAgent } from './activeAgents';
+import { canonicalActiveAgents, isActiveAgent } from './activeAgents';
 
 describe('Guidiana read-only profile', () => {
   it('shows all agents while keeping the account view-only', () => {
@@ -25,5 +25,6 @@ describe('active agent filter', () => {
     expect(isActiveAgent('Héctor Lomelí')).toBe(true);
     expect(isActiveAgent('Francesco Rinaldelli')).toBe(false);
     expect(isActiveAgent('John Escobar')).toBe(false);
+    expect(canonicalActiveAgents('Hector Lomeli, Héctor Lomelí')).toEqual(['Hector Lomeli']);
   });
 });

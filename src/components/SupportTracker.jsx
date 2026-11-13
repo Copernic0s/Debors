@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { isActiveAgent } from '../constants/activeAgents';
+import { canonicalActiveAgents } from '../constants/activeAgents';
 import styled from 'styled-components';
 import {
   AlertCircle,
@@ -989,8 +989,7 @@ const SupportTracker = ({
   const filterOptions = useMemo(() => {
     const statuses = Array.from(new Set(normalizedData.map((item) => item.statusLabel).filter(Boolean))).sort();
     const agents = Array.from(new Set(normalizedData
-      .map((item) => item.agentLabel)
-      .filter((agent) => agent && isActiveAgent(agent)))).sort();
+      .flatMap((item) => canonicalActiveAgents(item.agentLabel)))).sort();
 
     return { statuses, agents };
   }, [normalizedData]);

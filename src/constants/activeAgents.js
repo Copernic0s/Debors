@@ -8,8 +8,17 @@ const normalizeAgentName = (value) => String(value || '')
   .trim()
   .replace(/\s+/g, ' ');
 
-const activeAgentKeys = new Set(activeAgents.map(normalizeAgentName));
+const activeAgentByKey = new Map(activeAgents.map((agent) => [normalizeAgentName(agent), agent]));
 
-export const isActiveAgent = (agentName) => activeAgentKeys.has(normalizeAgentName(agentName));
+export const canonicalActiveAgent = (agentName) => activeAgentByKey.get(normalizeAgentName(agentName)) || null;
+
+export const canonicalActiveAgents = (agentNames) => Array.from(new Set(
+  String(agentNames || '')
+    .split(',')
+    .map((agentName) => canonicalActiveAgent(agentName.trim()))
+    .filter(Boolean)
+));
+
+export const isActiveAgent = (agentName) => canonicalActiveAgent(agentName) !== null;
 
 export { activeAgents };

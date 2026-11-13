@@ -19,7 +19,7 @@ import { useDebtors, aggregateByCompany } from './hooks/useDebtors';
 import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
 import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
-import { isActiveAgent } from './constants/activeAgents';
+import { canonicalActiveAgents } from './constants/activeAgents';
 import { normalizeBillingCycle } from './constants/billingCycles';
 import { emailService } from './services/emailService';
 import { openCmpInvoicePdf, requestCmpInvoicePdf, queueCmpInvoicePdf } from './services/cmpInvoices';
@@ -1297,9 +1297,7 @@ function App() {
 
 
   const agentOptions = React.useMemo(() => Array.from(new Set(
-    accessibleData
-      .map((item) => String(item.agentId || '').trim())
-      .filter((agentName) => agentName && isActiveAgent(agentName))
+    accessibleData.flatMap((item) => canonicalActiveAgents(item.agentId))
   )).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {

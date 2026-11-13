@@ -47,6 +47,17 @@ describe('invoiceFinancials', () => {
 });
 
 describe('aggregateByCompany financial totals', () => {
+  it('canonicalizes duplicate active agent spellings and omits inactive agents from the company label', () => {
+    const [company] = aggregateByCompany([
+      { id: 'one', company: 'Acme LLC', agentId: 'Hector Lomeli', invoiceNumber: 'INV-1', status: 'pending', amount: 100, totalAmount: 100, remainingAmount: 100, dueDate: '2099-01-01' },
+      { id: 'two', company: 'Acme LLC', agentId: 'Héctor Lomelí', invoiceNumber: 'INV-2', status: 'pending', amount: 200, totalAmount: 200, remainingAmount: 200, dueDate: '2099-01-02' },
+      { id: 'three', company: 'Acme LLC', agentId: 'Francesco Rinaldelli', invoiceNumber: 'INV-3', status: 'pending', amount: 300, totalAmount: 300, remainingAmount: 300, dueDate: '2099-01-03' }
+    ]);
+
+    expect(company.agentId).toBe('Hector Lomeli');
+    expect(company.totalDue).toBe(600);
+  });
+
   it('sums partial balances and multiple overdue invoices without floating point drift', () => {
     const result = aggregateByCompany([
       { id: 'one', company: 'Acme LLC', invoiceNumber: 'INV-1', status: 'overdue', amount: 600, totalAmount: 1000, remainingAmount: 600, totalPaid: 400, dueDate: '2026-05-01' },

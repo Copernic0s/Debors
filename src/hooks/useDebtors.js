@@ -6,6 +6,7 @@ import { normalizeWeekLabel, normalizeMatchKey } from '../utils/normalizers';
 import { normalizeBillingCycle } from '../constants/billingCycles';
 import { BILLING_CYCLES } from '../constants/billingCycles';
 import { centsToAmount, invoiceFinancials } from '../services/invoiceFinancials';
+import { canonicalActiveAgents } from '../constants/activeAgents';
 
 const mergeManualEdits = (rows, editsById) => {
   const editsByInvKey = new Map();
@@ -111,7 +112,8 @@ export const aggregateByCompany = (rows) => {
     const company = String(row.company || row.clientName || '').trim();
     if (!company) return;
 
-    const agent = String(row.agentId || 'Unassigned').trim() || 'Unassigned';
+    const agents = canonicalActiveAgents(row.agentId);
+    const agent = agents[0] || 'Unassigned';
     const rawInv = String(row.invoiceNumber || '').trim();
     const invKey = rawInv
       ? rawInv.toLowerCase().replace(/^inv[-_]*/i, '').replace(/^0+/, '').replace(/[^a-z0-9]/g, '')
@@ -139,7 +141,7 @@ export const aggregateByCompany = (rows) => {
         company,
         clientName: company,
         agentId: agent,
-        agentSet: new Set([agent]),
+        agentSet: new Set(agents),
         amount: 0,
         totalDue: 0,
         totalInvoiced: 0,
@@ -189,7 +191,7 @@ export const aggregateByCompany = (rows) => {
       if (row.invoiceNumber) current.invoiceCount += 1;
     }
     
-    current.agentSet.add(agent);
+    agents.forEach((agentName) => current.agentSet.add(agentName));
     
     const normalizedRowCycle = normalizeBillingCycle(row.billingCycle);
     if (normalizedRowCycle && normalizedRowCycle !== BILLING_CYCLES.UNSPECIFIED) {
@@ -315,7 +317,7 @@ export const aggregateByCompany = (rows) => {
       status,
       overallStatus,
       isAutoOverdue,
-      agentId: agents.join(', '),
+      agentId: agents.join(', ') || 'Unassigned',
       billingCycle: (item.billingCycle && item.billingCycle !== BILLING_CYCLES.UNSPECIFIED) 
         ? item.billingCycle 
         : (Array.from(item.cycleSet).find(c => c !== BILLING_CYCLES.UNSPECIFIED) || BILLING_CYCLES.UNSPECIFIED),
