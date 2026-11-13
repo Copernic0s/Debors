@@ -157,7 +157,7 @@ export const resolveAccessProfile = (user) => {
     canEditInvoiceDetails: isManager,
     canDownloadInvoices: !isViewer,
     canCommentOnly: !isManager,
-    canViewAllData: isManager,
+    canViewAllData: isManager || isViewer,
     canViewManagerAnalytics: !isViewer,
     canViewSupportTracker: false,
     canViewInvoiceEntry:

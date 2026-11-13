@@ -3,19 +3,20 @@ import { resolveAccessProfile, userCanAccessAgent } from './accessControl';
 import { isActiveAgent } from './activeAgents';
 
 describe('Guidiana read-only profile', () => {
-  it('limits the account to its portfolio and view-only sections/actions', () => {
+  it('shows all agents while keeping the account view-only', () => {
     const profile = resolveAccessProfile({ email: 'Guidiana.Puentes@theunitedtransports.com' });
 
     expect(profile.role).toBe('viewer');
     expect(profile.agentScope).toContain('guidiana puentes');
-    expect(profile.canViewAllData).toBe(false);
+    expect(profile.canViewAllData).toBe(true);
     expect(profile.canViewManagerAnalytics).toBe(false);
     expect(profile.canViewInvoiceEntry).toBe(false);
     expect(profile.canEditData).toBe(false);
     expect(profile.canDeleteData).toBe(false);
     expect(profile.canDownloadInvoices).toBe(false);
     expect(userCanAccessAgent(profile, 'Guidiana Puentes')).toBe(true);
-    expect(userCanAccessAgent(profile, 'Kevin Ruiz')).toBe(false);
+    expect(userCanAccessAgent(profile, 'Kevin Ruiz')).toBe(true);
+    expect(userCanAccessAgent(profile, 'SAN MIGUEL EXPRESS LLC')).toBe(true);
   });
 });
 

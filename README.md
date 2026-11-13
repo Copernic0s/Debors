@@ -27,7 +27,7 @@ El bootstrap limpio, config de Supabase local y contratos SQL están separados e
 
 El roster de agentes activos está en [config/active-agents.json](config/active-agents.json); el extractor y los filtros de Overview usan la misma lista. Los agentes fuera del roster quedan fuera de los filtros y no se usan para asignar nuevas filas CMP. Los registros existentes no se borran ni se reasignan automáticamente.
 
-La cuenta `guidiana.puentes@theunitedtransports.com` tiene perfil de solo lectura en la UI: Overview y Companies, sin Analytics, edición, borrado ni acciones de PDF. La cuenta aún debe existir/invitarse en Supabase Auth. Estas restricciones visuales no son una frontera de seguridad de datos: las políticas abiertas de lectura siguen activas hasta que estén completos el backfill de `agent_id` y los scopes verificados. No retirar las políticas abiertas todavía.
+La cuenta `guidiana.puentes@theunitedtransports.com` tiene perfil de billing de solo lectura en la UI: puede ver Overview y Companies para todos los agentes, pero no Analytics, edición, borrado ni acciones de PDF. La cuenta debe existir en Supabase Auth. Estas restricciones visuales no son una frontera de seguridad de datos: las políticas abiertas de lectura siguen activas hasta que estén completos el backfill de `agent_id` y los scopes verificados. Antes de activar RLS, provisionar y probar para ella el alcance de lectura de todos los agentes; no marcarla manager solo para ampliar visibilidad. No retirar las políticas abiertas todavía.
 
 Provisionar `agent_scopes` con usuarios y `agent_id` verificados; usar [supabase/agent_scopes.seed.example.sql](supabase/agent_scopes.seed.example.sql) solo como plantilla, nunca con datos de usuarios reales en Git.
 
