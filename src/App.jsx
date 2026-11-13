@@ -691,7 +691,7 @@ function App() {
         return next;
       });
     }
-  }, [accessProfile.canDownloadInvoices, cmpRunnerApiBase, loadData, refreshCmpData, supabase]);
+  }, [accessProfile.canDownloadInvoices, cmpRunnerApiBase, loadData, refreshCmpData]);
 
   useEffect(() => {
     const readyIds = [];
@@ -848,11 +848,15 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshCmpData, supabase]);
+  }, [refreshCmpData]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
+    const statusTimer = setInterval(() => setLastTick(Date.now()), 60_000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(statusTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -1301,7 +1305,7 @@ function App() {
   )).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
-    const today = new Date();
+    const today = new Date(lastTick);
     return accessibleData.map(row => {
       let status = row.status || 'pending';
       let isAutoOverdue = false;
