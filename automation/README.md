@@ -24,6 +24,10 @@ The runner generates a `run_id` and passes it to the extractor. Status JSON and 
 
 Every run carries an explicit `trigger` (`manual` or `scheduled`); `fast` is only a sync depth and does not imply scheduling. Manual login/MFA wait defaults to 300 seconds so an operator can complete MFA in Chrome. Scheduled-trigger runs default to 60 seconds and end with `mfa_required` or `session_expired`; MFA is never bypassed. `CMP_LOGIN_TIMEOUT_SECONDS` overrides either default. A max-pages result stays `incomplete` and records `scrape_truncated`.
 
+The invoicing URL requests 500 rows per page, so the current fast cap of five pages can expose up to 2,500 raw rows, unlike the earlier 10-row behavior. Do not assume fast is now complete or raise its cap based on that arithmetic alone; recalibrate using real page-size verification and representative run coverage before scheduling.
+
+CMP's table/log includes `last payment date`, `% of payment`, and `days after issue`, but the current extractor does not read them and the invoice schema has no last-payment-date field. For a future open-focused mode, keep all rows with a positive remaining balance regardless of age; use `last payment date` to select recently settled invoices. Validate parsing, null behavior, and whether CMP's status/balance controls alter pagination before implementing or activating a filtered mode. The invoice-date window currently remains the paid/closed fallback until that data contract is tested.
+
 The active agent roster lives in `config/active-agents.json` and is shared with the frontend filter. The CMP extractor ignores Zoho rows whose agent is not in that roster; blank or conflicting assignments stay unassigned. Company matching preserves legal suffixes so `RV TRANSPORT LLC` and `RV TRANSPORT INC` remain distinct. This does not delete historical rows or reassign companies owned by former agents.
 
 ## Environment variables
