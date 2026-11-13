@@ -6,7 +6,8 @@ const getBaseApiUrl = () => {
   }
 
   if (import.meta.env.DEV) {
-    return `http://${window.location.hostname}:3001/api/debtors`;
+    const hostname = typeof window === 'undefined' ? 'localhost' : window.location.hostname;
+    return `http://${hostname}:3001/api/debtors`;
   }
 
   return '/api/debtors';

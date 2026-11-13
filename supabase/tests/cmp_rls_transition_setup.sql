@@ -2,8 +2,13 @@ insert into auth.users (id, aud, role, email, encrypted_password, email_confirme
 values
   ('f6100000-0000-4000-8000-000000000001', 'authenticated', 'authenticated', 'f6-agent@test.invalid', '', now(), now(), now()),
   ('f6100000-0000-4000-8000-000000000002', 'authenticated', 'authenticated', 'f6-manager@test.invalid', '', now(), now(), now()),
-  ('f6100000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'f6-unscoped@test.invalid', '', now(), now(), now())
+  ('f6100000-0000-4000-8000-000000000003', 'authenticated', 'authenticated', 'f6-unscoped@test.invalid', '', now(), now(), now()),
+  ('f6100000-0000-4000-8000-000000000004', 'authenticated', 'authenticated', 'f6-billing-viewer@test.invalid', '', now(), now(), now())
 on conflict (id) do nothing;
+
+insert into public.cmp_billing_viewers (user_id)
+values ('f6100000-0000-4000-8000-000000000004')
+on conflict (user_id) do nothing;
 
 insert into public.agent_scopes (user_id, agent_id, is_manager)
 values ('f6100000-0000-4000-8000-000000000001', 'f6-agent-a', false);

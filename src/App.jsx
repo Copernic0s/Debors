@@ -670,7 +670,7 @@ function App() {
     setPdfBusyIds((prev) => ({ ...prev, [rowId]: true }));
     try {
       if (cmpRunnerApiBase) {
-        await requestCmpInvoicePdf(cmpRunnerApiBase, row);
+        await requestCmpInvoicePdf(supabase, cmpRunnerApiBase, row);
         toast.success('PDF request started');
       } else {
         await queueCmpInvoicePdf(supabase, row);

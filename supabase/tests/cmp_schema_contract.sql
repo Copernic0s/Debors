@@ -31,6 +31,11 @@ begin
     raise exception 'cmp_sync_runs table is missing';
   end if;
 
+  if to_regclass('public.cmp_billing_viewers') is null
+     or to_regprocedure('public.is_cmp_billing_viewer()') is null then
+    raise exception 'billing viewer access objects are missing';
+  end if;
+
   select column_default into current_default
   from information_schema.columns
   where table_schema = 'public'

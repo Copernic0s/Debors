@@ -77,17 +77,27 @@ export const openCmpInvoicePdf = async (supabase, row) => {
   window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 };
 
-export const requestCmpInvoicePdf = async (runnerApiBase, row) => {
+export const requestCmpInvoicePdf = async (supabase, runnerApiBase, row) => {
+  if (!supabase) {
+    throw new Error('Supabase client is required to authorize PDF requests');
+  }
   if (!runnerApiBase) {
     throw new Error('PDF fetching requires the local CMP runner');
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
+  if (sessionError || !accessToken) {
+    throw new Error('Please sign in again before requesting PDFs');
+  }
+
   const response = await fetch(`${runnerApiBase}/api/cmp/pdf`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`
+    },
     body: JSON.stringify({
-      invoiceNumber: row?.invoiceNumber,
-      companyName: row?.company || row?.clientName,
       invoiceId: row?.id
     })
   });
@@ -104,9 +114,9 @@ export const queueCmpInvoicePdf = async (supabase, row) => {
     throw new Error('Supabase client is required to queue PDF download');
   }
 
-  const invoiceNumber = String(row?.invoiceNumber || '').trim();
-  if (!invoiceNumber) {
-    throw new Error('Invoice number is required to queue PDF download');
+  const invoiceId = String(row?.id || '').trim();
+  if (!invoiceId) {
+    throw new Error('Invoice id is required to queue PDF download');
   }
 
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -121,7 +131,7 @@ export const queueCmpInvoicePdf = async (supabase, row) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`
     },
-    body: JSON.stringify({ invoiceNumber })
+    body: JSON.stringify({ invoiceId })
   });
 
   const payload = await response.json().catch(() => ({}));

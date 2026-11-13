@@ -13,6 +13,8 @@ The open production-equivalent policy identifiers are `cmp_invoices_read_authent
 
 `20261112213000_cmp_agent_rls.sql` is additive. PostgreSQL combines applicable permissive policies with OR, so the scoped policies do not narrow access while the open policies exist. Do not treat this migration as activation. `activate_agent_rls.sql` is a separately approved manual cutover and refuses to run until at least one manager scope exists. `rollback_agent_rls.sql` restores the open reads.
 
+`20261113120000_cmp_billing_viewer_access.sql` adds the separate `cmp_billing_viewers` role. A billing viewer can read all invoice rows after activation but is explicitly excluded from the PDF policy and PDF-request endpoints. Provision Guidiana with `activation/grant_guidiana_billing_viewer.sql`; this does not grant manager or agent scopes. Before the open policies are removed, direct Storage reads remain open by design, so this permission boundary is not effective until the manual activation is completed.
+
 ## Reconciliation scope
 
 The RPC `public.apply_cmp_sync_run` reconciles only rows satisfying all of these predicates:
@@ -39,16 +41,19 @@ At verification time, all 4,142 invoice rows had `is_current = true`, `agent_id`
 
 ## Remote rollout order (documentation only)
 
-The first four additive migration steps below are complete in the production project above. Do not run the remaining data provisioning or manual activation steps without a reviewed production change window. No remote SQL is applied by these instructions.
+The first four additive migration steps below are complete in the production project above. The billing-viewer migration is not yet applied. Do not run data provisioning or manual activation without a reviewed production change window. No remote SQL is applied by these instructions.
 
 1. Back up `cmp_invoices` to a dated backup table and verify its row count.
 2. Apply `20261112205608_cmp_invoice_financial_and_snapshot_fields.sql` (205608). It adds `agent_id`, financial columns, and snapshot fields; financial values use unbounded `numeric NOT NULL DEFAULT 0`.
 3. Apply `20261112213000_cmp_agent_rls.sql` (213000). It is additive and creates `agent_scopes`, helper functions, and scoped invoice/PDF policies. Open policies remain in place, so access does not narrow.
 4. Apply `20261112214000_cmp_snapshot_reconciliation.sql` (214000). It uses `agent_id` introduced by 205608; it does not depend on `agent_scopes` or helper functions created only by 213000. Applying 213000 first is still the documented rollout order so the scoped policies are ready before activation.
-5. Seed `agent_scopes` and verify at least one correct `is_manager = true` user before activation.
-6. Backfill `agent_id` using a dry-run first; verify the number of null, ambiguous, and changed rows before writing.
-7. Run the RPC dry-run for a representative complete snapshot. Review would-close count, total outstanding amount, paid/non-paid breakdown, cutoff, and scope. Abort if the result is unexpected.
-8. After a complete, non-truncated sync and access review, manually run `activation/activate_agent_rls.sql`. This removes only the two open policies. Verify the final policy listing and test agent, manager, unscoped-user, invoice, and PDF access.
-9. Keep `activation/rollback_agent_rls.sql` ready. Run it manually to restore authenticated open reads if access is incorrect; verify the policy listing afterward.
+5. Apply `20261113120000_cmp_billing_viewer_access.sql`; provision Guidiana with `activation/grant_guidiana_billing_viewer.sql` and verify the returned account. This grants all invoice reads only after activation, not PDF access.
+6. Seed `agent_scopes` and verify at least one correct `is_manager = true` user before activation.
+7. Backfill `agent_id` using a dry-run first; verify the number of null, ambiguous, and changed rows before writing.
+8. Run the RPC dry-run for a representative complete snapshot. Review would-close count, total outstanding amount, paid/non-paid breakdown, cutoff, and scope. Abort if the result is unexpected.
+9. After a complete, non-truncated sync and access review, manually run `activation/activate_agent_rls.sql`. This removes only the two open policies. Verify that Guidiana can read invoices but not PDFs, agents see only assigned invoices/PDFs, managers see all, and unscoped users see none.
+10. Keep `activation/rollback_agent_rls.sql` ready. Run it manually to restore authenticated open reads if access is incorrect; verify the policy listing afterward. This rollback reopens PDF reads to all authenticated users.
+
+The PDF request endpoint requires a valid Supabase access token and authorizes the exact invoice against `agent_scopes`; billing viewers are denied. The local runner uses the same check, and its queue-inspection endpoint is manager-only. Direct signed Storage URLs still depend on the active Storage RLS policy, so deployment of code alone does not close the currently open direct-read path.
 
 Never run the activation script before manager and agent scopes and the `agent_id` backfill have been verified. The migration itself intentionally does not activate agent isolation.
