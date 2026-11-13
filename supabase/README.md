@@ -31,9 +31,15 @@ Reconciliation also requires `status = complete`, `truncated = false`, `rows_ext
 
 Dry-run (`p_dry_run = true`) performs no writes and returns `rowsThatWouldClose`, `amountThatWouldClose` (sum of `coalesce(remaining_amount, amount, 0)`), counts and amounts split into paid and non-paid rows, plus eligibility, scope size, cutoff, and skip reason.
 
+## Production status
+
+As of 2026-11-12, migrations `20261112000000`, `20261112205608`, `20261112213000`, and `20261112214000` are applied to `Copernic0s's Project`. The original backup `cmp_invoices_backup_20261112` and live table both contain 4,142 rows. The open authenticated invoice and PDF policies remain in place alongside the scoped policies; this rollout did not activate agent isolation.
+
+At verification time, all 4,142 invoice rows had `is_current = true`, `agent_id` was null on all rows, `agent_scopes` was empty with no manager, and `cmp_sync_runs` had just been created. Do not activate agent RLS or run reconciliation until ownership mappings are verified, scopes (including a manager) are seeded, and `agent_id` backfill and reconciliation dry-runs have been reviewed. The reconciliation RPC is executable only by `service_role`.
+
 ## Remote rollout order (documentation only)
 
-Do not run this sequence without a reviewed production change window. No remote SQL is applied by these instructions.
+The first four additive migration steps below are complete in the production project above. Do not run the remaining data provisioning or manual activation steps without a reviewed production change window. No remote SQL is applied by these instructions.
 
 1. Back up `cmp_invoices` to a dated backup table and verify its row count.
 2. Apply `20261112205608_cmp_invoice_financial_and_snapshot_fields.sql` (205608). It adds `agent_id`, financial columns, and snapshot fields; financial values use unbounded `numeric NOT NULL DEFAULT 0`.
