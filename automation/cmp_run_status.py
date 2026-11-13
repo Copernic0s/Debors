@@ -19,6 +19,7 @@ def write_run_status(
     pages_scraped: int | None = None,
     truncated: bool | None = None,
     persisted: bool = False,
+    failure_reason: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     previous: dict[str, Any] = {}
@@ -48,6 +49,7 @@ def write_run_status(
         "pagesScraped": pages_scraped,
         "truncated": truncated,
         "persisted": persisted,
+        "failureReason": failure_reason,
         "updatedAt": timestamp,
         "lastSuccessfulSync": last_success,
         "lastRunError": last_error,

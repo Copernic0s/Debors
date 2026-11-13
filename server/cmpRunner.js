@@ -198,6 +198,7 @@ const createCmpRunner = ({
       page: usableStatus?.page || 0,
       invoicesFound: usableStatus?.invoicesFound || 0,
       error: usableStatus?.error || null,
+      failureReason: usableStatus?.failureReason || null,
       runStatus: usableStatus?.runStatus || null,
       updatedAt: usableStatus?.updatedAt || null,
       lastSuccessfulSync,

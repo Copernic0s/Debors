@@ -217,6 +217,11 @@ export default function CmpSyncPanel({
           ? 'Sync All: refreshing Zoho, then CMP scraper runs in Chrome.'
           : cmpStatus?.message || 'Chrome runs in the background. Status updates every few seconds.'}
       </Message>
+      {cmpStatus?.failureReason && (
+        <Message role="alert" style={{ color: 'var(--danger)' }}>
+          Run reason: <strong>{cmpStatus.failureReason}</strong>
+        </Message>
+      )}
 
       <SyncSection>
         <SyncLabel>Trigger Sync Depth:</SyncLabel>

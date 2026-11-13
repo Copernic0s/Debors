@@ -82,6 +82,7 @@ test('starting a run resets live progress and isolates status and logs by run id
     assert.deepEqual(result, { started: true, runId: 'run-1' });
     assert.equal(status.phase, 'starting');
     assert.equal(status.error, null);
+    assert.equal(status.failureReason, null);
     assert.equal(status.page, 0);
     assert.equal(status.invoicesFound, 0);
     assert.equal(status.runId, 'run-1');

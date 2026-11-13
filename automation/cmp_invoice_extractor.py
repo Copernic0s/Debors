@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 from cmp_agent_scope import ACTIVE_AGENT_NAMES, build_company_agent_map, normalize_company
 from cmp_invoice_window import should_keep_invoice
+from cmp_page_size import page_size_matches, requested_page_size
 from cmp_scrape_completion import classify_scrape_completion
 from cmp_run_status import write_run_status
 
@@ -122,6 +123,7 @@ def write_status(
     pages_scraped: int | None = None,
     truncated: bool | None = None,
     persisted: bool = False,
+    failure_reason: str | None = None,
 ) -> None:
     write_run_status(
         STATUS_PATH,
@@ -137,6 +139,7 @@ def write_status(
         pages_scraped=pages_scraped,
         truncated=truncated,
         persisted=persisted,
+        failure_reason=failure_reason,
     )
 
 
@@ -331,6 +334,82 @@ def wait_for_invoicing_table(driver: WebDriver) -> None:
                 
             last_row_count = current_count
         time.sleep(2)
+
+
+class CmpRunFailure(RuntimeError):
+    def __init__(self, reason: str, message: str):
+        super().__init__(message)
+        self.reason = reason
+
+
+def verify_invoicing_page_size(driver: WebDriver, requested: int) -> bool:
+    snapshot = driver.execute_script(
+        """
+        const visible = (el) => {
+          const style = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const pattern = /\\b\\d+\\s*[-–—]\\s*\\d+\\s+of\\s+[\\d,]+/i;
+        const pagination = [...document.querySelectorAll('body *')]
+          .map((el) => (el.innerText || el.textContent || '').trim())
+          .filter((text) => text.length < 120 && pattern.test(text))
+          .sort((a, b) => a.length - b.length)[0] || '';
+        const controls = [...document.querySelectorAll('select, [role="combobox"]')]
+          .filter(visible)
+          .map((el) => {
+            const parent = el.closest('label') || el.parentElement;
+            const selected = el.selectedOptions?.[0]?.textContent || el.innerText || el.value || '';
+            const context = [el.getAttribute('aria-label') || '', parent?.innerText || ''].join(' ').trim();
+            return { selected: selected.trim(), context };
+          })
+          .filter((item) => /per page|rows per page|items per page|page size/i.test(item.context));
+        const table = document.querySelector('table, [role="table"]');
+        const rawRows = table ? table.querySelectorAll('tbody tr, [role="row"]:not([role="columnheader"])').length : 0;
+        return { url: window.location.href, pagination, controls, rawRows };
+        """
+    )
+    selected_sizes = []
+    for control in snapshot.get("controls", []):
+        match = re.search(r"\b(\d+)\b", control.get("selected", ""))
+        if match:
+            selected_sizes.append(int(match.group(1)))
+    raw_rows = int(snapshot.get("rawRows") or 0)
+    valid = page_size_matches(
+        requested,
+        url=str(snapshot.get("url") or safe_current_url(driver)),
+        pagination_text=str(snapshot.get("pagination") or ""),
+        selected_sizes=tuple(selected_sizes),
+        raw_rows=raw_rows,
+    )
+    logging.info(
+        "Invoicing page-size check: requested=%d url=%s selected=%s raw_rows=%d pagination=%s valid=%s",
+        requested,
+        snapshot.get("url"),
+        selected_sizes,
+        raw_rows,
+        snapshot.get("pagination"),
+        valid,
+    )
+    return valid
+
+
+def ensure_invoicing_page_size(driver: WebDriver, requested: int) -> None:
+    for attempt in range(2):
+        wait_for_invoicing_table(driver)
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if verify_invoicing_page_size(driver, requested):
+                return
+            time.sleep(1)
+        if attempt == 0:
+            logging.warning("Requested page size was not active after navigation; retrying canonical invoicing URL.")
+            goto_invoicing_page(driver, 1)
+            continue
+    raise CmpRunFailure(
+        "unexpected_page_size",
+        f"CMP did not honor the requested {requested}-row page size after one retry; no invoice snapshot was ingested.",
+    )
 
 
 def resolve_column_index(headers: list[str], candidates: tuple[str, ...]) -> int | None:
@@ -627,6 +706,11 @@ def scrape_global_invoices(
     end_reason = "incomplete"
 
     navigate_to_invoicing(driver)
+    requested_size = requested_page_size(INVOICING_URL)
+    wait_for_invoicing_table(driver)
+    clear_visible_table_filters(driver)
+    wait_for_invoicing_table(driver)
+    ensure_invoicing_page_size(driver, requested_size)
 
     for page in range(1, MAX_PAGES + 1):
         write_status(
@@ -637,10 +721,6 @@ def scrape_global_invoices(
             invoices_found=len(results),
         )
         wait_for_invoicing_table(driver)
-        if page == 1:
-            clear_visible_table_filters(driver)
-            wait_for_invoicing_table(driver)
-
         tables = driver.find_elements(By.CSS_SELECTOR, "table, [role='table']")
         if not tables:
             break
@@ -917,6 +997,7 @@ def main() -> int:
             phase="error",
             message="CMP sync failed",
             error=str(error),
+            failure_reason=getattr(error, "reason", None),
             run_status="failed",
             pages_scraped=pages_scraped,
             truncated=False,

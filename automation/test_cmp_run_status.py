@@ -91,6 +91,20 @@ class CmpRunStatusTests(unittest.TestCase):
             "message": "ingest unavailable",
         })
 
+    def test_failed_run_exposes_structured_failure_reason(self):
+        status = write_run_status(
+            self.status_path,
+            run_id="wrong-page-size",
+            running=False,
+            phase="error",
+            message="Could not verify page size",
+            error="CMP did not honor limit=500",
+            failure_reason="unexpected_page_size",
+            run_status="failed",
+            now=self.now,
+        )
+        self.assertEqual(status["failureReason"], "unexpected_page_size")
+
 
 if __name__ == "__main__":
     unittest.main()
