@@ -1,25 +1,28 @@
 # Debors Project Progress
 
-Ultima actualizacion: 2026-11-12
+Ultima actualizacion: 2026-11-13
 
 ## Estado
 
-- La app React/Vite y el backend local CMP estan configurados para ejecutarse en `localhost:5173` y `localhost:3001`.
-- Zoho entrega 475 filas de `Client BY agent`, equivalentes a 443 nombres de compania distintos en la lectura de esta sesion.
-- CMP se scrapea desde Chrome local, se filtra por el portafolio de Zoho y se persiste en Supabase al terminar el recorrido.
-- En la ultima comprobacion de esta sesion el scraper seguia activo en pagina 56 con 1,360 facturas extraidas; ese progreso no confirma que el run haya terminado o se haya persistido.
-- La revision tecnica completa y el backlog con criterios de aceptacion estan en [docs/debors-project-flow-and-findings.md](docs/debors-project-flow-and-findings.md).
+- Rama de trabajo: `codex/db-fidelity-and-activation`; los cambios revisados aun no estan integrados en `main`/`master`.
+- En produccion se aplicaron las cuatro migraciones aditivas segun la verificacion read-only del 2026-11-12; no se activo RLS por agente.
+- Ultimo estado remoto documentado: 4,142 invoices vigentes, `agent_id` nulo en 4,142, `agent_scopes` vacia y politicas abiertas de lectura activas.
+- Roster actual: 10 agentes. El dry-run previo mapeo 3,999/4,142 filas CMP; 143 filas de 18 nombres siguen sin una asignacion activa unica. No se hizo backfill.
+- Guidiana tiene un perfil UI de billing solo lectura para todas las companias. Andres reporta que su usuario fue agregado a Supabase Auth; la sesion real aun no se ha verificado.
+- No tratar el perfil como aislamiento de datos: las restricciones de acciones estan en la UI y las politicas de invoices/PDFs siguen abiertas para usuarios autenticados.
+- La revision local mas reciente pasa frontend, backend, Python, lint (sin errores) y build. Los contratos SQL no se pudieron reejecutar en esta revision porque Docker Desktop no esta activo.
+- La revision tecnica completa y el backlog anterior estan en [docs/debors-project-flow-and-findings.md](docs/debors-project-flow-and-findings.md).
 
 ## Prioridad inmediata
 
 - [x] P1: leer todas las facturas CMP; paginacion Supabase de hasta 1,000 por peticion, conteo exacto y rechazo de lecturas incompletas.
 - [x] P1: conciliar importe original, total pagado y saldo restante en agregados y detalle (aritmetica en centavos y aviso de discrepancias).
 - [x] P1: ordenar invoices por fecha y asegurar que el perfil no esconda CMP por el filtro de semana.
-- [ ] P1: activar acceso por agente en remoto requiere provisionar scopes reales y decision del owner. La RLS local agente/manager/sin scope ya se prueba en `codex/db-baseline`.
+- [ ] P1: antes de afirmar permisos reales para Guidiana, proteger tambien las rutas directas de API/storage; los botones ocultos no aplican autorizacion backend.
+- [ ] P1: activar acceso por agente en remoto requiere backfill validado, provisionar scopes reales (incluido manager) y decision del owner. 143 CMP rows siguen sin asignacion activa unica.
 - [x] P1: F4 SQL local: bootstrap limpio, migraciones F1-F4 y contratos de esquema/RLS/reconciliacion pasan con Supabase local; no aplicar migracion remota.
-- [ ] P1: activar acceso por agente en remoto requiere provisionar scopes reales y decision del owner. RLS agente/manager/sin scope pasa en baseline local `codex/db-baseline`.
 - [x] P1: F4 snapshot SQL, dry-run, esquema limpio y contratos de reconciliacion pasan en Supabase local aislado (`codex/db-baseline`); no aplicar a remoto sin aprobacion.
-- [x] P1: reflejar en SQL las columnas financieras usadas por ingest (migracion creada; no aplicada a Supabase remoto).
+- [x] P1: reflejar en SQL las columnas financieras usadas por ingest (migracion aplicada en el proyecto remoto segun la verificacion del 2026-11-12).
 - [x] P1: hacer que ingest falle cerrado si falta `CMP_INGEST_SECRET` (backend requiere secreto de 32 bytes o mas al reiniciar).
 - [x] P1: D1 confirmado: conservar todos los saldos abiertos y limitar por fecha solo invoices pagadas; F4 cambia el filtro del extractor y agrega tests.
 - [x] P2: T9 perfil por fecha desc y CMP excluido del filtro semanal; pruebas agregadas.
@@ -60,3 +63,4 @@ Ultima actualizacion: 2026-11-12
 | 2026-11-12 | Filtros complementarios de agentes activos aplicados tambien en Support Tracker y Manager Analytics, sin ocultar facturas ni afectar los totales globales. | Frontend 32/32, build OK (warning bundle >500 kB); lint focalizado 0 errores/3 warnings preexistentes. Guidiana requiere invitacion en Supabase Auth; acceso de lectura sigue siendo una restriccion de UI mientras las politicas abiertas esten activas. |
 | 2026-11-13 | Guidiana pasa de cartera individual a viewer de billing con lectura de todas las companias/agentes; no obtiene Analytics ni acciones de escritura/descarga. | Frontend 32/32, build y lint focalizado pasan; login local disponible para prueba manual (sesion Guidiana aun no verificada). Produccion/RLS sin cambios; antes de activar aislamiento por agente hay que provisionar y probar alcance de lectura para todos los agentes sin elevar permisos de UI. |
 | 2026-11-13 | Duplicados del roster consolidados a nombres canonicos en filtros de agentes y Sales Rep del Debtor List; asignaciones fuera del roster se ocultan de esa etiqueta, sin borrar companias ni saldos. | Frontend 33/33, build OK (warning bundle >500 KB), lint focalizado 0 errores/3 warnings existentes. Casos de prueba cubren Hector con/sin tilde y agente fuera del roster. |
+| 2026-11-13 | Revision preproduccion: corregidos defaults financieros NaN en ingest Node y serverless; lint de Node configurado y agregado a CI. | Frontend 34/34, server 21/21, Python 15/15, build OK; `npm run lint` 0 errores/4 warnings de hooks. SQL no reejecutado: Docker engine no disponible. Bloqueos: RLS/API/PDF no aplican permisos de viewer; 143 filas sin mapeo y login real pendiente. |
