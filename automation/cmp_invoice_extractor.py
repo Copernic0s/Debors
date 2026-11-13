@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
-from cmp_agent_scope import build_company_agent_map, normalize_company
+from cmp_agent_scope import ACTIVE_AGENT_NAMES, build_company_agent_map, normalize_company
 from cmp_invoice_window import should_keep_invoice
 from cmp_scrape_completion import classify_scrape_completion
 from cmp_run_status import write_run_status
@@ -234,7 +234,7 @@ def load_portfolio_scope() -> tuple[set[str], dict[str, str | None]]:
         company = str(row[company_col]).strip()
         agent = row[agent_col] if agent_col else ""
         scope_entries.append((company, agent))
-    agents_by_company = build_company_agent_map(scope_entries)
+    agents_by_company = build_company_agent_map(scope_entries, ACTIVE_AGENT_NAMES)
     keys = set(agents_by_company)
     logging.info(
         "Portfolio loaded: %d companies from '%s'; %d scoped, %d ambiguous/unassigned.",

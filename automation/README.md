@@ -22,6 +22,8 @@ Set `CMP_INGEST_DRY_RUN=true` for a read-only preview. It still needs the extrac
 
 The runner generates a `run_id` and passes it to the extractor. Status JSON and log lines/files are associated with that run. Starting a new run resets live phase, error, page and row progress. The UI keeps `Last successful sync` separate from `Last run error`. Status older than `STATUS_MAX_AGE_MIN` (default 60 minutes), or belonging to another active `run_id`, is ignored as live progress.
 
+The active agent roster lives in `config/active-agents.json` and is shared with the frontend filter. The CMP extractor ignores Zoho rows whose agent is not in that roster; blank or conflicting assignments stay unassigned. Company matching preserves legal suffixes so `RV TRANSPORT LLC` and `RV TRANSPORT INC` remain distinct. This does not delete historical rows or reassign companies owned by former agents.
+
 ## Environment variables
 
 | Variable | Purpose | Default |
