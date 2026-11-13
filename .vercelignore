@@ -1,0 +1,13 @@
+.git
+.vercel
+node_modules
+dist
+.env*
+!.env.example
+!server/.env.example
+automation/chrome_user_data
+automation/__pycache__
+automation/*.pyc
+automation/cmp_status.json
+automation/cmp_status.log
+automation/cmp_run_status.json
