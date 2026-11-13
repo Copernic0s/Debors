@@ -95,5 +95,14 @@ begin
   ) then
     raise exception 'cmp_sync_runs.id is missing';
   end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'cmp_sync_runs'
+      and column_name = 'failure_reason'
+  ) then
+    raise exception 'cmp_sync_runs.failure_reason is missing';
+  end if;
 end;
 $$;

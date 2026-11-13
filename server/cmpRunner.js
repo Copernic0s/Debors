@@ -31,7 +31,7 @@ const writeStatusFile = (fileSystem, statusPath, status) => {
   fileSystem.renameSync(temporaryPath, statusPath);
 };
 
-const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString()) => {
+const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString(), trigger = 'manual') => {
   const mode = depth === 'standard' ? 'normal' : ['fast', 'normal', 'deep'].includes(depth) ? depth : 'fast';
   const settings = {
     fast: { historyDays: '15', maxPages: '5', isFastSync: 'true' },
@@ -41,6 +41,7 @@ const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().t
 
   return {
     mode,
+    trigger: ['manual', 'scheduled'].includes(trigger) ? trigger : 'manual',
     runId,
     startedAt,
     historyDays: settings.historyDays,
@@ -98,6 +99,7 @@ const createCmpRunner = ({
     running: true,
     phase: 'starting',
     message: 'CMP run starting...',
+    trigger: runConfig.trigger,
     page: 0,
     invoicesFound: 0,
     error: null,
@@ -188,6 +190,7 @@ const createCmpRunner = ({
       statusMaxAgeMin,
       running,
       runId: usableStatus?.runId || latestRun?.runId || null,
+      trigger: usableStatus?.trigger || latestRun?.trigger || null,
       lastRunIsStale: Boolean(fileStatus && !usableStatus && (!running || !belongsToActiveRun)),
       startedAt,
       lastExitAt,
@@ -215,7 +218,7 @@ const createCmpRunner = ({
     return content.split(/\r?\n/).slice(-lines).join('\n');
   };
 
-  const startCmpScraper = (depth = 'fast') => {
+  const startCmpScraper = (depth = 'fast', trigger = 'manual') => {
     if (cmpChild && cmpChild.exitCode === null) {
       return { started: false, reason: 'already_running' };
     }
@@ -224,7 +227,7 @@ const createCmpRunner = ({
     }
     refreshHistory(readStatusFile(fileSystem, statusPath));
 
-    const runConfig = buildCmpRunConfig(depth, makeRunId(), now().toISOString());
+    const runConfig = buildCmpRunConfig(depth, makeRunId(), now().toISOString(), trigger);
     latestRun = runConfig;
     startedAt = runConfig.startedAt;
     lastExitCode = null;
@@ -241,6 +244,10 @@ const createCmpRunner = ({
       CMP_MAX_PAGES: runConfig.maxPages,
       CMP_FAST_SYNC: runConfig.isFastSync,
       CMP_SYNC_MODE: runConfig.mode,
+      CMP_RUN_TRIGGER: runConfig.trigger,
+      CMP_LOGIN_TIMEOUT_SECONDS: runConfig.trigger === 'scheduled'
+        ? (env.CMP_SCHEDULED_LOGIN_TIMEOUT_SECONDS || '60')
+        : (env.CMP_MANUAL_LOGIN_TIMEOUT_SECONDS || '300'),
       CMP_RUN_ID: runConfig.runId,
       CMP_PARENT_RUN_ID: runConfig.runId,
       CMP_RUN_STARTED_AT: runConfig.startedAt,

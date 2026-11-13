@@ -22,6 +22,8 @@ Set `CMP_INGEST_DRY_RUN=true` for a read-only preview. It still needs the extrac
 
 The runner generates a `run_id` and passes it to the extractor. Status JSON and log lines/files are associated with that run. Starting a new run resets live phase, error, page and row progress. The UI keeps `Last successful sync` separate from `Last run error`. Status older than `STATUS_MAX_AGE_MIN` (default 60 minutes), or belonging to another active `run_id`, is ignored as live progress.
 
+Every run carries an explicit `trigger` (`manual` or `scheduled`); `fast` is only a sync depth and does not imply scheduling. Manual login/MFA wait defaults to 300 seconds so an operator can complete MFA in Chrome. Scheduled-trigger runs default to 60 seconds and end with `mfa_required` or `session_expired`; MFA is never bypassed. `CMP_LOGIN_TIMEOUT_SECONDS` overrides either default. A max-pages result stays `incomplete` and records `scrape_truncated`.
+
 The active agent roster lives in `config/active-agents.json` and is shared with the frontend filter. The CMP extractor ignores Zoho rows whose agent is not in that roster; blank or conflicting assignments stay unassigned. Company matching preserves legal suffixes so `RV TRANSPORT LLC` and `RV TRANSPORT INC` remain distinct. This does not delete historical rows or reassign companies owned by former agents.
 
 ## Environment variables
@@ -36,6 +38,10 @@ The active agent roster lives in `config/active-agents.json` and is shared with 
 | `CMP_HISTORY_DAYS` | Paid/closed invoice history window; runner sets by mode | `15` / `120` / `365` |
 | `CMP_MAX_PAGES` | Pagination safety limit; reaching it marks the run truncated | runner sets by mode |
 | `CMP_SYNC_MODE` | Run coverage label (`fast`, `normal`, `deep`) | runner sets it |
+| `CMP_RUN_TRIGGER` | Why the run started (`manual`, `scheduled`) | `manual` |
+| `CMP_LOGIN_TIMEOUT_SECONDS` | Login/MFA wait for this run | 300 manual / 60 scheduled |
+| `CMP_MANUAL_LOGIN_TIMEOUT_SECONDS` | Runner override for manual login wait | `300` |
+| `CMP_SCHEDULED_LOGIN_TIMEOUT_SECONDS` | Runner override for scheduled login wait | `60` |
 | `CMP_USER_DATA_DIR`, `CMP_PROFILE_DIR` | Chrome profile when not attaching to a debugger | workstation-specific |
 | `CMP_DEBUGGER_ADDRESS` | Existing Chrome remote-debugging address | optional |
 

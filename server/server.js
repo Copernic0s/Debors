@@ -461,7 +461,11 @@ app.post('/api/cmp/run', (req, res) => {
 
   try {
     const depth = req.body?.depth || 'fast';
-    const result = startCmpScraper(depth);
+    const trigger = req.body?.trigger || 'manual';
+    if (!['manual', 'scheduled'].includes(trigger)) {
+      return res.status(400).json({ error: 'CMP trigger must be manual or scheduled' });
+    }
+    const result = startCmpScraper(depth, trigger);
     if (!result.started) {
       return res.status(409).json({ error: 'CMP scraper is already running' });
     }

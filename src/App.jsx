@@ -624,7 +624,7 @@ function App() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ depth })
+      body: JSON.stringify({ depth, trigger: 'manual' })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

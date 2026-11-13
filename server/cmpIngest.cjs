@@ -45,7 +45,7 @@ const mapCmpInvoiceRows = (invoices, runId, syncedAt) => (invoices || [])
 
 const ingestCmpSnapshot = async ({
   invoices = [], syncRunId, startedAt, runStatus, mode, pagesScraped,
-  rowsExtracted, truncated, cutoffDate, scopeAgentIds, dryRun = false
+  rowsExtracted, truncated, cutoffDate, scopeAgentIds, dryRun = false, failureReason
 }) => {
   const supabaseUrl = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const serviceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
@@ -96,10 +96,25 @@ const ingestCmpSnapshot = async ({
   });
   if (error) throw new Error(`CMP snapshot transaction failed: ${error.message}`);
 
+  let failureReasonPersisted = null;
+  if (failureReason) {
+    const { error: reasonError } = await supabase
+      .from('cmp_sync_runs')
+      .update({ failure_reason: String(failureReason) })
+      .eq('id', runId);
+    if (reasonError) {
+      console.warn('[CMP Ingest] Could not persist failure_reason; apply the additive cmp_sync_runs migration before deployment.');
+      failureReasonPersisted = false;
+    } else {
+      failureReasonPersisted = true;
+    }
+  }
+
   return {
     syncRunId: runId,
     count: dryRun === true ? 0 : rows.length,
     syncedAt,
+    failureReasonPersisted,
     ...data
   };
 };

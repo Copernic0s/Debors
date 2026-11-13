@@ -219,7 +219,12 @@ export default function CmpSyncPanel({
       </Message>
       {cmpStatus?.failureReason && (
         <Message role="alert" style={{ color: 'var(--danger)' }}>
-          Run reason: <strong>{cmpStatus.failureReason}</strong>
+          Run reason: <strong>{{
+            session_expired: 'CMP session expired',
+            mfa_required: 'MFA is required in Chrome',
+            unexpected_page_size: 'CMP loaded an unexpected page size',
+            scrape_truncated: 'Scrape reached its page limit; snapshot was not reconciled'
+          }[cmpStatus.failureReason] || cmpStatus.failureReason}</strong>
         </Message>
       )}
 

@@ -19,6 +19,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 from cmp_agent_scope import ACTIVE_AGENT_NAMES, build_company_agent_map, normalize_company
+from cmp_auth import classify_auth_timeout, login_timeout_seconds
 from cmp_invoice_window import should_keep_invoice
 from cmp_page_size import page_size_matches, requested_page_size
 from cmp_scrape_completion import classify_scrape_completion
@@ -81,6 +82,9 @@ STATUS_PATH = ROOT_DIR / "automation" / "cmp_status.json"
 LOG_PATH = Path(os.getenv("CMP_LOG_PATH", str(ROOT_DIR / "automation" / "cmp_invoice_extractor.log")))
 RUN_ID = os.getenv("CMP_RUN_ID", "")
 PARENT_RUN_ID = os.getenv("CMP_PARENT_RUN_ID", "")
+RUN_TRIGGER = os.getenv("CMP_RUN_TRIGGER", "manual").strip().lower()
+if RUN_TRIGGER not in {"manual", "scheduled"}:
+    RUN_TRIGGER = "manual"
 
 
 @dataclass
@@ -140,6 +144,7 @@ def write_status(
         truncated=truncated,
         persisted=persisted,
         failure_reason=failure_reason,
+        trigger=RUN_TRIGGER,
     )
 
 
@@ -480,12 +485,14 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
         logging.warning("driver.get failed, trying in-page navigation: %s", error)
         driver.execute_script("window.location.assign(arguments[0]);", INVOICING_URL)
 
-    manual_timeout = int(os.getenv("CMP_MANUAL_LOGIN_TIMEOUT_SECONDS", "300"))
+    login_timeout = login_timeout_seconds(RUN_TRIGGER, os.getenv("CMP_LOGIN_TIMEOUT_SECONDS"))
     start = time.time()
     last_status_at = 0.0
+    observed_urls: list[str] = []
 
-    while time.time() - start < manual_timeout:
+    while time.time() - start < login_timeout:
         url = safe_current_url(driver)
+        observed_urls.append(url)
         if "/invoicing" in url and "/auth" not in url:
             logging.info("Invoicing page ready: %s", url)
             write_status(
@@ -503,21 +510,20 @@ def navigate_to_invoicing(driver: WebDriver) -> None:
         now = time.time()
         if now - last_status_at >= 5:
             elapsed = int(now - start)
-            hint = "log in on the Chrome window" if "/auth" in url else "waiting for invoicing table"
+            hint = "complete login or MFA in Chrome" if "/auth" in url else "waiting for invoicing table"
             write_status(
                 running=True,
                 phase="navigate",
-                message=f"Waiting for invoicing ({elapsed}s) — {hint}. URL: {url[:80]}",
+                message=f"Waiting for invoicing ({elapsed}s) of {login_timeout}s — {hint}. URL: {url[:80]}",
             )
             logging.info("Waiting for invoicing (%ss): %s", elapsed, url)
             last_status_at = now
 
         time.sleep(1)
 
-    raise TimeoutException(
-        f"Timed out after {manual_timeout}s waiting for CMP invoicing. "
-        "Open Chrome Profile 8 on the invoicing page while logged in."
-    )
+    reason = classify_auth_timeout(observed_urls)
+    message = "CMP MFA was not completed" if reason == "mfa_required" else "CMP authentication did not reach invoicing"
+    raise CmpRunFailure(reason, f"{message} within {login_timeout} seconds.")
 
 
 def build_invoicing_page_url(page: int) -> str:
@@ -884,6 +890,7 @@ def post_ingest(
     cutoff_date: datetime,
     scope_agent_ids: list[str],
     started_at: str,
+    failure_reason: str | None = None,
 ) -> dict[str, Any] | None:
     if not INGEST_URL:
         logging.warning("CMP_INGEST_URL not set; skipping upload.")
@@ -915,6 +922,8 @@ def post_ingest(
             "cutoffDate": cutoff_date.date().isoformat(),
             "scopeAgentIds": scope_agent_ids,
             "dryRun": dry_run,
+            "failureReason": failure_reason,
+            "trigger": RUN_TRIGGER,
         },
         timeout=120,
     )
@@ -957,6 +966,7 @@ def main() -> int:
             cutoff_date=cutoff,
             scope_agent_ids=scope_agent_ids,
             started_at=started_at,
+            failure_reason="scrape_truncated" if scrape_result.truncated else None,
         )
         final_message = (
             f"Dry run: {ingest_result.get('rowsThatWouldClose', 0)} rows would be closed."
@@ -972,6 +982,7 @@ def main() -> int:
             pages_scraped=pages_scraped,
             truncated=scrape_result.truncated,
             persisted=bool(ingest_result and not ingest_result.get("dryRun")),
+            failure_reason="scrape_truncated" if scrape_result.truncated else None,
         )
         logging.info("CMP run %s finished: %d invoices, %d pages, complete=%s, truncated=%s, ingest=%s",
                      sync_run_id, len(invoices), pages_scraped, scrape_result.complete,
@@ -989,6 +1000,7 @@ def main() -> int:
                 cutoff_date=cutoff,
                 scope_agent_ids=scope_agent_ids,
                 started_at=started_at,
+                failure_reason=getattr(error, "reason", None),
             )
         except Exception:
             logging.warning("Could not persist failed CMP run metadata.")

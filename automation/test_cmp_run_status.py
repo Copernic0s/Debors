@@ -37,6 +37,7 @@ class CmpRunStatusTests(unittest.TestCase):
         )
 
         self.assertEqual(status["runId"], "new-run")
+        self.assertEqual(status["trigger"], "manual")
         self.assertIsNone(status["error"])
         self.assertEqual(status["page"], 0)
         self.assertEqual(status["invoicesFound"], 0)
@@ -100,10 +101,12 @@ class CmpRunStatusTests(unittest.TestCase):
             message="Could not verify page size",
             error="CMP did not honor limit=500",
             failure_reason="unexpected_page_size",
+            trigger="scheduled",
             run_status="failed",
             now=self.now,
         )
         self.assertEqual(status["failureReason"], "unexpected_page_size")
+        self.assertEqual(status["trigger"], "scheduled")
 
 
 if __name__ == "__main__":

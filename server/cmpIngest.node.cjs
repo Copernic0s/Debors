@@ -130,6 +130,46 @@ test('dry-run sends the snapshot to the preview RPC and performs no table write'
   }
 });
 
+test('missing failure_reason column does not turn the registered run into an ingest failure', async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFetch = global.fetch;
+  const previousWarn = console.warn;
+  let patchAttempted = false;
+  process.env.SUPABASE_URL = 'http://127.0.0.1:54321';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+  console.warn = () => {};
+  global.fetch = async (url, options) => {
+    if (String(url).endsWith('/rpc/apply_cmp_sync_run')) {
+      return new Response(JSON.stringify({ runId: 'reason-run', status: 'failed' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    patchAttempted = options.method === 'PATCH' && String(url).includes('/cmp_sync_runs?');
+    return new Response(JSON.stringify({ code: 'PGRST204', message: 'column failure_reason does not exist' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await ingestCmpSnapshot({
+      syncRunId: 'f4f80000-0000-4000-8000-000000000003',
+      runStatus: 'failed', mode: 'fast', pagesScraped: 0, rowsExtracted: 0,
+      truncated: false, cutoffDate: '2026-10-28', scopeAgentIds: [],
+      failureReason: 'mfa_required', invoices: []
+    });
+    assert.equal(patchAttempted, true);
+    assert.equal(result.failureReasonPersisted, false);
+  } finally {
+    global.fetch = previousFetch;
+    console.warn = previousWarn;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test('serverless ingest uses the same transactional dry-run RPC', async () => {
   const { ingestCmpSnapshot: ingestServerless } = await serverlessIngest;
   const previousFetch = global.fetch;

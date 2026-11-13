@@ -20,6 +20,7 @@ def write_run_status(
     truncated: bool | None = None,
     persisted: bool = False,
     failure_reason: str | None = None,
+    trigger: str = "manual",
     now: datetime | None = None,
 ) -> dict[str, Any]:
     previous: dict[str, Any] = {}
@@ -50,6 +51,7 @@ def write_run_status(
         "truncated": truncated,
         "persisted": persisted,
         "failureReason": failure_reason,
+        "trigger": trigger,
         "updatedAt": timestamp,
         "lastSuccessfulSync": last_success,
         "lastRunError": last_error,

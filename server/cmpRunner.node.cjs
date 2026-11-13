@@ -10,12 +10,20 @@ test('runner creates a run envelope and preserves mode-specific coverage', () =>
   const config = buildCmpRunConfig('fast', 'f4-run-id', '2026-11-12T21:00:00.000Z');
   assert.deepEqual(config, {
     mode: 'fast',
+    trigger: 'manual',
     runId: 'f4-run-id',
     startedAt: '2026-11-12T21:00:00.000Z',
     historyDays: '15',
     maxPages: '5',
     isFastSync: 'true'
   });
+});
+
+test('runner trigger controls login timeout without changing sync depth', () => {
+  const scheduled = buildCmpRunConfig('fast', 'scheduled-run', '2026-11-12T21:00:00.000Z', 'scheduled');
+  assert.equal(scheduled.mode, 'fast');
+  assert.equal(scheduled.trigger, 'scheduled');
+  assert.equal(buildCmpRunConfig('fast', 'bad-trigger', '2026-11-12T21:00:00.000Z', 'other').trigger, 'manual');
 });
 
 test('normal and deep modes retain their configured windows and max pages', () => {
@@ -94,9 +102,23 @@ test('starting a run resets live progress and isolates status and logs by run id
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(path.dirname(fixture.statusPath), 'run_cmp_bot.ps1')
     ]);
     assert.equal(options.env.CMP_RUN_ID, 'run-1');
+    assert.equal(options.env.CMP_RUN_TRIGGER, 'manual');
+    assert.equal(options.env.CMP_LOGIN_TIMEOUT_SECONDS, '300');
     assert.equal(options.env.CMP_LOG_PATH, status.logPath);
     fs.writeFileSync(status.logPath, 'run_id=run-1 | isolated log line', 'utf8');
     assert.match(fixture.runner.tailLog(), /run_id=run-1/);
+  } finally {
+    fixture.dispose();
+  }
+});
+
+test('scheduled trigger selects the short login timeout', () => {
+  const fixture = createRunnerFixture();
+  try {
+    fixture.runner.startCmpScraper('fast', 'scheduled');
+    const [, , options] = fixture.children[0].spawnArgs;
+    assert.equal(options.env.CMP_RUN_TRIGGER, 'scheduled');
+    assert.equal(options.env.CMP_LOGIN_TIMEOUT_SECONDS, '60');
   } finally {
     fixture.dispose();
   }
