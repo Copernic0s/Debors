@@ -167,16 +167,6 @@ const Tr = styled.tr`
   }
 `;
 
-const formatAmountInput = (value) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return '0.00';
-  return new Intl.NumberFormat('en-US', {
-    useGrouping: true,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(numeric);
-};
-
 const BillingCycleSelect = styled.select`
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-color);
@@ -357,6 +347,7 @@ export default function DebtorsList({
   onQuickUpdateAmount,
   onOpenPdf,
   onRequestPdf,
+  canOpenPdf = true,
   canRequestPdf = false,
   pdfBusyIds = {},
   readOnly = false
@@ -625,9 +616,9 @@ export default function DebtorsList({
                 </Td>
                 <Td>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                    {item.invoiceNumber && (item.source === 'cmp' || item.sourceType === 'invoice') && (
+                    {item.invoiceNumber && (item.source === 'cmp' || item.sourceType === 'invoice') && (canOpenPdf || canRequestPdf) && (
                       item.pdfStoragePath ? (
-                        <IconActionButton
+                        canOpenPdf && <IconActionButton
                           type="button"
                           onClick={() => onOpenPdf?.(item)}
                           title="Open PDF"
@@ -635,7 +626,7 @@ export default function DebtorsList({
                         >
                           <FileText size={14} />
                         </IconActionButton>
-                      ) : (String(item.pdfStatus || '').toLowerCase() === 'queued' || String(item.pdfStatus || '').toLowerCase() === 'fetching') ? (
+                      ) : !canRequestPdf ? null : (String(item.pdfStatus || '').toLowerCase() === 'queued' || String(item.pdfStatus || '').toLowerCase() === 'fetching') ? (
                         <IconActionButton
                           type="button"
                           disabled

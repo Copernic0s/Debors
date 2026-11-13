@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { isActiveAgent } from '../constants/activeAgents';
 import styled, { createGlobalStyle } from 'styled-components';
 import {
   AlertTriangle,
@@ -803,12 +804,14 @@ export default function ManagerAnalytics({
 
       statusTotals[status] += amount;
 
-      const currentAgent = agentMap.get(agent) || { agent, open: 0, overdue: 0, paid: 0, accounts: 0 };
-      currentAgent.accounts += 1;
-      if (status === 'pending' || status === 'overdue') currentAgent.open += amount;
-      if (status === 'overdue') currentAgent.overdue += amount;
-      if (status === 'paid') currentAgent.paid += amount;
-      agentMap.set(agent, currentAgent);
+      if (isActiveAgent(agent)) {
+        const currentAgent = agentMap.get(agent) || { agent, open: 0, overdue: 0, paid: 0, accounts: 0 };
+        currentAgent.accounts += 1;
+        if (status === 'pending' || status === 'overdue') currentAgent.open += amount;
+        if (status === 'overdue') currentAgent.overdue += amount;
+        if (status === 'paid') currentAgent.paid += amount;
+        agentMap.set(agent, currentAgent);
+      }
 
       const currentWeek = weekMap.get(week) || { week, open: 0, collected: 0, overdue: 0 };
       if (status === 'pending' || status === 'overdue') currentWeek.open += amount;

@@ -1,11 +1,17 @@
 const MANAGER_ROLE = 'manager';
 const AGENT_ROLE = 'agent';
+const VIEWER_ROLE = 'viewer';
 
 const parseCsv = (value) =>
   String(value || '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+
+const READ_ONLY_EMAILS = new Set([
+  'guidiana.puentes@theunitedtransports.com',
+  ...parseCsv(import.meta.env.VITE_READ_ONLY_EMAILS).map((item) => item.toLowerCase())
+]);
 
 const parseDelimitedList = (value) =>
   String(value || '')
@@ -128,18 +134,19 @@ export const resolveAccessProfile = (user) => {
   
   // Exclude Hector from being a manager so he is restricted to his own clients
   const isHector = email === 'hector.lomeli@theunitedtransports.com';
+  const isViewer = READ_ONLY_EMAILS.has(email) || normalizedRole === VIEWER_ROLE;
   const isManager =
-    !isHector &&
+    !isHector && !isViewer &&
     (normalizedRole === MANAGER_ROLE ||
       operationsEmails.has(email) ||
       hasPrivilegedIdentityFallback(email));
-  const role = isManager ? MANAGER_ROLE : AGENT_ROLE;
+  const role = isViewer ? VIEWER_ROLE : isManager ? MANAGER_ROLE : AGENT_ROLE;
 
   return {
     role,
     email,
     agentScope,
-    accessLabel: isManager ? 'Control Access' : 'Assigned Portfolio',
+    accessLabel: isManager ? 'Control Access' : isViewer ? 'View Only' : 'Assigned Portfolio',
     canEditData: isManager,
     canDeleteData: isManager,
     canResetData: isManager,
@@ -148,8 +155,10 @@ export const resolveAccessProfile = (user) => {
       parseCsv(import.meta.env.VITE_INVOICE_ENTRY_ALLOWED_EMAILS).map((item) => item.toLowerCase()).includes(email) ||
       hasInvoiceEntryAccessFallback(email),
     canEditInvoiceDetails: isManager,
+    canDownloadInvoices: !isViewer,
     canCommentOnly: !isManager,
     canViewAllData: isManager,
+    canViewManagerAnalytics: !isViewer,
     canViewSupportTracker: false,
     canViewInvoiceEntry:
       parseCsv(import.meta.env.VITE_INVOICE_ENTRY_ALLOWED_EMAILS).map((item) => item.toLowerCase()).includes(email) ||
@@ -181,4 +190,4 @@ export const userCanAccessAgent = (accessProfile, agentId) => {
   });
 };
 
-export { MANAGER_ROLE, AGENT_ROLE, normalizeScopeValue };
+export { MANAGER_ROLE, AGENT_ROLE, VIEWER_ROLE, normalizeScopeValue };

@@ -191,7 +191,7 @@ const getStatusTone = (status) => {
   return { label: 'Pending', color: 'var(--warn)' };
 };
 
-export default function CompanyProfileModal({ isOpen, onClose, profile, onEditInvoice }) {
+export default function CompanyProfileModal({ isOpen, onClose, profile, onEditInvoice, canEditInvoices = true }) {
   if (!isOpen || !profile) return null;
 
   return (
@@ -264,7 +264,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                   <th>Invoice total</th>
                   <th>Paid</th>
                   <th>Balance due</th>
-                  <th>Actions</th>
+                  {canEditInvoices && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -286,7 +286,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                       <td style={{ color: amounts.due > 0 ? 'var(--danger)' : 'var(--text-main)', fontWeight: 700 }}>
                         {formatCurrency(centsToAmount(amounts.due))}
                       </td>
-                      <td>
+                      {canEditInvoices && <td>
                         <button
                           className="btn btn-secondary"
                           style={{ padding: '0.25rem', minWidth: 'auto' }}
@@ -295,12 +295,12 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                         >
                           <Edit2 size={14} />
                         </button>
-                      </td>
+                      </td>}
                     </tr>
                   );
                 }) : (
                   <tr>
-                    <td colSpan={9} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                    <td colSpan={canEditInvoices ? 9 : 8} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
                   </tr>
                 )}
                 {profile.invoices.length > 0 && (
@@ -309,7 +309,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                     <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalInvoiced)}</td>
                     <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalPaid)}</td>
                     <td style={{ fontWeight: 800, color: 'var(--danger)' }}>{formatCurrency(profile.totalDue)}</td>
-                    <td />
+                    {canEditInvoices && <td />}
                   </tr>
                 )}
               </tbody>

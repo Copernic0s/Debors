@@ -19,6 +19,7 @@ import { useDebtors, aggregateByCompany } from './hooks/useDebtors';
 import { roundMoney } from './utils/moneyUtils';
 import { normalizeMatchKey } from './utils/normalizers';
 import { agentMatchesScopeValue, resolveAccessProfile, userCanAccessAgent } from './constants/accessControl';
+import { isActiveAgent } from './constants/activeAgents';
 import { normalizeBillingCycle } from './constants/billingCycles';
 import { emailService } from './services/emailService';
 import { openCmpInvoicePdf, requestCmpInvoicePdf, queueCmpInvoicePdf } from './services/cmpInvoices';
@@ -534,8 +535,12 @@ function App() {
     }
     if (activeView === 'invoice_entry' && !accessProfile.canViewInvoiceEntry) {
       setActiveView('overview');
+      return;
     }
-  }, [activeView, accessProfile.canViewInvoiceEntry]);
+    if (activeView === 'analytics' && !accessProfile.canViewManagerAnalytics) {
+      setActiveView('overview');
+    }
+  }, [activeView, accessProfile.canViewInvoiceEntry, accessProfile.canViewManagerAnalytics]);
 
   useEffect(() => {
     if (accessProfile.canViewAllData) return;
@@ -649,14 +654,16 @@ function App() {
   }, [cmpRunnerApiBase, isAndresProfile, loadData, runCmpScraper]);
 
   const handleOpenPdf = React.useCallback(async (row) => {
+    if (!accessProfile.canDownloadInvoices) return;
     try {
       await openCmpInvoicePdf(supabase, row);
     } catch (error) {
       toast.error(error?.message || 'Could not open PDF');
     }
-  }, []);
+  }, [accessProfile.canDownloadInvoices]);
 
   const handleRequestPdf = React.useCallback(async (row) => {
+    if (!accessProfile.canDownloadInvoices) return;
     const rowId = row?.id;
     if (!rowId) return;
 
@@ -684,7 +691,7 @@ function App() {
         return next;
       });
     }
-  }, [cmpRunnerApiBase, loadData, refreshCmpData, supabase]);
+  }, [accessProfile.canDownloadInvoices, cmpRunnerApiBase, loadData, refreshCmpData, supabase]);
 
   useEffect(() => {
     const readyIds = [];
@@ -878,6 +885,7 @@ function App() {
   const timeString = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const handleSaveDebtor = (debtor) => {
+    if (!accessProfile.canEditData) return;
     if (currentDebtor) {
       const isAggregatedRow = String(currentDebtor.id || '').startsWith('CMP-');
 
@@ -983,6 +991,7 @@ function App() {
   };
 
   const handleResetDebtor = async (id) => {
+    if (!accessProfile.canResetData) return;
     if (!user || !id) return;
     try {
       let targetCompany = null;
@@ -1044,6 +1053,7 @@ function App() {
   };
 
   const handleDeleteDebtor = (id) => {
+    if (!accessProfile.canDeleteData) return;
     if (String(id).startsWith('CMP-')) {
       const targetCompanyKey = String(id).replace('CMP-', '').trim();
 
@@ -1097,6 +1107,7 @@ function App() {
   };
 
   const quickUpdateBillingCycle = (row, nextCycle) => {
+    if (!accessProfile.canEditData) return;
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1143,6 +1154,7 @@ function App() {
   };
 
   const quickUpdatePaymentStatus = (row, nextStatus) => {
+    if (!accessProfile.canEditData) return;
     const isAggregatedRow = String(row.id || '').startsWith('CMP-');
     const normalizedStatus = String(nextStatus || '').toLowerCase();
 
@@ -1234,6 +1246,7 @@ function App() {
   };
 
   const quickUpdateTotalDue = (row, nextAmount) => {
+    if (!accessProfile.canEditData) return;
     const idToUpdate = row.latestId || row.id;
     if (!idToUpdate) return;
 
@@ -1283,7 +1296,11 @@ function App() {
 
 
 
-  const agentOptions = React.useMemo(() => Array.from(new Set(accessibleData.map((item) => String(item.agentId || '').trim()).filter(Boolean))).sort(), [accessibleData]);
+  const agentOptions = React.useMemo(() => Array.from(new Set(
+    accessibleData
+      .map((item) => String(item.agentId || '').trim())
+      .filter((agentName) => agentName && isActiveAgent(agentName))
+  )).sort(), [accessibleData]);
 
   const hydratedWithSmartStatus = React.useMemo(() => {
     const today = new Date();
@@ -1416,7 +1433,9 @@ function App() {
       <ViewSwitch>
         <ViewButton type="button" $active={activeView === 'overview'} onClick={() => setActiveView('overview')}>Overview</ViewButton>
         <ViewButton type="button" $active={activeView === 'companies_directory'} onClick={() => setActiveView('companies_directory')}>Companies</ViewButton>
-        <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+        {accessProfile.canViewManagerAnalytics && (
+          <ViewButton type="button" $active={activeView === 'analytics'} onClick={() => setActiveView('analytics')}>Manager Analytics</ViewButton>
+        )}
         {accessProfile.canViewInvoiceEntry && (
           <ViewButton type="button" $active={activeView === 'invoice_entry'} onClick={() => setActiveView('invoice_entry')}>Invoice Entry</ViewButton>
         )}
@@ -1465,7 +1484,9 @@ function App() {
             onQuickUpdateAmount={quickUpdateTotalDue}
             onOpenPdf={handleOpenPdf}
             onRequestPdf={handleRequestPdf}
-            canRequestPdf={Boolean(supabase)}
+            canOpenPdf={accessProfile.canDownloadInvoices}
+            canRequestPdf={Boolean(supabase) && accessProfile.canDownloadInvoices}
+            readOnly={!accessProfile.canEditData}
             pdfBusyIds={pdfBusyIds}
             onEdit={(debtor) => {
               setCurrentDebtor(debtor);
@@ -1652,6 +1673,7 @@ function App() {
         isOpen={Boolean(activeCompany)}
         onClose={() => setActiveCompany(null)}
         profile={companyProfile}
+        canEditInvoices={accessProfile.canEditInvoiceDetails}
         onEditInvoice={(inv) => {
           setActiveCompany(null);
           setCurrentDebtor(inv);

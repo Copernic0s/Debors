@@ -23,7 +23,11 @@ Ver [automation/README.md](automation/README.md) para variables, instalación, m
 
 ## Esquema y acceso
 
-El bootstrap limpio, config de Supabase local y contratos SQL están separados en la rama `codex/db-baseline` para revisión/PR independiente. Ejecutar sus instrucciones contra una base local desechable. Esta revisión no aplicó migraciones remotas.
+El bootstrap limpio, config de Supabase local y contratos SQL están separados en la rama `codex/db-baseline`. Las cuatro migraciones aditivas ya se aplicaron al proyecto de producción; el estado y las comprobaciones están en [supabase/README.md](supabase/README.md). Ejecutar los fixtures SQL solo contra una base local desechable.
+
+El roster de agentes activos está en [config/active-agents.json](config/active-agents.json); el extractor y los filtros de Overview usan la misma lista. Los agentes fuera del roster quedan fuera de los filtros y no se usan para asignar nuevas filas CMP. Los registros existentes no se borran ni se reasignan automáticamente.
+
+La cuenta `guidiana.puentes@theunitedtransports.com` tiene perfil de solo lectura en la UI: Overview y Companies, sin Analytics, edición, borrado ni acciones de PDF. La cuenta aún debe existir/invitarse en Supabase Auth. Estas restricciones visuales no son una frontera de seguridad de datos: las políticas abiertas de lectura siguen activas hasta que estén completos el backfill de `agent_id` y los scopes verificados. No retirar las políticas abiertas todavía.
 
 Provisionar `agent_scopes` con usuarios y `agent_id` verificados; usar [supabase/agent_scopes.seed.example.sql](supabase/agent_scopes.seed.example.sql) solo como plantilla, nunca con datos de usuarios reales en Git.
 
