@@ -9,6 +9,7 @@ const LOG_PATH = path.join(ROOT_DIR, 'automation', 'cmp_invoice_extractor.log');
 const LOG_DIR = path.join(ROOT_DIR, 'automation', 'logs');
 const PS_SCRIPT = path.join(ROOT_DIR, 'automation', 'run_cmp_bot.ps1');
 const DEFAULT_STATUS_MAX_AGE_MIN = 60;
+const MAX_RUN_LOGS = 20;
 
 const parseStatusMaxAge = (value) => {
   const parsed = Number(value);
@@ -110,6 +111,46 @@ const createCmpRunner = ({
     ...values
   });
 
+  const listRunLogs = () => {
+    try {
+      return fileSystem.readdirSync(logDir)
+        .filter((name) => /^cmp-.+\.log$/i.test(name))
+        .map((name) => {
+          const fullPath = path.join(logDir, name);
+          const stats = fileSystem.statSync(fullPath);
+          return {
+            runId: name.slice(4, -4),
+            updatedAt: stats.mtime.toISOString(),
+            size: stats.size
+          };
+        })
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+    } catch {
+      return [];
+    }
+  };
+
+  const pruneRunLogs = (protectedRunId) => {
+    const logs = listRunLogs();
+    if (logs.length <= MAX_RUN_LOGS) return;
+    const protectedLog = logs.find((log) => log.runId === protectedRunId);
+    const keepIds = new Set([
+      ...(protectedLog ? [protectedLog.runId] : []),
+      ...logs.filter((log) => log.runId !== protectedRunId)
+        .slice(0, protectedLog ? MAX_RUN_LOGS - 1 : MAX_RUN_LOGS)
+        .map((log) => log.runId)
+    ]);
+    for (const log of logs) {
+      if (!keepIds.has(log.runId)) {
+        try {
+          fileSystem.unlinkSync(path.join(logDir, `cmp-${log.runId}.log`));
+        } catch (error) {
+          logger.warn('[CMP Runner] Could not prune old run log:', error.message);
+        }
+      }
+    }
+  };
+
   const refreshHistory = (status) => {
     if (status?.lastSuccessfulSync) lastSuccessfulSync = status.lastSuccessfulSync;
     if (status?.lastRunError) lastRunError = status.lastRunError;
@@ -148,15 +189,20 @@ const createCmpRunner = ({
 
     const existing = readStatusFile(fileSystem, statusPath);
     const matchesRun = existing?.runId === runConfig.runId || existing?.parentRunId === runConfig.runId;
-    if (!matchesRun) return;
+    if (!matchesRun) {
+      pruneRunLogs(runConfig.runId);
+      return;
+    }
 
     if (code !== 0) {
       recordRunFailure(runConfig, existing.error || `CMP worker exited with code ${code}`);
+      pruneRunLogs(runConfig.runId);
       return;
     }
 
     if (existing.running || !['done', 'error'].includes(existing.phase)) {
       recordRunFailure(runConfig, 'CMP worker exited without a terminal status');
+      pruneRunLogs(runConfig.runId);
       return;
     }
 
@@ -164,6 +210,7 @@ const createCmpRunner = ({
       lastSuccessfulSync = { runId: existing.runId, timestamp: existing.updatedAt };
       writeStatusFile(fileSystem, statusPath, { ...existing, lastSuccessfulSync });
     }
+    pruneRunLogs(runConfig.runId);
   };
 
   const getCmpStatus = () => {
@@ -209,14 +256,17 @@ const createCmpRunner = ({
     };
   };
 
-  const tailLog = (lines = 120) => {
-    const activeLogPath = latestRun
-      ? path.join(logDir, `cmp-${latestRun.runId}.log`)
+  const tailLog = (lines = 120, requestedRunId = null) => {
+    const runId = requestedRunId || latestRun?.runId;
+    const activeLogPath = runId
+      ? path.join(logDir, `cmp-${path.basename(String(runId))}.log`)
       : logPath;
     if (!fileSystem.existsSync(activeLogPath)) return '';
     const content = fileSystem.readFileSync(activeLogPath, 'utf8');
     return content.split(/\r?\n/).slice(-lines).join('\n');
   };
+
+  const getRunLogs = () => listRunLogs().slice(0, MAX_RUN_LOGS);
 
   const startCmpScraper = (depth = 'fast', trigger = 'manual') => {
     if (cmpChild && cmpChild.exitCode === null) {
@@ -236,6 +286,8 @@ const createCmpRunner = ({
 
     const runLogPath = path.join(logDir, `cmp-${runConfig.runId}.log`);
     fileSystem.mkdirSync(logDir, { recursive: true });
+    fileSystem.writeFileSync(runLogPath, '', { flag: 'a' });
+    pruneRunLogs(runConfig.runId);
     const childEnv = {
       ...env,
       CMP_INGEST_URL: env.CMP_INGEST_URL || `http://127.0.0.1:${env.PORT || 3001}/api/cmp/ingest`,
@@ -278,7 +330,7 @@ const createCmpRunner = ({
     return { started: true, runId: runConfig.runId };
   };
 
-  return { getCmpStatus, tailLog, startCmpScraper };
+  return { getCmpStatus, tailLog, getRunLogs, startCmpScraper };
 };
 
 let runner;
@@ -290,11 +342,13 @@ const getRunner = () => {
 module.exports = {
   getCmpStatus: (...args) => getRunner().getCmpStatus(...args),
   tailLog: (...args) => getRunner().tailLog(...args),
+  getRunLogs: (...args) => getRunner().getRunLogs(...args),
   startCmpScraper: (...args) => getRunner().startCmpScraper(...args),
   buildCmpRunConfig,
   createCmpRunner,
   STATUS_PATH,
   LOG_PATH,
   LOG_DIR,
-  DEFAULT_STATUS_MAX_AGE_MIN
+  DEFAULT_STATUS_MAX_AGE_MIN,
+  MAX_RUN_LOGS
 };

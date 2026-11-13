@@ -124,6 +124,31 @@ test('scheduled trigger selects the short login timeout', () => {
   }
 });
 
+test('run logs retain twenty executions, protect the active file, and can be tailed by run id', () => {
+  const fixture = createRunnerFixture();
+  try {
+    const logDir = path.join(path.dirname(fixture.statusPath), 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    for (let index = 1; index <= 25; index += 1) {
+      const logPath = path.join(logDir, `cmp-old-${index}.log`);
+      fs.writeFileSync(logPath, `old log ${index}`);
+      const timestamp = new Date(1_700_000_000_000 + index * 1000);
+      fs.utimesSync(logPath, timestamp, timestamp);
+    }
+
+    fixture.runner.startCmpScraper('fast');
+    const logs = fixture.runner.getRunLogs();
+    assert.equal(logs.length, 20);
+    assert.ok(fs.existsSync(path.join(logDir, 'cmp-run-1.log')));
+    assert.equal(fs.readdirSync(logDir).filter((name) => name.endsWith('.log')).length, 20);
+
+    fs.writeFileSync(path.join(logDir, 'cmp-old-25.log'), 'previous failed run detail');
+    assert.match(fixture.runner.tailLog(120, 'old-25'), /previous failed run detail/);
+  } finally {
+    fixture.dispose();
+  }
+});
+
 test('runner ignores status from another run and status older than STATUS_MAX_AGE_MIN', () => {
   const fixture = createRunnerFixture({ ageMinutes: 2 });
   try {

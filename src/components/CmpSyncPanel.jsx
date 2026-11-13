@@ -182,11 +182,45 @@ export default function CmpSyncPanel({
   syncAllBusy,
   onRunSync
 }) {
+  const [runLogs, setRunLogs] = React.useState([]);
+  const [selectedLogRunId, setSelectedLogRunId] = React.useState('');
   const running = Boolean(cmpStatus?.running);
   const phase = String(cmpStatus?.phase || 'idle');
   const error = cmpStatus?.error;
   const partial = phase === 'done' && (cmpStatus?.runStatus !== 'complete' || cmpStatus?.persisted !== true);
   const tone = error ? 'err' : running ? 'warn' : phase === 'done' && !partial ? 'ok' : 'warn';
+
+  React.useEffect(() => {
+    if (!runnerApiBase) {
+      setRunLogs([]);
+      return undefined;
+    }
+    let active = true;
+    const refreshLogs = async () => {
+      try {
+        const response = await fetch(`${runnerApiBase}/api/cmp/logs`);
+        const payload = await response.json();
+        if (active && response.ok) setRunLogs(Array.isArray(payload.logs) ? payload.logs : []);
+      } catch {
+        if (active) setRunLogs([]);
+      }
+    };
+    refreshLogs();
+    const interval = window.setInterval(refreshLogs, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [runnerApiBase]);
+
+  React.useEffect(() => {
+    const currentRunId = cmpStatus?.runId;
+    if (currentRunId && !runLogs.some((log) => log.runId === selectedLogRunId)) {
+      setSelectedLogRunId(currentRunId);
+    } else if (!selectedLogRunId && runLogs.length) {
+      setSelectedLogRunId(runLogs[0].runId);
+    }
+  }, [cmpStatus?.runId, runLogs, selectedLogRunId]);
 
   return (
     <Panel>
@@ -202,7 +236,22 @@ export default function CmpSyncPanel({
           </StatusPill>
         </Title>
         <Actions>
-          <ActionBtn type="button" onClick={onShowLog} disabled={!runnerApiBase}>
+          <select
+            aria-label="CMP run log"
+            value={selectedLogRunId || cmpStatus?.runId || ''}
+            onChange={(event) => setSelectedLogRunId(event.target.value)}
+            disabled={!runnerApiBase || (!runLogs.length && !cmpStatus?.runId)}
+          >
+            {cmpStatus?.runId && !runLogs.some((log) => log.runId === cmpStatus.runId) && (
+              <option value={cmpStatus.runId}>{cmpStatus.runId} (active)</option>
+            )}
+            {runLogs.map((log) => (
+              <option key={log.runId} value={log.runId}>
+                {log.runId} · {formatTime(log.updatedAt)}
+              </option>
+            ))}
+          </select>
+          <ActionBtn type="button" onClick={() => onShowLog(selectedLogRunId || cmpStatus?.runId)} disabled={!runnerApiBase}>
             <FileText size={14} />
             Log
           </ActionBtn>

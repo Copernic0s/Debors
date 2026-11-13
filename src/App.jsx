@@ -603,10 +603,12 @@ function App() {
     return () => window.clearInterval(interval);
   }, [cmpRunnerApiBase, refreshCmpStatus]);
 
-  const showCmpLog = React.useCallback(async () => {
+  const showCmpLog = React.useCallback(async (runId) => {
     if (!cmpRunnerApiBase) return;
     try {
-      const response = await fetch(`${cmpRunnerApiBase}/api/cmp/log?lines=120`);
+      const query = new URLSearchParams({ lines: '120' });
+      if (runId) query.set('runId', runId);
+      const response = await fetch(`${cmpRunnerApiBase}/api/cmp/log?${query.toString()}`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || 'Failed to read log');
       toast(`${payload?.runId ? `Run ${payload.runId}\n` : ''}${String(payload?.tail || 'No log yet.').trim()}`, { duration: 8000 });

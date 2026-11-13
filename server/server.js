@@ -12,7 +12,7 @@ const { canAccessCmpInvoicePdf } = require('./cmpPdfAuthorization.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const { getCmpStatus, tailLog, startCmpScraper } = require('./cmpRunner');
+const { getCmpStatus, getRunLogs, tailLog, startCmpScraper } = require('./cmpRunner');
 const {
   ingestCmpSnapshot,
   verifyCmpIngestSecret,
@@ -449,9 +449,16 @@ app.get('/api/cmp/status', (_req, res) => {
 });
 
 app.get('/api/cmp/log', (req, res) => {
-  const lines = Number.parseInt(String(req.query.lines || '120'), 10);
+  const requestedLines = Number.parseInt(String(req.query.lines || '120'), 10);
+  const lines = Number.isFinite(requestedLines) ? Math.min(1000, Math.max(1, requestedLines)) : 120;
+  const requestedRunId = typeof req.query.runId === 'string' ? req.query.runId : null;
   const status = getCmpStatus();
-  res.json({ runId: status.runId, tail: tailLog(Number.isFinite(lines) ? lines : 120) });
+  const runId = requestedRunId || status.runId;
+  res.json({ runId, tail: tailLog(lines, requestedRunId) });
+});
+
+app.get('/api/cmp/logs', (_req, res) => {
+  res.json({ logs: getRunLogs() });
 });
 
 app.post('/api/cmp/run', (req, res) => {
