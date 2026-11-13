@@ -18,7 +18,7 @@ begin
       and tablename = 'objects'
       and policyname = 'cmp_invoice_pdfs_read_authenticated'
   ) then
-    execute 'create policy cmp_invoice_pdfs_read_authenticated on storage.objects for select to authenticated using (bucket_id = ''cmp-invoices'')';
+    execute 'create policy cmp_invoice_pdfs_read_authenticated on storage.objects for select to authenticated using (bucket_id = ''cmp-invoices'' and not (select public.is_cmp_billing_viewer()))';
   end if;
 end;
 $$;

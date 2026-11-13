@@ -82,6 +82,7 @@ begin
       and cmd = 'SELECT'
       and 'authenticated' = any(roles)
       and qual like '%cmp-invoices%'
+      and qual like '%is_cmp_billing_viewer%'
   ) then
     raise exception 'open authenticated CMP PDF read policy is missing';
   end if;

@@ -1,7 +1,5 @@
 -- Grant all-invoice read access without manager or PDF permissions.
 -- Run manually only after confirming the intended Auth account exists.
-begin;
-
 do $$
 declare
   target_user_id uuid;
@@ -19,10 +17,3 @@ begin
   on conflict (user_id) do nothing;
 end;
 $$;
-
-select v.user_id, u.email, v.created_at
-from public.cmp_billing_viewers v
-join auth.users u on u.id = v.user_id
-where lower(u.email) = 'guidiana.puentes@theunitedtransports.com';
-
-commit;

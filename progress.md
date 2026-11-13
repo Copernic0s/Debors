@@ -4,14 +4,15 @@ Ultima actualizacion: 2026-11-13
 
 ## Estado
 
-- Rama de trabajo: `codex/db-fidelity-and-activation`; los cambios revisados aun no estan integrados en `main`/`master`.
+- Rama de trabajo: `codex/db-fidelity-and-activation`; permisos SQL de billing viewer ya aplicados en produccion; cambios de frontend/API aun no desplegados.
 - En produccion se aplicaron las cuatro migraciones aditivas segun la verificacion read-only del 2026-11-12; no se activo RLS por agente.
 - Ultimo estado remoto documentado: 4,142 invoices vigentes, `agent_id` nulo en 4,142, `agent_scopes` vacia y politicas abiertas de lectura activas.
 - Roster actual: 10 agentes. El dry-run previo mapeo 3,999/4,142 filas CMP; 143 filas de 18 nombres siguen sin una asignacion activa unica. No se hizo backfill.
 - Guidiana tiene un perfil UI de billing solo lectura para todas las companias. Andres reporta que su usuario fue agregado a Supabase Auth; la sesion real aun no se ha verificado.
 - No tratar el perfil como aislamiento de datos: las restricciones de acciones estan en la UI y las politicas de invoices/PDFs siguen abiertas para usuarios autenticados.
 - La revision local mas reciente pasa frontend, backend, Python, lint (sin errores) y build. `supabase db reset --no-seed` y los contratos SQL pasan en el stack local iniciado con `--exclude studio` porque Studio queda unhealthy.
-- Nuevo cambio pendiente de despliegue: rol DB `cmp_billing_viewers` para lectura global de facturas sin PDFs; rutas cloud/local de solicitud PDF exigen sesion y alcance por factura. Para cerrar lectura directa de Storage en produccion aun se requiere aplicar la migracion 20261113120000 y activar las politicas scoped manualmente.
+- En produccion ya estan aplicadas 20261113120000 y 20261113130000; Guidiana aparece en `cmp_billing_viewers`, no tiene manager scope, invoice read policy permanece abierta y la policy PDF excluye al billing viewer. No se activo agent RLS global.
+- Frontend/API de este branch sigue pendiente de despliegue. GitHub Pages workflow publica desde `master`, el default branch remoto es `main` y `/api` requiere un host con funciones serverless; confirmar deployment target antes de integrar/publicar.
 - La revision tecnica completa y el backlog anterior estan en [docs/debors-project-flow-and-findings.md](docs/debors-project-flow-and-findings.md).
 
 ## Prioridad inmediata
@@ -66,3 +67,4 @@ Ultima actualizacion: 2026-11-13
 | 2026-11-13 | Duplicados del roster consolidados a nombres canonicos en filtros de agentes y Sales Rep del Debtor List; asignaciones fuera del roster se ocultan de esa etiqueta, sin borrar companias ni saldos. | Frontend 33/33, build OK (warning bundle >500 KB), lint focalizado 0 errores/3 warnings existentes. Casos de prueba cubren Hector con/sin tilde y agente fuera del roster. |
 | 2026-11-13 | Revision preproduccion: corregidos defaults financieros NaN en ingest Node/serverless; lint agregado a CI; overdue se recalcula cada minuto. | Frontend 34/34, server 21/21, Python 15/15, build OK; `npm run lint` 0 errores/1 warning preexistente de `DebtorModal`. Reset limpio local y contratos de schema, RLS aditiva, reconciliacion y transicion open/scoped/rollback pasan. Stack iniciado con `--exclude studio` tras fallo de salud de Studio; ningun SQL remoto. Bloqueos: RLS/API/PDF no aplican permisos de viewer, 143 filas sin mapeo unico; login de Guidiana no verificado por Codex. |
 | 2026-11-13 | Seguridad del billing viewer: nuevo rol SQL con acceso de lectura global a facturas y denegacion explicita de PDFs; endpoints PDF cloud/local validan token, scope por `invoice_id` y rol, cola solo manager. | Frontend 34/34, server 24/24, Python 15/15, build OK; lint 0 errores/1 warning preexistente. Reset limpio y contratos SQL pasan: tras activacion local Guidiana fixture lee 2 invoices/0 PDFs; agent, manager, unscoped y rollback pasan. No SQL remoto ni despliegue; falta aplicar migracion, provisionar Guidiana y activar policies en produccion despues de confirmar mapeo/scopes. |
+| 2026-11-13 | Rollout de Guidiana reducido a su necesidad: lectura global de invoices y bloqueo de Storage PDFs solo para billing viewers, preservando PDFs del resto y sin activar agent RLS global. | Produccion `Copernic0s's Project`: migrations 215000/216000 aplicadas; Guidiana provisionada (1 fila), manager scopes 0, lectura invoices abierta y politica Storage excluye billing viewer. Contratos locales pasan. Frontend/API pendiente: workflow Pages apunta a `master`, repo default `main`, `/api` requiere hosting compatible; destino real por confirmar. |
