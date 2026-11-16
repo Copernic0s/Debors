@@ -92,6 +92,20 @@ class CmpRunStatusTests(unittest.TestCase):
             "message": "ingest unavailable",
         })
 
+    def test_failure_reason_is_retained_in_last_run_error(self):
+        status = write_run_status(
+            self.status_path,
+            run_id="mfa-run",
+            running=False,
+            phase="error",
+            message="CMP sync failed",
+            error="MFA timed out",
+            failure_reason="mfa_required",
+            run_status="failed",
+            now=self.now,
+        )
+        self.assertEqual(status["lastRunError"]["failureReason"], "mfa_required")
+
     def test_failed_run_exposes_structured_failure_reason(self):
         status = write_run_status(
             self.status_path,

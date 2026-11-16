@@ -42,6 +42,7 @@ const createRunnerFixture = ({ ageMinutes = 60, initialStatus = null } = {}) => 
   const automationDir = path.join(rootDir, 'automation');
   const statusPath = path.join(automationDir, 'cmp_status.json');
   const logDir = path.join(automationDir, 'logs');
+  const sessionExpiredFlagPath = path.join(rootDir, 'logs', 'cmp-session-expired.flag');
   const scriptPath = path.join(automationDir, 'run_cmp_bot.ps1');
   fs.mkdirSync(automationDir, { recursive: true });
   fs.writeFileSync(scriptPath, '# fixture', 'utf8');
@@ -52,6 +53,7 @@ const createRunnerFixture = ({ ageMinutes = 60, initialStatus = null } = {}) => 
     rootDir,
     statusPath,
     logDir,
+    sessionExpiredFlagPath,
     scriptPath,
     logPath: path.join(automationDir, 'legacy.log'),
     env: { PORT: '3001', STATUS_MAX_AGE_MIN: String(ageMinutes) },
@@ -69,6 +71,7 @@ const createRunnerFixture = ({ ageMinutes = 60, initialStatus = null } = {}) => 
   return {
     runner,
     statusPath,
+    sessionExpiredFlagPath,
     children,
     setNow(value) { currentTime = new Date(value); },
     dispose() { fs.rmSync(rootDir, { recursive: true, force: true }); }
@@ -246,6 +249,44 @@ test('runner reports last successful sync and last-run error as separate history
       runId: 'run-2', timestamp: '2026-11-12T20:00:00.000Z', message: 'worker failed'
     });
     assert.deepEqual(status.lastSuccessfulSync, { runId: 'run-1', timestamp: '2026-11-12T20:00:00.000Z' });
+  } finally {
+    fixture.dispose();
+  }
+});
+
+test('successful manual sync clears the scheduled-session circuit-breaker flag', () => {
+  const fixture = createRunnerFixture();
+  try {
+    fs.mkdirSync(path.dirname(fixture.sessionExpiredFlagPath), { recursive: true });
+    fs.writeFileSync(fixture.sessionExpiredFlagPath, 'reason=mfa_required\n');
+    fixture.runner.startCmpScraper('normal', 'manual');
+    fs.writeFileSync(fixture.statusPath, JSON.stringify({
+      runId: 'run-1', running: false, phase: 'done', runStatus: 'complete', persisted: true,
+      updatedAt: '2026-11-12T20:00:00.000Z', error: null
+    }));
+    fixture.children[0].emit('exit', 0);
+    assert.equal(fs.existsSync(fixture.sessionExpiredFlagPath), false);
+  } finally {
+    fixture.dispose();
+  }
+});
+
+test('runner exposes the last structured failure reason after the run terminates', () => {
+  const fixture = createRunnerFixture();
+  try {
+    fixture.runner.startCmpScraper('fast', 'scheduled');
+    fs.writeFileSync(fixture.statusPath, JSON.stringify({
+      runId: 'run-1', running: false, phase: 'error', runStatus: 'failed', persisted: false,
+      failureReason: 'mfa_required', updatedAt: '2026-11-12T20:00:00.000Z', error: 'MFA timeout',
+      lastRunError: {
+        runId: 'run-1', timestamp: '2026-11-12T20:00:00.000Z',
+        message: 'MFA timeout', failureReason: 'mfa_required'
+      }
+    }));
+    fixture.children[0].emit('exit', 1);
+    const status = fixture.runner.getCmpStatus();
+    assert.equal(status.failureReason, 'mfa_required');
+    assert.equal(status.lastRunError.failureReason, 'mfa_required');
   } finally {
     fixture.dispose();
   }

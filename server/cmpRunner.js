@@ -7,6 +7,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const STATUS_PATH = path.join(ROOT_DIR, 'automation', 'cmp_status.json');
 const LOG_PATH = path.join(ROOT_DIR, 'automation', 'cmp_invoice_extractor.log');
 const LOG_DIR = path.join(ROOT_DIR, 'automation', 'logs');
+const SESSION_EXPIRED_FLAG_PATH = path.join(ROOT_DIR, 'logs', 'cmp-session-expired.flag');
 const PS_SCRIPT = path.join(ROOT_DIR, 'automation', 'run_cmp_bot.ps1');
 const DEFAULT_STATUS_MAX_AGE_MIN = 60;
 const MAX_RUN_LOGS = 20;
@@ -58,6 +59,7 @@ const createCmpRunner = ({
   statusPath = STATUS_PATH,
   logPath = LOG_PATH,
   logDir = LOG_DIR,
+  sessionExpiredFlagPath = SESSION_EXPIRED_FLAG_PATH,
   scriptPath = PS_SCRIPT,
   env = process.env,
   now = () => new Date(),
@@ -158,23 +160,31 @@ const createCmpRunner = ({
       lastRunError = {
         runId: status.runId || null,
         timestamp: status.updatedAt || null,
-        message: status.error
+        message: status.error,
+        ...(status.failureReason ? { failureReason: status.failureReason } : {})
       };
     }
   };
 
-  const recordRunFailure = (runConfig, message) => {
+  const recordRunFailure = (runConfig, message, failureReason = null) => {
     const failedAt = now().toISOString();
     const existing = readStatusFile(fileSystem, statusPath);
     const matchesRun = existing?.runId === runConfig.runId || existing?.parentRunId === runConfig.runId;
     const matching = matchesRun ? existing : statusForRun(runConfig);
-    lastRunError = { runId: matching.runId || runConfig.runId, timestamp: failedAt, message };
+    const reason = failureReason || matching.failureReason || null;
+    lastRunError = {
+      runId: matching.runId || runConfig.runId,
+      timestamp: failedAt,
+      message,
+      ...(reason ? { failureReason: reason } : {})
+    };
     writeStatusFile(fileSystem, statusPath, {
       ...matching,
       running: false,
       phase: 'error',
       message: 'CMP run failed',
       error: message,
+      failureReason: reason,
       runStatus: 'failed',
       updatedAt: failedAt,
       lastSuccessfulSync,
@@ -195,13 +205,13 @@ const createCmpRunner = ({
     }
 
     if (code !== 0) {
-      recordRunFailure(runConfig, existing.error || `CMP worker exited with code ${code}`);
+      recordRunFailure(runConfig, existing.error || `CMP worker exited with code ${code}`, existing.failureReason);
       pruneRunLogs(runConfig.runId);
       return;
     }
 
     if (existing.running || !['done', 'error'].includes(existing.phase)) {
-      recordRunFailure(runConfig, 'CMP worker exited without a terminal status');
+      recordRunFailure(runConfig, 'CMP worker exited without a terminal status', existing.failureReason);
       pruneRunLogs(runConfig.runId);
       return;
     }
@@ -209,6 +219,13 @@ const createCmpRunner = ({
     if (existing.phase === 'done' && existing.runStatus === 'complete' && existing.persisted === true) {
       lastSuccessfulSync = { runId: existing.runId, timestamp: existing.updatedAt };
       writeStatusFile(fileSystem, statusPath, { ...existing, lastSuccessfulSync });
+      if (runConfig.trigger === 'manual' && fileSystem.existsSync(sessionExpiredFlagPath)) {
+        try {
+          fileSystem.unlinkSync(sessionExpiredFlagPath);
+        } catch (error) {
+          logger.warn('[CMP Runner] Could not clear the expired-session flag after a successful manual run:', error.message);
+        }
+      }
     }
     pruneRunLogs(runConfig.runId);
   };
@@ -224,7 +241,10 @@ const createCmpRunner = ({
 
     refreshHistory(usableStatus);
     if (usableStatus?.phase === 'done' && usableStatus.runStatus === 'complete' && usableStatus.persisted === true) {
-      lastSuccessfulSync = { runId: usableStatus.runId, timestamp: usableStatus.updatedAt };
+      lastSuccessfulSync = {
+        runId: usableStatus.runId,
+        timestamp: usableStatus.updatedAt
+      };
     }
     const activeLogPath = latestRun
       ? path.join(logDir, `cmp-${latestRun.runId}.log`)
@@ -349,6 +369,7 @@ module.exports = {
   STATUS_PATH,
   LOG_PATH,
   LOG_DIR,
+  SESSION_EXPIRED_FLAG_PATH,
   DEFAULT_STATUS_MAX_AGE_MIN,
   MAX_RUN_LOGS
 };

@@ -34,8 +34,14 @@ def write_run_status(
     last_error = previous.get("lastRunError")
     if phase == "done" and run_status == "complete" and persisted:
         last_success = {"runId": run_id, "timestamp": timestamp}
-    if error:
-        last_error = {"runId": run_id, "timestamp": timestamp, "message": error}
+    if error or failure_reason:
+        last_error = {
+            "runId": run_id,
+            "timestamp": timestamp,
+            "message": error or message,
+        }
+        if failure_reason:
+            last_error["failureReason"] = failure_reason
 
     payload = {
         "runId": run_id,
