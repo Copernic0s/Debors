@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { Bot, FileText, Loader2, CheckCircle2, AlertCircle, Zap, RefreshCw, Database } from 'lucide-react';
+import { formatBogotaSyncTime, getCmpSyncStalenessWarning } from '../utils/cmpSyncWarning';
 
 const Panel = styled.div`
   margin: 0 2rem 1rem;
@@ -189,6 +190,7 @@ export default function CmpSyncPanel({
   const error = cmpStatus?.error;
   const partial = phase === 'done' && (cmpStatus?.runStatus !== 'complete' || cmpStatus?.persisted !== true);
   const tone = error ? 'err' : running ? 'warn' : phase === 'done' && !partial ? 'ok' : 'warn';
+  const staleSyncWarning = getCmpSyncStalenessWarning(cmpStatus);
 
   React.useEffect(() => {
     if (!runnerApiBase) {
@@ -266,6 +268,12 @@ export default function CmpSyncPanel({
           ? 'Sync All: refreshing Zoho, then CMP scraper runs in Chrome.'
           : cmpStatus?.message || 'Chrome runs in the background. Status updates every few seconds.'}
       </Message>
+      {staleSyncWarning && (
+        <Message role="status" style={{ color: 'var(--brand-amber)', borderLeft: '3px solid var(--brand-amber)' }}>
+          CMP has not completed a successful sync since {formatBogotaSyncTime(staleSyncWarning.timestamp)} Bogotá time.
+          {' '}Last failure reason: <strong>{staleSyncWarning.failureReason}</strong>.
+        </Message>
+      )}
       {cmpStatus?.failureReason && (
         <Message role="alert" style={{ color: 'var(--danger)' }}>
           Run reason: <strong>{{
