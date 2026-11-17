@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { buildCmpRunConfig, createCmpRunner } = require('./cmpRunner.js');
 
-test('runner creates a run envelope and preserves mode-specific coverage', () => {
+test('runner keeps each sync depth complete-capable for the current CMP inventory', () => {
   const config = buildCmpRunConfig('fast', 'f4-run-id', '2026-11-12T21:00:00.000Z');
   assert.deepEqual(config, {
     mode: 'fast',
@@ -14,7 +14,7 @@ test('runner creates a run envelope and preserves mode-specific coverage', () =>
     runId: 'f4-run-id',
     startedAt: '2026-11-12T21:00:00.000Z',
     historyDays: '15',
-    maxPages: '5',
+    maxPages: '1000',
     isFastSync: 'true'
   });
 });
@@ -26,14 +26,14 @@ test('runner trigger controls login timeout without changing sync depth', () => 
   assert.equal(buildCmpRunConfig('fast', 'bad-trigger', '2026-11-12T21:00:00.000Z', 'other').trigger, 'manual');
 });
 
-test('normal and deep modes retain their configured windows and max pages', () => {
+test('normal and deep modes keep their paid windows with full-inventory page coverage', () => {
   assert.deepEqual(
     [buildCmpRunConfig('normal').historyDays, buildCmpRunConfig('normal').maxPages],
-    ['120', '100']
+    ['120', '1000']
   );
   assert.deepEqual(
     [buildCmpRunConfig('deep').historyDays, buildCmpRunConfig('deep').maxPages],
-    ['365', '250']
+    ['365', '1000']
   );
 });
 

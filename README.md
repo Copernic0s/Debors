@@ -8,6 +8,8 @@ Panel de seguimiento de deudas por agente. Combina el portafolio de Zoho (`Clien
 
 El extractor conserva **todos los saldos abiertos, sin límite de antigüedad**, y limita por fecha de factura solo las facturas pagadas/cerradas. Los modos definen esa ventana de pagadas: fast 15 días, normal 120 y deep 365.
 
+Cada modo permite recorrer hasta 1,000 páginas de 500 filas. CMP reportó 433,812 filas el 2026-11-17 (unas 868 páginas); por eso la cobertura completa puede tardar varias horas. Fast todavía hace el recorrido global para no perder saldos abiertos antiguos, así que no debe programarse con el timeout actual de una hora. El fast incremental con filtros CMP queda pendiente.
+
 Los resultados se envían al ingest al terminar el scrape. Si el extractor devuelve filas con estado incompleto, esas observaciones se upsert; un error que interrumpe el scrape reporta una corrida fallida sin reconciliar. Corridas incompletas, vacías, fallidas o truncadas no cierran filas ausentes. Solo una corrida `complete`, no truncada, no vacía y con cobertura suficiente reconcilia el alcance observado. Un scrape posterior completo recupera la reconciliación sin borrar el historial.
 
 Pasos de sync desde este equipo:

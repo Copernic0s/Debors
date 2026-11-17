@@ -60,7 +60,7 @@ Remove all Debors tasks:
 - Keep the PC powered on and signed in at scheduled times. Wake-to-run depends on Windows power settings and hardware; test it on this machine.
 - Prefer AC power. Configure sleep so the machine remains awake for the planned run windows; the display may turn off. Do not rely on wake-from-hibernate unless verified.
 - Keep the CMP Chrome profile available and authenticated. Scheduled runs do not bypass MFA. If the session expires or MFA is required, the flag pauses further scheduled runs until a successful manual Sync All or manual flag removal.
-- Fast currently requests 500 rows per page and is capped at five pages. Recheck real scrape coverage before treating this schedule as complete; truncation remains incomplete and cannot reconcile the snapshot.
+- Each depth now permits up to 1,000 pages at 500 rows per page to cover the 433,812-row CMP inventory observed on 2026-11-17. A full scan can take several hours; the scheduled task's one-hour execution limit is therefore insufficient. Do not register these tasks until the CMP query is optimized or the task timeout and schedule are deliberately redesigned. Truncation remains incomplete and cannot reconcile the snapshot.
 - This is workstation automation, not a cloud scheduler: shutdown, sign-out, network loss, Chrome profile locks, or CMP changes can delay or fail syncs.
 - Logs and flags are local operational data under `logs/`, excluded from Git. The invoice extractor's per-run logs remain under `automation/logs/` and are also ignored.
 

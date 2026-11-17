@@ -11,6 +11,7 @@ const SESSION_EXPIRED_FLAG_PATH = path.join(ROOT_DIR, 'logs', 'cmp-session-expir
 const PS_SCRIPT = path.join(ROOT_DIR, 'automation', 'run_cmp_bot.ps1');
 const DEFAULT_STATUS_MAX_AGE_MIN = 60;
 const MAX_RUN_LOGS = 20;
+const CMP_MAX_PAGES = '1000';
 
 const parseStatusMaxAge = (value) => {
   const parsed = Number(value);
@@ -36,9 +37,9 @@ const writeStatusFile = (fileSystem, statusPath, status) => {
 const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString(), trigger = 'manual') => {
   const mode = depth === 'standard' ? 'normal' : ['fast', 'normal', 'deep'].includes(depth) ? depth : 'fast';
   const settings = {
-    fast: { historyDays: '15', maxPages: '5', isFastSync: 'true' },
-    normal: { historyDays: '120', maxPages: '100', isFastSync: 'false' },
-    deep: { historyDays: '365', maxPages: '250', isFastSync: 'false' }
+    fast: { historyDays: '15', maxPages: CMP_MAX_PAGES, isFastSync: 'true' },
+    normal: { historyDays: '120', maxPages: CMP_MAX_PAGES, isFastSync: 'false' },
+    deep: { historyDays: '365', maxPages: CMP_MAX_PAGES, isFastSync: 'false' }
   }[mode];
 
   return {

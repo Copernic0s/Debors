@@ -73,7 +73,7 @@ ZOHO_XLSX_URL = os.getenv(
 )
 ZOHO_SHEET_NAME = os.getenv("CMP_ZOHO_SHEET_NAME", "Client BY agent")
 HISTORY_DAYS = int(os.getenv("CMP_HISTORY_DAYS", "60"))
-MAX_PAGES = int(os.getenv("CMP_MAX_PAGES", "40"))
+MAX_PAGES = int(os.getenv("CMP_MAX_PAGES", "1000"))
 DEFAULT_TIMEOUT = int(os.getenv("CMP_TIMEOUT", "90"))
 ATTACH_TIMEOUT_SECONDS = int(os.getenv("CMP_ATTACH_TIMEOUT_SECONDS", "20"))
 INGEST_URL = os.getenv("CMP_INGEST_URL", "http://127.0.0.1:3001/api/cmp/ingest").strip()

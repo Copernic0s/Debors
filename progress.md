@@ -1,6 +1,13 @@
 # Debors Project Progress
 
-Ultima actualizacion: 2026-11-16
+Ultima actualizacion: 2026-11-17
+
+## 2026-11-17: cobertura de paginacion CMP
+
+- Diagnostico del run `c31f4576-1b0d-4425-a9f3-a385973b50bb`: Standard termino en 100 paginas, guardo 2,234 filas y quedo `incomplete/truncated`; no reconcilio ni cerro facturas. CMP reporto 433,812 filas con limite 500 por pagina (aprox. 868 paginas).
+- Correccion aplicada: Fast, Standard y Deep elevan el maximo de seguridad a 1,000 paginas; el default del extractor tambien se alinea. Las ventanas pagadas siguen siendo 15/120/365 dias y los saldos abiertos siguen sin limite de antiguedad.
+- Riesgo operativo: el recorrido completo puede tardar varias horas; el limite de una hora de las tareas Windows no alcanza. No registrar tareas hasta optimizar con filtros CMP/incremental y redisenar timeout/horario.
+- Verificacion: runner 13/13, backend 30/30, Python CMP 29/29, frontend 38/38 y build OK (aviso de bundle >500 kB ya existente). No se ejecuto el bot, no se aplico SQL remoto y no se modifico Supabase.
 
 ## Estado
 
