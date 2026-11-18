@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { RefreshCw, Users, Clock } from 'lucide-react';
 import CmpSyncPanel from './components/CmpSyncPanel';
+import CmpFreshnessPanel from './components/CmpFreshnessPanel';
 import { Toaster, toast } from 'react-hot-toast';
 import Dashboard from './components/Dashboard';
 import DebtorsList from './components/DebtorsList';
@@ -492,6 +493,7 @@ function App() {
     loading,
     isSyncing,
     lastCmpSyncAt,
+    lastCmpSyncRunId,
     cmpInvoiceCount,
     cmpExpectedCount,
     cmpPartial,
@@ -1657,6 +1659,16 @@ function App() {
             cmpLoadError={cmpLoadError}
             syncAllBusy={syncAllBusy}
             onRunSync={handleSyncAll}
+          />
+        )}
+        {!isLocalHost && (
+          <CmpFreshnessPanel
+            rows={rawZohoData.filter((row) => row.source === 'cmp')}
+            totalCurrent={cmpExpectedCount ?? cmpInvoiceCount ?? 0}
+            latestRunId={lastCmpSyncRunId}
+            lastCheckedAt={lastCmpSyncAt}
+            partial={cmpPartial}
+            loadError={cmpLoadError}
           />
         )}
 

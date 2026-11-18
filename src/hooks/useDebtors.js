@@ -342,6 +342,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const [syncSourceLabel, setSyncSourceLabel] = useState('Zoho WorkDrive');
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [lastCmpSyncAt, setLastCmpSyncAt] = useState(null);
+  const [lastCmpSyncRunId, setLastCmpSyncRunId] = useState(null);
   const [cmpInvoiceCount, setCmpInvoiceCount] = useState(0);
   const [cmpExpectedCount, setCmpExpectedCount] = useState(0);
   const [cmpPartial, setCmpPartial] = useState(false);
@@ -503,6 +504,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
         setCmpPartial(false);
         setCmpLoadError('');
         setLastCmpSyncAt(sources.cmp.meta?.synced_at ? new Date(sources.cmp.meta.synced_at) : null);
+        setLastCmpSyncRunId(sources.cmp.meta?.sync_run_id || null);
       } else {
         console.error('[CMP] Load failed:', sources.cmpError.message);
         setCmpPartial(true);
@@ -553,6 +555,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
         setCmpLoadError('');
         const cmpMeta = await fetchCmpSyncMeta(supabase);
         setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
+        setLastCmpSyncRunId(cmpMeta?.sync_run_id || null);
       } catch (cmpError) {
         console.warn('[CMP] Refresh skipped:', cmpError.message);
         setCmpPartial(true);
@@ -655,6 +658,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     syncSourceLabel,
     lastSyncAt,
     lastCmpSyncAt,
+    lastCmpSyncRunId,
     cmpInvoiceCount,
     cmpExpectedCount,
     cmpPartial,
