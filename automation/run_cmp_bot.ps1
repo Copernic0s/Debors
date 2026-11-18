@@ -1,5 +1,7 @@
 param(
-  [string]$Depth = ""
+  [string]$Depth = "",
+  [string]$MaxPages = "",
+  [switch]$ResolveOnly
 )
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -13,19 +15,23 @@ if (-not $env:CMP_LOG_PATH) {
   $env:CMP_LOG_PATH = Join-Path $PSScriptRoot ("logs\cmp-{0}.log" -f $env:CMP_RUN_ID)
 }
 
+if ($MaxPages) {
+  $env:CMP_MAX_PAGES = $MaxPages
+}
+
 if ($Depth) {
   if ($Depth -eq "deep") {
     $env:CMP_HISTORY_DAYS = "365"
-    $env:CMP_MAX_PAGES = "250"
     $env:CMP_FAST_SYNC = "false"
+    $env:CMP_SYNC_MODE = "deep"
   } elseif ($Depth -eq "fast") {
     $env:CMP_HISTORY_DAYS = "15"
-    $env:CMP_MAX_PAGES = "5"
     $env:CMP_FAST_SYNC = "true"
+    $env:CMP_SYNC_MODE = "fast"
   } elseif ($Depth -eq "normal" -or $Depth -eq "standard") {
     $env:CMP_HISTORY_DAYS = "120"
-    $env:CMP_MAX_PAGES = "100"
     $env:CMP_FAST_SYNC = "false"
+    $env:CMP_SYNC_MODE = "normal"
   }
 }
 
@@ -37,7 +43,9 @@ if (-not $env:CMP_CLONE_PROFILE) { $env:CMP_CLONE_PROFILE = "false" }
 if (-not $env:CMP_HEADLESS) { $env:CMP_HEADLESS = "false" }
 if (-not $env:CMP_REQUIRE_EXACT_PROFILE) { $env:CMP_REQUIRE_EXACT_PROFILE = "true" }
 if (-not $env:CMP_HISTORY_DAYS) { $env:CMP_HISTORY_DAYS = "120" }
-if (-not $env:CMP_MAX_PAGES) { $env:CMP_MAX_PAGES = "100" }
+if (-not $env:CMP_MAX_PAGES) { $env:CMP_MAX_PAGES = "1000" }
+if (-not $env:CMP_FAST_SYNC) { $env:CMP_FAST_SYNC = "false" }
+if (-not $env:CMP_SYNC_MODE) { $env:CMP_SYNC_MODE = if ($env:CMP_FAST_SYNC -eq "true") { "fast" } else { "normal" } }
 if (-not $env:CMP_ATTACH_TIMEOUT_SECONDS) { $env:CMP_ATTACH_TIMEOUT_SECONDS = "60" }
 # Set to "true" if you want to see the Chrome window while scraping (debug).
 # Default is hidden/minimized so you can keep working.
@@ -45,6 +53,17 @@ if (-not $env:CMP_SHOW_BROWSER) { $env:CMP_SHOW_BROWSER = "true" }
 
 if (-not $env:CMP_INGEST_URL) {
   $env:CMP_INGEST_URL = "http://127.0.0.1:3001/api/cmp/ingest"
+}
+
+if ($ResolveOnly) {
+  [PSCustomObject]@{
+    Depth = $Depth
+    HistoryDays = $env:CMP_HISTORY_DAYS
+    MaxPages = $env:CMP_MAX_PAGES
+    FastSync = $env:CMP_FAST_SYNC
+    SyncMode = $env:CMP_SYNC_MODE
+  }
+  return
 }
 
 # No longer killing all chrome processes to avoid disrupting the user.

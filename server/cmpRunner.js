@@ -11,7 +11,8 @@ const SESSION_EXPIRED_FLAG_PATH = path.join(ROOT_DIR, 'logs', 'cmp-session-expir
 const PS_SCRIPT = path.join(ROOT_DIR, 'automation', 'run_cmp_bot.ps1');
 const DEFAULT_STATUS_MAX_AGE_MIN = 60;
 const MAX_RUN_LOGS = 20;
-const CMP_MAX_PAGES = '1000';
+const DEFAULT_CMP_MAX_PAGES = '1000';
+const CMP_MAX_PAGES = DEFAULT_CMP_MAX_PAGES;
 
 const parseStatusMaxAge = (value) => {
   const parsed = Number(value);
@@ -34,12 +35,19 @@ const writeStatusFile = (fileSystem, statusPath, status) => {
   fileSystem.renameSync(temporaryPath, statusPath);
 };
 
-const buildCmpRunConfig = (depth, runId = randomUUID(), startedAt = new Date().toISOString(), trigger = 'manual') => {
+const buildCmpRunConfig = (
+  depth,
+  runId = randomUUID(),
+  startedAt = new Date().toISOString(),
+  trigger = 'manual',
+  maxPagesOverride = null
+) => {
   const mode = depth === 'standard' ? 'normal' : ['fast', 'normal', 'deep'].includes(depth) ? depth : 'fast';
+  const effectiveMaxPages = String(maxPagesOverride || process.env.CMP_MAX_PAGES || DEFAULT_CMP_MAX_PAGES);
   const settings = {
-    fast: { historyDays: '15', maxPages: CMP_MAX_PAGES, isFastSync: 'true' },
-    normal: { historyDays: '120', maxPages: CMP_MAX_PAGES, isFastSync: 'false' },
-    deep: { historyDays: '365', maxPages: CMP_MAX_PAGES, isFastSync: 'false' }
+    fast: { historyDays: '15', maxPages: effectiveMaxPages, isFastSync: 'true' },
+    normal: { historyDays: '120', maxPages: effectiveMaxPages, isFastSync: 'false' },
+    deep: { historyDays: '365', maxPages: effectiveMaxPages, isFastSync: 'false' }
   }[mode];
 
   return {
@@ -298,7 +306,7 @@ const createCmpRunner = ({
     }
     refreshHistory(readStatusFile(fileSystem, statusPath));
 
-    const runConfig = buildCmpRunConfig(depth, makeRunId(), now().toISOString(), trigger);
+    const runConfig = buildCmpRunConfig(depth, makeRunId(), now().toISOString(), trigger, env.CMP_MAX_PAGES);
     latestRun = runConfig;
     startedAt = runConfig.startedAt;
     lastExitCode = null;
@@ -367,6 +375,8 @@ module.exports = {
   startCmpScraper: (...args) => getRunner().startCmpScraper(...args),
   buildCmpRunConfig,
   createCmpRunner,
+  CMP_MAX_PAGES,
+  DEFAULT_CMP_MAX_PAGES,
   STATUS_PATH,
   LOG_PATH,
   LOG_DIR,

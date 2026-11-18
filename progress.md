@@ -2,6 +2,19 @@
 
 Ultima actualizacion: 2026-11-18
 
+## 2026-11-18: unificación de CMP_MAX_PAGES en runner y script de automatización
+
+- Se unificó el límite de páginas de paginación a 1,000 entre `server/cmpRunner.js`, `automation/run_cmp_bot.ps1` y `automation/cmp_invoice_extractor.py`.
+- En `automation/run_cmp_bot.ps1`: se eliminaron los límites históricos hardcodeados (fast=5, normal=100, deep=250 y default=100). Todas las profundidades (`fast`, `normal`, `standard`, `deep`) y la ejecución por defecto ahora usan 1,000 páginas para permitir la cobertura completa del inventario CMP (~868 páginas). Se agregaron parámetros `-MaxPages` y el switch `-ResolveOnly` para validar la resolución de configuración sin iniciar Chrome ni el bot Python.
+- En `server/cmpRunner.js`: se formalizó `DEFAULT_CMP_MAX_PAGES = '1000'`, se permite `maxPagesOverride` y `process.env.CMP_MAX_PAGES`, pasando `env.CMP_MAX_PAGES` al child environment.
+- Tests añadidos y suites completas verificadas:
+  - Pester `scripts/windows/tests/run_cmp_bot.Tests.ps1`: 5 pruebas unitarias cubriendo resolución de Fast, Normal, Standard, Deep, default y override (11/11 suite Windows passing).
+  - Node `server/cmpRunner.node.cjs`: 31/31 passing (`cd server; npm test`).
+  - Python extractor `automation/test_cmp_*.py`: 29/29 passing.
+  - Frontend vitest: 44/44 passing (`npm run test:run`).
+  - Frontend build: Vite build passing (`npm run build`).
+- Diagnóstico del proceso API activo (PID 4292): verificado que fue iniciado a las 8:18 AM (antes del commit `1b5c36b` de las 10:02 AM). Esto explica por qué el run `c1dfbdf3` de las 10:10 AM siguió truncando a 20 páginas (mantenía el módulo cargado en memoria de `f4bd723`). Se requiere reinicio del servidor API local desde el entorno autorizado con credenciales para activar `maxPages=1000`.
+
 ## 2026-11-18: restaurada cobertura completa en Fast
 
 - Se revirtió solo el límite introducido en `f4bd723`: Fast vuelve de 20 a 1,000 páginas (igual que normal/deep), con ventana de facturas pagadas de 15 días y conservación de abiertos de cualquier antigüedad. No se revirtió el arreglo de carga independiente del dashboard ni se modificó la base de datos.

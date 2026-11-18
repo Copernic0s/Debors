@@ -37,6 +37,24 @@ test('normal and deep modes keep their paid windows with full-inventory page cov
   );
 });
 
+test('buildCmpRunConfig accepts explicit maxPages override and environment variable', () => {
+  const overridden = buildCmpRunConfig('fast', 'override-run', '2026-11-12T21:00:00.000Z', 'manual', '50');
+  assert.equal(overridden.maxPages, '50');
+
+  const previousEnv = process.env.CMP_MAX_PAGES;
+  try {
+    process.env.CMP_MAX_PAGES = '75';
+    const fromEnv = buildCmpRunConfig('fast', 'env-run', '2026-11-12T21:00:00.000Z');
+    assert.equal(fromEnv.maxPages, '75');
+  } finally {
+    if (previousEnv === undefined) {
+      delete process.env.CMP_MAX_PAGES;
+    } else {
+      process.env.CMP_MAX_PAGES = previousEnv;
+    }
+  }
+});
+
 const createRunnerFixture = ({ ageMinutes = 60, initialStatus = null } = {}) => {
   const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'debors-cmp-runner-'));
   const automationDir = path.join(rootDir, 'automation');
