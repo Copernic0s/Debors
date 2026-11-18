@@ -11,6 +11,7 @@ Ultima actualizacion: 2026-11-18
 - Tests: suite frontend completa `npm run test:run` (40/40). `npm run build` pasa; permanece advertencia preexistente del bundle >500 kB. Smoke check local: API `/api/health` OK con el host Supabase esperado, Vite en `http://127.0.0.1:5173` sirve el nuevo modulo.
 - Publicado a produccion desde una rama hotfix limpia basada en el commit que estaba desplegado (`b82b120`): Vercel deployment READY `dpl_MYxAeG67ygYSH9dhjCSzJ8Jek7RT`; alias `https://debors.vercel.app` responde HTTP 200. Se revoco el bypass temporal usado para la verificacion CLI.
 - No se ejecuto el bot ni se escribio en Supabase. `failure_reason` sigue sin existir en la tabla remota `cmp_sync_runs`; no es requisito para esta lectura.
+- Reincidencia reportada por Andres: produccion sigue mostrando datos percibidos como de hace tres dias. Analisis detallado en `docs/CMP-DASHBOARD-DATA-FRESHNESS-ANALYSIS.md`. Run mas reciente `01fe7c97-0239-4e6d-94d4-5fa2c7ee85fb`: 20 paginas, 351 filas, incomplete/truncated, cero reconciliation; 2,022 de 4,260 filas current no se han sincronizado en >72h. El cambio de carga no basta para refrescar filas fuera de cobertura. Pendiente comparar un invoice de control entre DB, respuesta REST autenticada y Debtors List para separar cobertura de merge/UI.
 
 ## 2026-11-17: cobertura de paginacion CMP
 
