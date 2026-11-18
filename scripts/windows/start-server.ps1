@@ -56,22 +56,40 @@ try {
     exit 0
   }
 
-  $existing = @()
-  try {
-    $existing = Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop |
-      Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($serverScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 }
-  } catch {
-    $existing = @()
+  if ($Restart) {
+    try {
+      $port = ([Uri]$ApiBaseUrl).Port
+      $connections = @(Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue)
+      foreach ($conn in $connections) {
+        if ($conn.OwningProcess -gt 0) {
+          Write-Output "Stopping process $($conn.OwningProcess) listening on port $port..."
+          Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+      }
+    } catch {}
+
+    try {
+      $existingProcesses = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop |
+        Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($serverScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+      foreach ($proc in $existingProcesses) {
+        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+      }
+    } catch {}
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $port = ([Uri]$ApiBaseUrl).Port
+      $listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
+      if (-not $listener) { break }
+      Start-Sleep -Milliseconds 500
+    }
   }
 
-  if ($Restart -and $existing.Count -gt 0) {
-    Write-Output "Stopping $($existing.Count) existing Debors server process(es) for restart..."
-    foreach ($proc in $existing) {
-      try {
-        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-      } catch {}
-    }
-    Start-Sleep -Seconds 1
+  $existing = @()
+  try {
+    $existing = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop |
+      Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($serverScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+  } catch {
     $existing = @()
   }
 
