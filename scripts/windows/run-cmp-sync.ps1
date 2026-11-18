@@ -53,7 +53,19 @@ if (Test-CmpScheduledRunBlocked -FlagPath $flagPath) {
 }
 
 if (-not $EnvFile) { $EnvFile = [Environment]::GetEnvironmentVariable('DEBORS_ENV_FILE', 'Process') }
-if (-not $EnvFile) { $EnvFile = Join-Path $projectRoot '.env' }
+if (-not $EnvFile) {
+  $candidate = Join-Path $projectRoot '.env'
+  if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+    $EnvFile = $candidate
+  } else {
+    $fallback = Join-Path (Split-Path -Parent $projectRoot) 'Debors\.env'
+    if (Test-Path -LiteralPath $fallback -PathType Leaf) {
+      $EnvFile = $fallback
+    } else {
+      $EnvFile = $candidate
+    }
+  }
+}
 if (-not [System.IO.Path]::IsPathRooted($EnvFile)) { $EnvFile = Join-Path $projectRoot $EnvFile }
 $EnvFile = [System.IO.Path]::GetFullPath($EnvFile)
 [void](Import-DeborsEnvironment -EnvFile $EnvFile)

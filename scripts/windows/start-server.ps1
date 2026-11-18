@@ -2,7 +2,8 @@
 param(
   [string]$ApiBaseUrl = 'http://127.0.0.1:3001',
   [int]$StartupTimeoutSeconds = 30,
-  [string]$EnvFile
+  [string]$EnvFile,
+  [switch]$Restart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,10 +12,6 @@ $serverScript = Join-Path $projectRoot 'server\server.js'
 $logsDirectory = Join-Path $projectRoot 'logs'
 $healthUrl = "$($ApiBaseUrl.TrimEnd('/'))/api/health"
 . (Join-Path $PSScriptRoot 'sync-helpers.ps1')
-if (-not $EnvFile) { $EnvFile = [Environment]::GetEnvironmentVariable('DEBORS_ENV_FILE', 'Process') }
-if (-not $EnvFile) { $EnvFile = Join-Path $projectRoot '.env' }
-if (-not [System.IO.Path]::IsPathRooted($EnvFile)) { $EnvFile = Join-Path $projectRoot $EnvFile }
-$EnvFile = [System.IO.Path]::GetFullPath($EnvFile)
 
 function Test-DeborsServerHealth {
   try {
@@ -25,10 +22,27 @@ function Test-DeborsServerHealth {
   }
 }
 
-if (Test-DeborsServerHealth) {
+if (-not $Restart -and (Test-DeborsServerHealth)) {
   Write-Output 'Debors API is already healthy.'
   exit 0
 }
+
+if (-not $EnvFile) { $EnvFile = [Environment]::GetEnvironmentVariable('DEBORS_ENV_FILE', 'Process') }
+if (-not $EnvFile) {
+  $candidate = Join-Path $projectRoot '.env'
+  if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+    $EnvFile = $candidate
+  } else {
+    $fallback = Join-Path (Split-Path -Parent $projectRoot) 'Debors\.env'
+    if (Test-Path -LiteralPath $fallback -PathType Leaf) {
+      $EnvFile = $fallback
+    } else {
+      $EnvFile = $candidate
+    }
+  }
+}
+if (-not [System.IO.Path]::IsPathRooted($EnvFile)) { $EnvFile = Join-Path $projectRoot $EnvFile }
+$EnvFile = [System.IO.Path]::GetFullPath($EnvFile)
 
 New-Item -ItemType Directory -Path $logsDirectory -Force | Out-Null
 $mutex = New-Object System.Threading.Mutex($false, 'Local\DeborsServerStart')
@@ -37,12 +51,10 @@ try {
   $lockTaken = $mutex.WaitOne([TimeSpan]::FromSeconds(15))
   if (-not $lockTaken) { throw 'Timed out waiting for the Debors server startup lock.' }
 
-  if (Test-DeborsServerHealth) {
+  if (-not $Restart -and (Test-DeborsServerHealth)) {
     Write-Output 'Debors API became healthy while waiting for startup lock.'
     exit 0
   }
-
-  [void](Import-DeborsEnvironment -EnvFile $EnvFile)
 
   $existing = @()
   try {
@@ -51,9 +63,22 @@ try {
   } catch {
     $existing = @()
   }
+
+  if ($Restart -and $existing.Count -gt 0) {
+    Write-Output "Stopping $($existing.Count) existing Debors server process(es) for restart..."
+    foreach ($proc in $existing) {
+      try {
+        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+      } catch {}
+    }
+    Start-Sleep -Seconds 1
+    $existing = @()
+  }
+
   if ($existing.Count -gt 0) {
     Write-Output 'Debors server process already exists; waiting for health without starting a duplicate.'
   } else {
+    [void](Import-DeborsEnvironment -EnvFile $EnvFile)
     try {
       $port = ([Uri]$ApiBaseUrl).Port
       $listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
