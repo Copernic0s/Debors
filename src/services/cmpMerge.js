@@ -50,6 +50,7 @@ export const mapCmpInvoicesToDebtorRows = (cmpInvoices, clientsByAgent) => {
       invoiceDate: row.invoice_date || null,
       cmpStatusRaw: row.cmp_status_raw || null,
       syncedAt: row.synced_at || null,
+      syncRunId: row.sync_run_id || null,
       pdfStoragePath,
       pdfStatus: pdfStoragePath ? 'available' : (row.pdf_status || 'missing'),
       pdfDownloadedAt: row.pdf_downloaded_at || null,
