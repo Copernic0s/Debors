@@ -8,6 +8,7 @@ Ultima actualizacion: 2026-11-17
 - Correccion inicial: Standard/Deep elevan el maximo a 1,000 paginas y el default del extractor se alinea. Andres priorizo ahora la actualidad sobre refrescar todos los saldos abiertos antiguos.
 - Fast se limita a 20 paginas recientes; es parcial, upsertea observaciones al final y nunca reconcilia. CMP ordena por fecha de factura, por lo que puede omitir pagos de facturas antiguas.
 - Run `8f2fc28b-189b-464f-b0c5-9f3166b9d286` cancelado por solicitud a pagina 215 antes del ingest; no altero Supabase. El Chrome y el API permanecieron activos.
+- Run Fast `fc8ac8ca-ccba-4928-adf1-2d669dbbd6ec`: 20 paginas, 351 facturas upserted, ingest OK, `incomplete/truncated`, cero filas cerradas y sin reconciliacion. El limite de 20 prioriza el tramo reciente por fecha de factura; pagos recientes de invoices antiguas pueden no estar incluidos.
 - Riesgo operativo: Standard/Deep pueden tardar varias horas y el limite de una hora de la tarea Windows no alcanza. No registrar la tarea Standard hasta optimizar filtros y redisenar timeout/horario.
 - Verificacion: runner 13/13 y backend 30/30 tras limitar Fast; Python CMP 29/29, frontend 38/38 y build OK del cambio anterior. No SQL remoto.
 
