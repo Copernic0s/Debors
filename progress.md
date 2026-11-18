@@ -11,6 +11,8 @@ Ultima actualizacion: 2026-11-18
 - Tests: suite frontend completa `npm run test:run` (40/40). `npm run build` pasa; permanece advertencia preexistente del bundle >500 kB. Smoke check local: API `/api/health` OK con el host Supabase esperado, Vite en `http://127.0.0.1:5173` sirve el nuevo modulo.
 - Despliegue aislado desde `b82b120` a produccion completado: Vercel `dpl_MYxAeG67ygYSH9dhjCSzJ8Jek7RT`, estado READY, alias `https://debors.vercel.app` responde HTTP 200. El bypass temporal creado por la verificacion CLI fue revocado y no quedan bypass secrets activos.
 - No se ejecuto el bot ni se escribio en Supabase. `failure_reason` sigue sin existir en la tabla remota `cmp_sync_runs`; no es requisito para esta lectura.
+- Reincidencia reportada por Andres: produccion sigue mostrando datos percibidos como de hace tres dias. Analisis detallado en `docs/CMP-DASHBOARD-DATA-FRESHNESS-ANALYSIS.md`. Run mas reciente `01fe7c97-0239-4e6d-94d4-5fa2c7ee85fb`: 20 paginas, 351 filas, incomplete/truncated, cero reconciliation; 2,022 de 4,260 filas current no se han sincronizado en >72h. El cambio de carga no basta para refrescar filas fuera de cobertura. Pendiente comparar un invoice de control entre DB, respuesta REST autenticada y Debtors List para separar cobertura de merge/UI.
+- UI de frescura CMP: el panel muestra filas observadas por el run activo/reciente sobre total vigente, abiertas sin verificar por 72+ horas y el timestamp global renombrado a `Most recent invoice check`; el perfil de compañía muestra `CMP verified` por factura y alerta para abiertas sin sync o con más de 72 h. `sync_run_id` ahora se conserva en el mapeo. Tests frontend 44/44, build OK, ESLint focalizado OK. Aún no desplegado este cambio.
 
 ## 2026-11-17: cobertura de paginacion CMP
 

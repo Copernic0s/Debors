@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import { Bot, FileText, Loader2, CheckCircle2, AlertCircle, Zap, RefreshCw, Database } from 'lucide-react';
+import { countRowsRefreshedByRun, countStaleOpenCmpInvoices } from '../utils/cmpFreshness';
 
 const Panel = styled.div`
   margin: 0 2rem 1rem;
@@ -178,6 +179,7 @@ export default function CmpSyncPanel({
   lastCmpSyncAt,
   cmpInvoiceCount,
   cmpExpectedCount,
+  cmpRows = [],
   cmpPartial,
   cmpLoadError,
   syncAllBusy,
@@ -188,6 +190,9 @@ export default function CmpSyncPanel({
   const error = cmpStatus?.error;
   const partial = phase === 'done' && (cmpStatus?.runStatus !== 'complete' || cmpStatus?.persisted !== true);
   const tone = error ? 'err' : running ? 'warn' : phase === 'done' && !partial ? 'ok' : 'warn';
+  const refreshedInRun = countRowsRefreshedByRun(cmpRows, cmpStatus?.runId);
+  const staleOpenCount = countStaleOpenCmpInvoices(cmpRows);
+  const currentCount = cmpExpectedCount ?? cmpInvoiceCount ?? 0;
 
   return (
     <Panel>
@@ -269,7 +274,9 @@ export default function CmpSyncPanel({
         <span>Page: <strong>{cmpStatus?.page || 0}</strong></span>
         <span>Invoices found: <strong>{cmpStatus?.invoicesFound ?? 0}</strong></span>
         <span>Invoices loaded: <strong>{cmpInvoiceCount ?? 0}</strong> / {cmpExpectedCount ?? cmpInvoiceCount ?? 0}</span>
-        <span>Last CMP upload: <strong>{formatTime(lastCmpSyncAt)}</strong></span>
+        <span>Most recent invoice check: <strong>{formatTime(lastCmpSyncAt)}</strong></span>
+        <span>Rows observed in this run: <strong>{cmpStatus?.runId ? refreshedInRun : '--'} / {currentCount} current</strong></span>
+        <span>Open invoices unverified for 72+ hours: <strong>{staleOpenCount}</strong></span>
         <span>Last successful sync: <strong>{formatTime(cmpStatus?.lastSuccessfulSync?.timestamp)}</strong></span>
         <span>
           Last run error: <strong>{cmpStatus?.lastRunError

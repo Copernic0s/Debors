@@ -2,6 +2,7 @@ import React from 'react';
 import styled from 'styled-components';
 import { X, Building2, Users, FileText, AlertTriangle, Edit2, CalendarDays } from 'lucide-react';
 import { centsToAmount, invoiceFinancials } from '../services/invoiceFinancials';
+import { getInvoiceFreshness } from '../utils/cmpFreshness';
 
 const Overlay = styled.div`
   position: fixed;
@@ -130,7 +131,7 @@ const Chip = styled.span`
 
 const Table = styled.table`
   width: 100%;
-  min-width: 1020px;
+  min-width: 1140px;
   border-collapse: collapse;
 
   th,
@@ -170,6 +171,15 @@ const Notice = styled.div`
   font-size: 0.78rem;
 `;
 
+const VerificationState = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: ${(props) => props.$stale ? 'var(--warn)' : 'var(--text-muted)'};
+  white-space: nowrap;
+  font-size: 0.74rem;
+`;
+
 const formatCurrency = (value) => new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD'
@@ -181,6 +191,16 @@ const formatDate = (value) => {
   const date = new Date(rawDate.length === 10 ? `${rawDate}T12:00:00` : rawDate);
   if (Number.isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+};
+
+const formatSyncDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/Bogota'
+  }).format(date);
 };
 
 const getStatusTone = (status) => {
@@ -259,6 +279,7 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                   <th>Invoice</th>
                   <th>Invoice date</th>
                   <th>Due date</th>
+                  <th>CMP verified</th>
                   <th>Cycle</th>
                   <th>Status</th>
                   <th>Invoice total</th>
@@ -271,6 +292,10 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                 {profile.invoices.length > 0 ? profile.invoices.map((item) => {
                   const tone = getStatusTone(item.status);
                   const amounts = invoiceFinancials(item);
+                  const freshness = getInvoiceFreshness(item);
+                  const verifiedLabel = freshness.verifiedAt
+                    ? formatSyncDate(freshness.verifiedAt)
+                    : item.source === 'cmp' ? 'Not verified' : 'Not checked by CMP';
                   return (
                     <tr key={item.id}>
                       <td title={amounts.financialMismatch ? 'CMP financial fields do not reconcile' : undefined}>
@@ -279,6 +304,12 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                       </td>
                       <td>{formatDate(item.invoiceDate || item.lastInvoicedDate)}</td>
                       <td>{formatDate(item.dueDate)}</td>
+                      <td>
+                        <VerificationState $stale={freshness.isStale} title={freshness.verifiedAt?.toISOString()}>
+                          {freshness.isStale && <AlertTriangle size={13} aria-hidden="true" />}
+                          {verifiedLabel}{freshness.isStale ? ' · >72h' : ''}
+                        </VerificationState>
+                      </td>
                       <td>{item.billingCycle || '-'}</td>
                       <td style={{ color: tone.color, fontWeight: 700 }}>{tone.label}</td>
                       <td>{formatCurrency(centsToAmount(amounts.invoiced))}</td>
@@ -300,12 +331,12 @@ export default function CompanyProfileModal({ isOpen, onClose, profile, onEditIn
                   );
                 }) : (
                   <tr>
-                    <td colSpan={canEditInvoices ? 9 : 8} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
+                    <td colSpan={canEditInvoices ? 10 : 9} style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No invoice detail available for this company.</td>
                   </tr>
                 )}
                 {profile.invoices.length > 0 && (
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'right', fontWeight: 800 }}>Totals</td>
+                    <td colSpan={6} style={{ textAlign: 'right', fontWeight: 800 }}>Totals</td>
                     <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalInvoiced)}</td>
                     <td style={{ fontWeight: 800 }}>{formatCurrency(profile.totalPaid)}</td>
                     <td style={{ fontWeight: 800, color: 'var(--danger)' }}>{formatCurrency(profile.totalDue)}</td>

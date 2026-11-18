@@ -1652,6 +1652,7 @@ function App() {
             lastCmpSyncAt={lastCmpSyncAt}
             cmpInvoiceCount={cmpInvoiceCount}
             cmpExpectedCount={cmpExpectedCount}
+            cmpRows={rawZohoData.filter((row) => row.source === 'cmp')}
             cmpPartial={cmpPartial}
             cmpLoadError={cmpLoadError}
             syncAllBusy={syncAllBusy}
