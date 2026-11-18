@@ -7,6 +7,7 @@ import { normalizeBillingCycle } from '../constants/billingCycles';
 import { BILLING_CYCLES } from '../constants/billingCycles';
 import { centsToAmount, invoiceFinancials } from '../services/invoiceFinancials';
 import { canonicalActiveAgents } from '../constants/activeAgents';
+import { loadDashboardDataSources } from '../services/dashboardDataSources';
 
 const mergeManualEdits = (rows, editsById) => {
   const editsByInvKey = new Map();
@@ -344,6 +345,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
   const [cmpInvoiceCount, setCmpInvoiceCount] = useState(0);
   const [cmpExpectedCount, setCmpExpectedCount] = useState(0);
   const [cmpPartial, setCmpPartial] = useState(false);
+  const [cmpLoadError, setCmpLoadError] = useState('');
 
   const syncInFlightRef = useRef(false);
   const pendingCmpRefreshRef = useRef(false);
@@ -462,32 +464,59 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     setIsSyncing(true);
 
     try {
-      const { debtors: sheetData, clientsByAgent: csData, trackerLogs } = await fetchAllDataFromSheet(undefined, { cacheBust: true });
-      sheetDataRef.current = sheetData || [];
-      clientsByAgentRef.current = csData || [];
-      setClientsByAgent(csData || []);
+      const sources = await loadDashboardDataSources({
+        loadZoho: () => fetchAllDataFromSheet(undefined, { cacheBust: true }),
+        loadCmp: async () => {
+          const result = await fetchCmpInvoices(supabase);
+          return {
+            rows: result.rows,
+            expected: result.expected,
+            meta: await fetchCmpSyncMeta(supabase)
+          };
+        },
+        previousZoho: {
+          debtors: sheetDataRef.current || [],
+          clientsByAgent: clientsByAgentRef.current || [],
+          trackerLogs: null
+        },
+        previousCmp: { rows: cmpRowsRef.current || [], expected: 0 }
+      });
 
-      if (trackerLogs) setTrackerData(trackerLogs);
-
-      let cmpRows = cmpRowsRef.current;
-      try {
-        const cmpResult = await fetchCmpInvoices(supabase);
-        cmpRows = mapCmpInvoicesToDebtorRows(cmpResult.rows, csData);
-        cmpRowsRef.current = cmpRows;
-        setCmpInvoiceCount(cmpResult.rows.length);
-        setCmpExpectedCount(cmpResult.expected);
-        setCmpPartial(false);
-        const cmpMeta = await fetchCmpSyncMeta(supabase);
-        setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
-      } catch (cmpError) {
-        console.warn('[CMP] Load skipped:', cmpError.message);
-        setCmpPartial(true);
-        if (Number.isFinite(cmpError.expectedCount)) setCmpExpectedCount(cmpError.expectedCount);
+      if (!sources.zohoError) {
+        const sheetData = sources.zoho.debtors || [];
+        const csData = sources.zoho.clientsByAgent || [];
+        sheetDataRef.current = sheetData;
+        clientsByAgentRef.current = csData;
+        setClientsByAgent(csData);
+        if (sources.zoho.trackerLogs) setTrackerData(sources.zoho.trackerLogs);
+      } else {
+        console.error('[Sync] Zoho WorkDrive load failed; retaining cached rows:', sources.zohoError.message);
+        setSyncSourceLabel('Cached Zoho + CMP');
       }
-      applyCmpSnapshot(sheetData, csData, cmpRows);
-    } catch (err) {
-      console.error('[Sync] Load data failed:', err);
-      setSyncSourceLabel('Offline Data');
+
+      if (!sources.cmpError) {
+        const csData = clientsByAgentRef.current || [];
+        const mappedCmpRows = mapCmpInvoicesToDebtorRows(sources.cmp.rows, csData);
+        cmpRowsRef.current = mappedCmpRows;
+        setCmpInvoiceCount(mappedCmpRows.length);
+        setCmpExpectedCount(sources.cmp.expected);
+        setCmpPartial(false);
+        setCmpLoadError('');
+        setLastCmpSyncAt(sources.cmp.meta?.synced_at ? new Date(sources.cmp.meta.synced_at) : null);
+      } else {
+        console.error('[CMP] Load failed:', sources.cmpError.message);
+        setCmpPartial(true);
+        setCmpLoadError(sources.cmpError.message || 'Unable to read CMP invoices from Supabase');
+        if (Number.isFinite(sources.cmpError.expectedCount)) setCmpExpectedCount(sources.cmpError.expectedCount);
+      }
+
+      applyCmpSnapshot(
+        sheetDataRef.current || [],
+        clientsByAgentRef.current || [],
+        cmpRowsRef.current || []
+      );
+    } catch (error) {
+      console.error('[Sync] Dashboard data load failed:', error);
     } finally {
       setLastSyncAt(new Date());
       if (!silent) setLoading(false);
@@ -507,7 +536,6 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
       pendingCmpRefreshRef.current = true;
       return;
     }
-    if (!sheetDataRef.current || sheetDataRef.current.length === 0) return;
     syncInFlightRef.current = true;
 
     if (!silent) setIsSyncing(true);
@@ -522,16 +550,18 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
         setCmpInvoiceCount(cmpResult.rows.length);
         setCmpExpectedCount(cmpResult.expected);
         setCmpPartial(false);
+        setCmpLoadError('');
         const cmpMeta = await fetchCmpSyncMeta(supabase);
         setLastCmpSyncAt(cmpMeta?.synced_at ? new Date(cmpMeta.synced_at) : null);
       } catch (cmpError) {
         console.warn('[CMP] Refresh skipped:', cmpError.message);
         setCmpPartial(true);
+        setCmpLoadError(cmpError.message || 'Unable to read CMP invoices from Supabase');
         if (Number.isFinite(cmpError.expectedCount)) setCmpExpectedCount(cmpError.expectedCount);
         return;
       }
 
-      applyCmpSnapshot(sheetDataRef.current, clientsByAgentRef.current || [], cmpRows);
+      applyCmpSnapshot(sheetDataRef.current || [], clientsByAgentRef.current || [], cmpRows);
     } catch (err) {
       console.error('[CMP] Refresh failed:', err);
     } finally {
@@ -628,6 +658,7 @@ export function useDebtors({ supabase, user, tableName = 'manual_edits' }) {
     cmpInvoiceCount,
     cmpExpectedCount,
     cmpPartial,
+    cmpLoadError,
     manualEdits,
     setManualEdits,
     loadData,
