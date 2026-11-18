@@ -7,6 +7,7 @@ Ultima actualizacion: 2026-11-18
 - Se revirtió solo el límite introducido en `f4bd723`: Fast vuelve de 20 a 1,000 páginas (igual que normal/deep), con ventana de facturas pagadas de 15 días y conservación de abiertos de cualquier antigüedad. No se revirtió el arreglo de carga independiente del dashboard ni se modificó la base de datos.
 - Motivo: Fast de 20 páginas solo observa hasta 10,000 de las 433,812 filas crudas reportadas, por lo que la mayoría de facturas del portafolio queda fuera. La cobertura actual requiere aproximadamente 868 páginas y puede tomar varias horas. Fast seguirá siendo incompleto si alcanza el límite.
 - Validación: suite backend `npm test` 30/30 y `git diff --check` limpio. No se ejecutó el bot: para probar cobertura real hay que reiniciar el API local con este código y lanzar manualmente Fast; verificar luego `runStatus=complete`, `truncated=false`, filas upserted y frescura por factura. Los pagos recientes de facturas antiguas siguen sin garantía por el orden de CMP.
+- Corrección de cronología: el primer run parcial reportado fue ayer, antes de `f4bd723`; la captura de las 5:02 PM mostró un run de 100 páginas truncado. `f4bd723` se creó hoy y agravó Fast, pero no originó el incidente inicial. El análisis para continuidad está en `docs/PROJECT-ARCHITECTURE-AND-CMP-INCIDENT-HANDOFF.md`.
 
 ## 2026-11-18: CMP no debe depender de Zoho para mostrarse
 
