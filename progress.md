@@ -9,6 +9,7 @@ Ultima actualizacion: 2026-11-18
 - Causa de codigo encontrada: `loadData` cargaba Zoho y CMP en una unica secuencia; un error de Zoho saltaba la lectura CMP. El refresco CMP tambien retornaba temprano si no habia filas Zoho. Esto podia dejar el dashboard con datos CMP en cero/viejos pese a tenerlos en Supabase.
 - Correccion: fuentes Zoho y CMP se cargan en paralelo; si Zoho falla se conserva su ultimo snapshot local y CMP igual se consulta/mapea con la cartera cacheada. El refresh CMP ya no requiere filas Zoho. El panel CMP muestra el error real en vez de solo `0/0`.
 - Tests: suite frontend completa `npm run test:run` (40/40). `npm run build` pasa; permanece advertencia preexistente del bundle >500 kB. Smoke check local: API `/api/health` OK con el host Supabase esperado, Vite en `http://127.0.0.1:5173` sirve el nuevo modulo.
+- Publicado a produccion desde una rama hotfix limpia basada en el commit que estaba desplegado (`b82b120`): Vercel deployment READY `dpl_MYxAeG67ygYSH9dhjCSzJ8Jek7RT`; alias `https://debors.vercel.app` responde HTTP 200. Se revoco el bypass temporal usado para la verificacion CLI.
 - No se ejecuto el bot ni se escribio en Supabase. `failure_reason` sigue sin existir en la tabla remota `cmp_sync_runs`; no es requisito para esta lectura.
 
 ## 2026-11-17: cobertura de paginacion CMP
