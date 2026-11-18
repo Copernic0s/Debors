@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { buildCmpRunConfig, createCmpRunner } = require('./cmpRunner.js');
 
-test('fast scans a bounded recent page sample', () => {
+test('fast keeps its 15-day paid window and can cover the full CMP inventory', () => {
   const config = buildCmpRunConfig('fast', 'f4-run-id', '2026-11-12T21:00:00.000Z');
   assert.deepEqual(config, {
     mode: 'fast',
@@ -14,7 +14,7 @@ test('fast scans a bounded recent page sample', () => {
     runId: 'f4-run-id',
     startedAt: '2026-11-12T21:00:00.000Z',
     historyDays: '15',
-    maxPages: '20',
+    maxPages: '1000',
     isFastSync: 'true'
   });
 });
