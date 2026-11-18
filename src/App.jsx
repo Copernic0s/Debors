@@ -495,6 +495,7 @@ function App() {
     cmpInvoiceCount,
     cmpExpectedCount,
     cmpPartial,
+    cmpLoadError,
     loadData,
     refreshCmpData,
     persistEditedRows,
@@ -1652,6 +1653,7 @@ function App() {
             cmpInvoiceCount={cmpInvoiceCount}
             cmpExpectedCount={cmpExpectedCount}
             cmpPartial={cmpPartial}
+            cmpLoadError={cmpLoadError}
             syncAllBusy={syncAllBusy}
             onRunSync={handleSyncAll}
           />

@@ -1,7 +1,26 @@
 # Debors Project Progress
 
-Ultima actualizacion: 2026-11-13
+Ultima actualizacion: 2026-11-18
 
+## 2026-11-18: CMP no debe depender de Zoho para mostrarse
+
+- Verificacion de solo lectura en Supabase produccion (`etffmaakaefrygfomgen`): 4,260 facturas, 4,260 `is_current=true`, 2,238 con `agent_id`. Policy `cmp_invoices_read_authenticated` sigue activa con `USING (true)`; `agent_scopes` tiene 0 filas.
+- El run Fast `fc8ac8ca-ccba-4928-adf1-2d669dbbd6ec` guardo 351 filas el 2026-11-18 13:10 UTC; el total sincronizado en las ultimas 24 h es 2,234 filas. El run quedo incompleto/truncado, por lo que no reconcilio (correcto).
+- Causa de codigo encontrada: `loadData` cargaba Zoho y CMP en una unica secuencia; un error de Zoho saltaba la lectura CMP. El refresco CMP tambien retornaba temprano si no habia filas Zoho. Esto podia dejar el dashboard con datos CMP en cero/viejos pese a tenerlos en Supabase.
+- Correccion: fuentes Zoho y CMP se cargan en paralelo; si Zoho falla se conserva su ultimo snapshot local y CMP igual se consulta/mapea con la cartera cacheada. El refresh CMP ya no requiere filas Zoho. El panel CMP muestra el error real en vez de solo `0/0`.
+- Tests: suite frontend completa `npm run test:run` (40/40). `npm run build` pasa; permanece advertencia preexistente del bundle >500 kB. Smoke check local: API `/api/health` OK con el host Supabase esperado, Vite en `http://127.0.0.1:5173` sirve el nuevo modulo.
+- No se ejecuto el bot ni se escribio en Supabase. `failure_reason` sigue sin existir en la tabla remota `cmp_sync_runs`; no es requisito para esta lectura.
+
+## 2026-11-17: cobertura de paginacion CMP
+
+- Diagnostico del run `c31f4576-1b0d-4425-a9f3-a385973b50bb`: Standard termino en 100 paginas, guardo 2,234 filas y quedo `incomplete/truncated`; no reconcilio ni cerro facturas. CMP reporto 433,812 filas con limite 500 por pagina (aprox. 868 paginas).
+- Correccion inicial: Standard/Deep elevan el maximo a 1,000 paginas y el default del extractor se alinea. Andres priorizo ahora la actualidad sobre refrescar todos los saldos abiertos antiguos.
+- Fast se limita a 20 paginas recientes; es parcial, upsertea observaciones al final y nunca reconcilia. CMP ordena por fecha de factura, por lo que puede omitir pagos de facturas antiguas.
+- Run `8f2fc28b-189b-464f-b0c5-9f3166b9d286` cancelado por solicitud a pagina 215 antes del ingest; no altero Supabase. El Chrome y el API permanecieron activos.
+- Run Fast `fc8ac8ca-ccba-4928-adf1-2d669dbbd6ec`: 20 paginas, 351 facturas upserted, ingest OK, `incomplete/truncated`, cero filas cerradas y sin reconciliacion. El limite de 20 prioriza el tramo reciente por fecha de factura; pagos recientes de invoices antiguas pueden no estar incluidos.
+- Diagnostico inicial de visibilidad (2026-11-18): UI local mostraba `Invoices loaded 0/0` pese al upsert. Se verifico endpoint local y tabla remota; las policies de facturas permiten lectura autenticada abierta. Se corrigio el acoplamiento de lectura CMP con Zoho documentado arriba. Sigue pendiente prueba visual autenticada para confirmar carga efectiva en browser.
+- Riesgo operativo: Standard/Deep pueden tardar varias horas y el limite de una hora de la tarea Windows no alcanza. No registrar la tarea Standard hasta optimizar filtros y redisenar timeout/horario.
+- Verificacion: runner 13/13 y backend 30/30 tras limitar Fast; Python CMP 29/29, frontend 38/38 y build OK del cambio anterior. No SQL remoto.
 ## Estado
 
 - Rama de trabajo: `codex/db-fidelity-and-activation`; permisos SQL de billing viewer ya aplicados en produccion; cambios de frontend/API aun no desplegados.

@@ -179,6 +179,7 @@ export default function CmpSyncPanel({
   cmpInvoiceCount,
   cmpExpectedCount,
   cmpPartial,
+  cmpLoadError,
   syncAllBusy,
   onRunSync
 }) {
@@ -281,7 +282,7 @@ export default function CmpSyncPanel({
       )}
       {cmpPartial && (
         <Message role="alert" style={{ color: 'var(--danger)' }}>
-          CMP invoice read is incomplete. Totals may be partial; the previous complete snapshot is being kept.
+          CMP invoice read failed{cmpLoadError ? `: ${cmpLoadError}` : '. Totals may be partial; the previous snapshot is being kept.'}
         </Message>
       )}
 
