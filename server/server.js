@@ -435,9 +435,16 @@ app.get('/api/debtors', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  let supabaseHost = null;
+  try {
+    supabaseHost = new URL(supabaseUrl).host;
+  } catch {}
+
   res.json({
     ok: true,
-    supabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
+    supabaseUrl: Boolean(supabaseUrl),
+    supabaseHost,
     serviceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     cmpIngestSecret: Boolean(process.env.CMP_INGEST_SECRET),
     port: PORT
