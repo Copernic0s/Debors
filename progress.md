@@ -5,9 +5,11 @@ Ultima actualizacion: 2026-11-17
 ## 2026-11-17: cobertura de paginacion CMP
 
 - Diagnostico del run `c31f4576-1b0d-4425-a9f3-a385973b50bb`: Standard termino en 100 paginas, guardo 2,234 filas y quedo `incomplete/truncated`; no reconcilio ni cerro facturas. CMP reporto 433,812 filas con limite 500 por pagina (aprox. 868 paginas).
-- Correccion aplicada: Fast, Standard y Deep elevan el maximo de seguridad a 1,000 paginas; el default del extractor tambien se alinea. Las ventanas pagadas siguen siendo 15/120/365 dias y los saldos abiertos siguen sin limite de antiguedad.
-- Riesgo operativo: el recorrido completo puede tardar varias horas; el limite de una hora de las tareas Windows no alcanza. No registrar tareas hasta optimizar con filtros CMP/incremental y redisenar timeout/horario.
-- Verificacion: runner 13/13, backend 30/30, Python CMP 29/29, frontend 38/38 y build OK (aviso de bundle >500 kB ya existente). No se ejecuto el bot, no se aplico SQL remoto y no se modifico Supabase.
+- Correccion inicial: Standard/Deep elevan el maximo a 1,000 paginas y el default del extractor se alinea. Andres priorizo ahora la actualidad sobre refrescar todos los saldos abiertos antiguos.
+- Fast se limita a 20 paginas recientes; es parcial, upsertea observaciones al final y nunca reconcilia. CMP ordena por fecha de factura, por lo que puede omitir pagos de facturas antiguas.
+- Run `8f2fc28b-189b-464f-b0c5-9f3166b9d286` cancelado por solicitud a pagina 215 antes del ingest; no altero Supabase. El Chrome y el API permanecieron activos.
+- Riesgo operativo: Standard/Deep pueden tardar varias horas y el limite de una hora de la tarea Windows no alcanza. No registrar la tarea Standard hasta optimizar filtros y redisenar timeout/horario.
+- Verificacion: runner 13/13 y backend 30/30 tras limitar Fast; Python CMP 29/29, frontend 38/38 y build OK del cambio anterior. No SQL remoto.
 
 ## Estado
 

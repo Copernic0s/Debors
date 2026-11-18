@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { buildCmpRunConfig, createCmpRunner } = require('./cmpRunner.js');
 
-test('runner keeps each sync depth complete-capable for the current CMP inventory', () => {
+test('fast scans a bounded recent page sample', () => {
   const config = buildCmpRunConfig('fast', 'f4-run-id', '2026-11-12T21:00:00.000Z');
   assert.deepEqual(config, {
     mode: 'fast',
@@ -14,7 +14,7 @@ test('runner keeps each sync depth complete-capable for the current CMP inventor
     runId: 'f4-run-id',
     startedAt: '2026-11-12T21:00:00.000Z',
     historyDays: '15',
-    maxPages: '1000',
+    maxPages: '20',
     isFastSync: 'true'
   });
 });
